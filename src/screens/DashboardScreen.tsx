@@ -1,0 +1,250 @@
+import React from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Donut } from '../components/Donut';
+import { Glow } from '../components/Glow';
+import { TrendChart } from '../components/TrendChart';
+import { Icon } from '../icons';
+import { CATS, CatKey, colors, fonts } from '../theme';
+import { TX } from '../store/mockData';
+import { useSpendOwl } from '../store/SpendOwlContext';
+
+const CAT_KEYS: CatKey[] = ['food', 'bills', 'shopping', 'transport'];
+
+export function DashboardScreen() {
+  const store = useSpendOwl();
+  const { selCat, setSelCat, overBudget } = store;
+
+  const txList = TX.filter(t => !selCat || t.cat === selCat).map(t => {
+    const cat = CATS[t.cat];
+    const inc = t.amt > 0;
+    return {
+      merchant: t.merchant,
+      letter: t.merchant[0],
+      meta: `${t.date} · ${cat.name}`,
+      amt: `${inc ? '+€' : '−€'}${Math.abs(t.amt).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      inc,
+      color: cat.color,
+    };
+  });
+
+  const subsActive = store.subs.filter(s => !s.off);
+  const subsTotal = subsActive.reduce((a, s) => a + s.price, 0);
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 14 }}>
+      <View style={{ paddingTop: 8, position: 'relative' }}>
+        <Glow width={280} height={200} color={overBudget ? colors.rose : colors.mint} id="heroGlow" />
+        <Text style={{ fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 2, color: colors.textDim55 }}>SAFE TO SPEND · JULY</Text>
+        {!overBudget ? (
+          <Text style={{ fontSize: 46, fontFamily: fonts.bold, marginTop: 4, color: '#F2FBF7' }}>
+            €1,283<Text style={{ fontSize: 26, fontFamily: fonts.medium, color: colors.textDim55 }}>.65</Text>
+          </Text>
+        ) : (
+          <Text style={{ fontSize: 46, fontFamily: fonts.bold, marginTop: 4, color: colors.rose }}>
+            −€86<Text style={{ fontSize: 26, fontFamily: fonts.medium, color: 'rgba(255,143,163,.7)' }}>.40</Text>
+          </Text>
+        )}
+        <View style={{ marginTop: 10, height: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
+          <View
+            style={{
+              height: '100%',
+              width: overBudget ? '100%' : '46.5%',
+              borderRadius: 999,
+              backgroundColor: overBudget ? colors.rose : colors.mint,
+            }}
+          />
+        </View>
+        <Text style={{ marginTop: 7, fontSize: 11.5, color: colors.textDim50, fontFamily: fonts.mono }}>
+          {overBudget ? '104% OF €2,400 · 14 DAYS LEFT' : '47% OF €2,400 · 14 DAYS LEFT'}
+        </Text>
+        {overBudget && (
+          <View
+            style={{
+              marginTop: 12,
+              flexDirection: 'row',
+              gap: 10,
+              alignItems: 'flex-start',
+              backgroundColor: 'rgba(255,196,107,.08)',
+              borderWidth: 1,
+              borderColor: 'rgba(255,196,107,.3)',
+              borderRadius: 16,
+              padding: 12,
+              paddingHorizontal: 14,
+            }}
+          >
+            <Icon name="warn" size={20} color={colors.amber} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.amberText }}>Budget exceeded</Text>
+              <Text style={{ fontSize: 12, color: colors.textDim60, marginTop: 2, lineHeight: 17 }}>
+                You’re €86.40 past July’s budget. I can draft a catch-up plan for the last two weeks.
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+
+      <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>Where it’s going</Text>
+          <Text style={{ fontSize: 11, color: colors.textDim40 }}>tap a slice</Text>
+        </View>
+        <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+          <Donut selCat={selCat} onSelect={setSelCat} />
+          <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1.5, color: colors.textDim50 }}>
+              {selCat ? CATS[selCat].name.toUpperCase() : 'SPENT · JULY'}
+            </Text>
+            <Text style={{ fontSize: 24, fontFamily: fonts.bold, color: colors.text, marginTop: 3 }}>
+              {selCat ? `€${CATS[selCat].amount.toFixed(0)}` : '€1,116'}
+            </Text>
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {CAT_KEYS.map(k => {
+            const c = CATS[k];
+            const isSel = selCat === k;
+            return (
+              <Pressable
+                key={k}
+                onPress={() => setSelCat(isSel ? null : k)}
+                style={{
+                  width: '48%',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 7,
+                  paddingVertical: 6,
+                  paddingHorizontal: 9,
+                  borderRadius: 10,
+                  backgroundColor: isSel ? 'rgba(255,255,255,.06)' : 'transparent',
+                  borderWidth: 1,
+                  borderColor: isSel ? 'rgba(255,255,255,.14)' : 'transparent',
+                }}
+              >
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c.color }} />
+                <Text style={{ flex: 1, fontSize: 12, color: colors.text }} numberOfLines={1}>
+                  {c.name}
+                </Text>
+                <Text style={{ fontSize: 12, fontFamily: fonts.medium, color: colors.textDim70 }}>€{c.amount.toFixed(0)}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>Recent</Text>
+          {selCat && (
+            <Pressable
+              onPress={() => setSelCat(null)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: 'rgba(157,140,255,.4)', borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 }}
+            >
+              <Text style={{ fontSize: 11.5, color: colors.violetLight }}>{CATS[selCat].name} ✕</Text>
+            </Pressable>
+          )}
+        </View>
+        <View style={{ gap: 4 }}>
+          {txList.map((t, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 7 }}>
+              <View
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 12,
+                  backgroundColor: t.color + '22',
+                  borderWidth: 1,
+                  borderColor: t.color + '55',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: t.color, fontSize: 14, fontFamily: fonts.bold }}>{t.letter}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13.5, fontFamily: fonts.medium, color: colors.text }} numberOfLines={1}>
+                  {t.merchant}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.textDim45, marginTop: 1 }}>{t.meta}</Text>
+              </View>
+              <Text style={{ fontSize: 13.5, fontFamily: fonts.bold, color: t.inc ? colors.mint : colors.text }}>{t.amt}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16 }}>
+        <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>Spending trajectory</Text>
+        <View style={{ marginTop: 12 }}>
+          <TrendChart />
+        </View>
+        <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={{ width: 14, height: 3, borderRadius: 2, backgroundColor: colors.mint }} />
+            <Text style={{ fontSize: 11, color: colors.textDim60 }}>This month</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={{ width: 14, height: 0, borderTopWidth: 2, borderStyle: 'dashed', borderTopColor: 'rgba(233,237,242,.4)' }} />
+            <Text style={{ fontSize: 11, color: colors.textDim60 }}>3-month average</Text>
+          </View>
+        </View>
+      </View>
+
+      <Pressable
+        onPress={store.openAfford}
+        style={{
+          backgroundColor: 'rgba(157,140,255,.08)',
+          borderWidth: 1,
+          borderColor: 'rgba(157,140,255,.35)',
+          borderRadius: 20,
+          padding: 15,
+          paddingHorizontal: 16,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
+        <View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(157,140,255,.2)', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="scale" size={22} color={colors.violetLight} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.violetText }}>Can I afford this?</Text>
+          <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 1 }}>Simulate a purchase against your savings</Text>
+        </View>
+        <Icon name="chev" size={20} color={colors.textDim40} />
+      </Pressable>
+
+      <Pressable
+        onPress={store.openSubs}
+        style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 15, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}
+      >
+        <View style={{ flexDirection: 'row' }}>
+          {store.subs.slice(0, 4).map((s, i) => (
+            <View
+              key={s.id}
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 10,
+                backgroundColor: '#1C212B',
+                borderWidth: 1,
+                borderColor: s.color + '66',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginLeft: i ? -8 : 0,
+              }}
+            >
+              <Text style={{ color: s.color, fontSize: 12, fontFamily: fonts.bold }}>{s.name[0]}</Text>
+            </View>
+          ))}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.text }}>Subscriptions</Text>
+          <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 1 }}>
+            {subsActive.length} active · €{subsTotal.toFixed(2)}/mo
+          </Text>
+        </View>
+        <Icon name="chev" size={20} color={colors.textDim40} />
+      </Pressable>
+    </ScrollView>
+  );
+}
