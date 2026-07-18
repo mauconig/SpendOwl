@@ -60,3 +60,11 @@ export const fonts = {
   mono: 'RobotoMono_400Regular',
   monoMedium: 'RobotoMono_500Medium',
 };
+
+// Approximate demo exchange rate — Guaraní has no meaningful decimal unit,
+// and Paraguay conventionally uses "." as the thousands separator.
+export const PYG_PER_USD = 7500;
+
+export function formatPYG(amount: number): string {
+  return '₲' + Math.round(amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}

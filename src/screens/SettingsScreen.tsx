@@ -66,6 +66,7 @@ export function SettingsScreen() {
             <View style={{ flexDirection: 'row', gap: 4 }}>
               <CurPill label="EUR" active={store.baseCur === 'EUR'} onPress={() => store.setBaseCur('EUR')} />
               <CurPill label="USD" active={store.baseCur === 'USD'} onPress={() => store.setBaseCur('USD')} />
+              <CurPill label="PYG" active={store.baseCur === 'PYG'} onPress={() => store.setBaseCur('PYG')} />
             </View>
           }
         />

@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { CatKey } from '../theme';
+import { CatKey, PYG_PER_USD, formatPYG } from '../theme';
 import {
   AFFORD_OPTS,
   Msg,
@@ -18,12 +18,14 @@ const FIRST_RUN = false;
 const OVER_BUDGET = false;
 export const GLOW = true;
 
-export type Currency = 'EUR' | 'USD';
+export type Currency = 'EUR' | 'USD' | 'PYG';
 type CardState = { tax: boolean; ok: boolean };
 type Nav = 'pager' | 'vault' | 'settings';
 
-function fmt(cur: Currency, eur: number, usd: number) {
-  return cur === 'EUR' ? '€' + eur.toFixed(2) : '$' + usd.toFixed(2);
+function fmt(cur: Currency, eur: number, usd: number, pyg: number) {
+  if (cur === 'EUR') return '€' + eur.toFixed(2);
+  if (cur === 'USD') return '$' + usd.toFixed(2);
+  return formatPYG(pyg);
 }
 
 interface SpendOwlStore {
@@ -49,7 +51,7 @@ interface SpendOwlStore {
   firstRun: boolean;
   cardFor: (id: string) => CardState;
   setCard: (id: string, patch: Partial<CardState>) => void;
-  fmt: (cur: Currency, eur: number, usd: number) => string;
+  fmt: (cur: Currency, eur: number, usd: number, pyg: number) => string;
 
   // dashboard
   overBudget: boolean;
@@ -157,10 +159,14 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
       setInput('');
       after(2600, () => {
         setMessagesState(prev =>
-          (prev ?? []).map(m => (m.id === sid ? { id: sid, type: 'card', merchant: 'Mercado Central', cat: 'food', eur: 23.8, usd: 25.9, note: '3 items · Groceries · scanned' } : m))
+          (prev ?? []).map(m =>
+            m.id === sid
+              ? { id: sid, type: 'card', merchant: 'Mercado Central', cat: 'food', eur: 23.8, usd: 25.9, pyg: Math.round(25.9 * PYG_PER_USD), note: '3 items · Groceries · scanned' }
+              : m
+          )
         );
         setVaultExtra(prev => [
-          { id: 'vx' + sid, merchant: 'Mercado Central', date: 'Jul 17', amount: '€23.80', usd: '$25.90', status: 'ok', seed: 2, cat: 'Food & Drink' },
+          { id: 'vx' + sid, merchant: 'Mercado Central', date: 'Jul 17', amount: '€23.80', usd: '$25.90', pyg: formatPYG(25.9 * PYG_PER_USD), status: 'ok', seed: 2, cat: 'Food & Drink' },
           ...prev,
         ]);
       });
@@ -189,7 +195,9 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
         if (commit) {
           const vid = 'v' + midRef.current++;
           pushM([{ id: vid, type: 'voice', dur: '0:' + String(secs).padStart(2, '0') }]);
-          after(1400, () => pushM([{ id: 'c' + midRef.current++, type: 'card', merchant: 'Blue Bottle Coffee', cat: 'food', eur: 4.5, usd: 4.9, note: 'Voice note · transcribed' }]));
+          after(1400, () =>
+            pushM([{ id: 'c' + midRef.current++, type: 'card', merchant: 'Blue Bottle Coffee', cat: 'food', eur: 4.5, usd: 4.9, pyg: Math.round(4.9 * PYG_PER_USD), note: 'Voice note · transcribed' }])
+          );
         }
         return 0;
       });

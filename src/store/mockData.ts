@@ -1,4 +1,4 @@
-import { CatKey } from '../theme';
+import { CatKey, PYG_PER_USD, formatPYG } from '../theme';
 
 export type Msg =
   | { id: string; type: 'ai'; text: string }
@@ -6,13 +6,13 @@ export type Msg =
   | { id: string; type: 'voice'; dur: string }
   | { id: string; type: 'receipt' }
   | { id: string; type: 'scanning' }
-  | { id: string; type: 'card'; merchant: string; cat: CatKey; eur: number; usd: number; note: string };
+  | { id: string; type: 'card'; merchant: string; cat: CatKey; eur: number; usd: number; pyg: number; note: string };
 
 export function demoMsgs(): Msg[] {
   return [
     { id: 'a1', type: 'ai', text: "Morning, Maya. You're €38 under your usual pace this week — nice." },
     { id: 'u1', type: 'user', text: 'add my lunch — 12.40 at the market' },
-    { id: 'c1', type: 'card', merchant: 'Mercado Central', cat: 'food', eur: 12.4, usd: 13.5, note: 'Lunch · logged from chat' },
+    { id: 'c1', type: 'card', merchant: 'Mercado Central', cat: 'food', eur: 12.4, usd: 13.5, pyg: Math.round(13.5 * PYG_PER_USD), note: 'Lunch · logged from chat' },
   ];
 }
 
@@ -57,6 +57,7 @@ export type VaultItem = {
   date: string;
   amount: string;
   usd: string;
+  pyg: string;
   status: 'ok' | 'warn';
   seed: number;
   cat: string;
@@ -65,12 +66,12 @@ export type VaultItem = {
 export function vaultBaseSeed(firstRun: boolean): VaultItem[] {
   if (firstRun) return [];
   return [
-    { id: 'v1', merchant: 'Mercado Central', date: 'Jul 14', amount: '€23.80', usd: '$25.90', status: 'ok', seed: 0, cat: 'Food & Drink' },
-    { id: 'v2', merchant: 'Uber', date: 'Jul 13', amount: '€11.20', usd: '$12.20', status: 'ok', seed: 1, cat: 'Transport' },
-    { id: 'v3', merchant: 'IKEA', date: 'Jul 12', amount: '€89.90', usd: '$97.90', status: 'warn', seed: 2, cat: 'Shopping' },
-    { id: 'v4', merchant: 'Farmacia Sol', date: 'Jul 10', amount: '€8.45', usd: '$9.20', status: 'ok', seed: 0, cat: 'Health' },
-    { id: 'v5', merchant: 'Taller Motor', date: 'Jul 8', amount: '€140.00', usd: '$152.50', status: 'warn', seed: 1, cat: 'Transport' },
-    { id: 'v6', merchant: 'Aldi', date: 'Jul 6', amount: '€54.60', usd: '$59.50', status: 'ok', seed: 2, cat: 'Food & Drink' },
+    { id: 'v1', merchant: 'Mercado Central', date: 'Jul 14', amount: '€23.80', usd: '$25.90', pyg: formatPYG(25.9 * PYG_PER_USD), status: 'ok', seed: 0, cat: 'Food & Drink' },
+    { id: 'v2', merchant: 'Uber', date: 'Jul 13', amount: '€11.20', usd: '$12.20', pyg: formatPYG(12.2 * PYG_PER_USD), status: 'ok', seed: 1, cat: 'Transport' },
+    { id: 'v3', merchant: 'IKEA', date: 'Jul 12', amount: '€89.90', usd: '$97.90', pyg: formatPYG(97.9 * PYG_PER_USD), status: 'warn', seed: 2, cat: 'Shopping' },
+    { id: 'v4', merchant: 'Farmacia Sol', date: 'Jul 10', amount: '€8.45', usd: '$9.20', pyg: formatPYG(9.2 * PYG_PER_USD), status: 'ok', seed: 0, cat: 'Health' },
+    { id: 'v5', merchant: 'Taller Motor', date: 'Jul 8', amount: '€140.00', usd: '$152.50', pyg: formatPYG(152.5 * PYG_PER_USD), status: 'warn', seed: 1, cat: 'Transport' },
+    { id: 'v6', merchant: 'Aldi', date: 'Jul 6', amount: '€54.60', usd: '$59.50', pyg: formatPYG(59.5 * PYG_PER_USD), status: 'ok', seed: 2, cat: 'Food & Drink' },
   ];
 }
 

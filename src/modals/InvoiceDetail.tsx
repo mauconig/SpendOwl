@@ -67,7 +67,9 @@ export function InvoiceDetail() {
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }}>
               <Text style={{ fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 1, color: colors.textDim45 }}>TOTAL</Text>
-              <Text style={{ fontSize: 24, fontFamily: fonts.bold, color: colors.violetLight }}>{store.baseCur === 'USD' ? inv.usd : inv.amount}</Text>
+              <Text style={{ fontSize: 24, fontFamily: fonts.bold, color: colors.violetLight }}>
+                {store.baseCur === 'USD' ? inv.usd : store.baseCur === 'PYG' ? inv.pyg : inv.amount}
+              </Text>
             </View>
           </View>
 
