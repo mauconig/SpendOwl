@@ -12,50 +12,73 @@ import { DashboardScreen } from './screens/DashboardScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { VaultScreen } from './screens/VaultScreen';
-import { useSpendOwl } from './store/SpendOwlContext';
+import { useSpendOwl, Nav } from './store/SpendOwlContext';
 import { colors } from './theme';
+
+// Every destination reachable from BottomNav lives on this single horizontal
+// pager, in the same left-to-right order as the nav icons (home, dashboard,
+// chat, vault, settings), so every switch — tap or swipe — animates through
+// the exact same ScrollView transition.
+const NON_PAGER_ORDER: Exclude<Nav, 'pager'>[] = ['chat', 'vault', 'settings'];
+
+function pageIndexFor(nav: Nav, page: 0 | 1): number {
+  if (nav === 'pager') return page;
+  return 2 + NON_PAGER_ORDER.indexOf(nav);
+}
 
 export function RootScreen() {
   const store = useSpendOwl();
   const scrollRef = useRef<ScrollView>(null);
   const width = Dimensions.get('window').width;
+  const pageIndex = pageIndexFor(store.nav, store.page);
 
   useEffect(() => {
-    if (store.nav === 'pager') {
-      scrollRef.current?.scrollTo({ x: store.page * width, animated: true });
-    }
-  }, [store.page, store.nav, width]);
+    scrollRef.current?.scrollTo({ x: pageIndex * width, animated: true });
+  }, [pageIndex, width]);
 
   const onMomentumEnd = (ev: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const page = Math.round(ev.nativeEvent.contentOffset.x / width) as 0 | 1;
-    if (page !== store.page) store.setPage(page);
+    const idx = Math.round(ev.nativeEvent.contentOffset.x / width);
+    if (idx === pageIndex) return;
+    if (idx === 0) {
+      store.setNav('pager');
+      store.setPage(0);
+    } else if (idx === 1) {
+      store.setNav('pager');
+      store.setPage(1);
+    } else {
+      store.setNav(NON_PAGER_ORDER[idx - 2]);
+    }
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.screenBg }}>
       <Header />
       <View style={{ flex: 1 }}>
-        {store.nav === 'pager' && (
-          <ScrollView
-            ref={scrollRef}
-            style={{ flex: 1 }}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={onMomentumEnd}
-            contentOffset={{ x: store.page * width, y: 0 }}
-          >
-            <View style={{ width, flex: 1 }}>
-              <HomeScreen />
-            </View>
-            <View style={{ width, flex: 1 }}>
-              <DashboardScreen />
-            </View>
-          </ScrollView>
-        )}
-        {store.nav === 'chat' && <ChatScreen />}
-        {store.nav === 'vault' && <VaultScreen />}
-        {store.nav === 'settings' && <SettingsScreen />}
+        <ScrollView
+          ref={scrollRef}
+          style={{ flex: 1 }}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={onMomentumEnd}
+          contentOffset={{ x: pageIndex * width, y: 0 }}
+        >
+          <View style={{ width, flex: 1 }}>
+            <HomeScreen />
+          </View>
+          <View style={{ width, flex: 1 }}>
+            <DashboardScreen />
+          </View>
+          <View style={{ width, flex: 1 }}>
+            <ChatScreen />
+          </View>
+          <View style={{ width, flex: 1 }}>
+            <VaultScreen />
+          </View>
+          <View style={{ width, flex: 1 }}>
+            <SettingsScreen />
+          </View>
+        </ScrollView>
       </View>
       <BottomNav />
 

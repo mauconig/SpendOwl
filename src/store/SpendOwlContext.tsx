@@ -23,7 +23,7 @@ export const GLOW = true;
 
 export type { Currency };
 type CardState = { tax: boolean; ok: boolean };
-type Nav = 'pager' | 'chat' | 'vault' | 'settings';
+export type Nav = 'pager' | 'chat' | 'vault' | 'settings';
 
 function fmt(cur: Currency, eur: number, usd: number, pyg: number) {
   if (cur === 'EUR') return '€' + eur.toFixed(2);
