@@ -1,10 +1,10 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Donut } from '../components/Donut';
-import { Glow } from '../components/Glow';
 import { TrendChart } from '../components/TrendChart';
 import { Icon } from '../icons';
-import { CATS, CatKey, Currency, colors, convertFromEUR, fonts, formatMoney, formatPYG, moneyFont } from '../theme';
+import { CATS, CatKey, Currency, GRAD, GRAD_LOCATIONS, colors, convertFromEUR, fonts, formatMoney, formatPYG, moneyFont } from '../theme';
 import { TX } from '../store/mockData';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
@@ -47,58 +47,70 @@ export function DashboardScreen() {
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 14 }}>
-      <View style={{ paddingTop: 8, position: 'relative' }}>
-        <Glow width={280} height={200} color={overBudget ? colors.rose : colors.mint} id="heroGlow" />
-        <Text style={{ fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 2, color: colors.textDim55 }}>SAFE TO SPEND · JULY</Text>
+      <View style={{ backgroundColor: colors.card, borderRadius: 24, padding: 20, paddingBottom: 18 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ fontSize: 13, color: colors.textDim50 }}>Safe to Spend · July</Text>
+          <Icon name="arrowNE" size={18} color={colors.textDim40} />
+        </View>
         {!overBudget ? (
-          <Text style={{ fontSize: 46, fontFamily: moneyFont(baseCur, 'bold'), marginTop: 4, color: '#F2FBF7' }}>
+          <Text style={{ fontSize: 44, fontFamily: moneyFont(baseCur, 'bold'), marginTop: 6, letterSpacing: -1.5, color: '#FFFFFF' }}>
             {hero.main}
-            {hero.frac && <Text style={{ fontSize: 26, fontFamily: moneyFont(baseCur, 'medium'), color: colors.textDim55 }}>{hero.frac}</Text>}
+            {hero.frac && <Text style={{ fontSize: 26, fontFamily: moneyFont(baseCur, 'medium'), color: colors.textDim40 }}>{hero.frac}</Text>}
           </Text>
         ) : (
-          <Text style={{ fontSize: 46, fontFamily: moneyFont(baseCur, 'bold'), marginTop: 4, color: colors.rose }}>
+          <Text style={{ fontSize: 44, fontFamily: moneyFont(baseCur, 'bold'), marginTop: 6, letterSpacing: -1.5, color: colors.rose }}>
             −{hero.main}
-            {hero.frac && <Text style={{ fontSize: 26, fontFamily: moneyFont(baseCur, 'medium'), color: 'rgba(255,143,163,.7)' }}>{hero.frac}</Text>}
+            {hero.frac && <Text style={{ fontSize: 26, fontFamily: moneyFont(baseCur, 'medium'), color: 'rgba(248,113,113,.6)' }}>{hero.frac}</Text>}
           </Text>
         )}
-        <View style={{ marginTop: 10, height: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+          <Icon name={overBudget ? 'trendDown' : 'trendUp'} size={16} color={overBudget ? colors.rose : colors.mint} />
+          <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: overBudget ? colors.rose : colors.mint }}>
+            {overBudget ? `${formatMoney(86.4, baseCur, 2)} over budget (4%)` : `${formatMoney(38, baseCur, 0)} under pace (3.1%)`}
+          </Text>
+        </View>
+        <View style={{ marginTop: 14, height: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
           <View
             style={{
               height: '100%',
               width: overBudget ? '100%' : '46.5%',
               borderRadius: 999,
-              backgroundColor: overBudget ? colors.rose : colors.mint,
-            }}
-          />
-        </View>
-        <Text style={{ marginTop: 7, fontSize: 11.5, color: colors.textDim50, fontFamily: fonts.mono }}>
-          {overBudget ? '104%' : '47%'} OF {formatMoney(2400, baseCur, 0)} · 14 DAYS LEFT
-        </Text>
-        {overBudget && (
-          <View
-            style={{
-              marginTop: 12,
-              flexDirection: 'row',
-              gap: 10,
-              alignItems: 'flex-start',
-              backgroundColor: 'rgba(255,196,107,.08)',
-              borderWidth: 1,
-              borderColor: 'rgba(255,196,107,.3)',
-              borderRadius: 16,
-              padding: 12,
-              paddingHorizontal: 14,
+              backgroundColor: overBudget ? colors.rose : undefined,
             }}
           >
-            <Icon name="warn" size={20} color={colors.amber} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.amberText }}>Budget exceeded</Text>
-              <Text style={{ fontSize: 12, color: colors.textDim60, marginTop: 2, lineHeight: 17 }}>
-                You’re {formatMoney(86.4, baseCur, 2)} past July’s budget. I can draft a catch-up plan for the last two weeks.
-              </Text>
-            </View>
+            {!overBudget && (
+              <LinearGradient colors={GRAD} locations={GRAD_LOCATIONS} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1 }} />
+            )}
           </View>
-        )}
+        </View>
+        <Text style={{ marginTop: 8, fontSize: 11.5, color: colors.textDim45 }}>
+          {overBudget ? '104%' : '47%'} of {formatMoney(2400, baseCur, 0)} · 14 days left
+        </Text>
       </View>
+
+      {overBudget && (
+        <View
+          style={{
+            flexDirection: 'row',
+            gap: 10,
+            alignItems: 'flex-start',
+            backgroundColor: colors.card,
+            borderWidth: 1,
+            borderColor: 'rgba(250,204,21,.35)',
+            borderRadius: 20,
+            padding: 14,
+            paddingHorizontal: 16,
+          }}
+        >
+          <Icon name="warn" size={20} color={colors.amber} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.amber }}>Budget exceeded</Text>
+            <Text style={{ fontSize: 12, color: colors.textDim55, marginTop: 2, lineHeight: 17 }}>
+              You’re {formatMoney(86.4, baseCur, 2)} past July’s budget. I can draft a catch-up plan for the last two weeks.
+            </Text>
+          </View>
+        </View>
+      )}
 
       <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
@@ -159,14 +171,16 @@ export function DashboardScreen() {
 
       <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>Recent</Text>
-          {selCat && (
+          <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>Transactions</Text>
+          {selCat ? (
             <Pressable
               onPress={() => setSelCat(null)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: 'rgba(157,140,255,.4)', borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#F2F2F4', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 11 }}
             >
-              <Text style={{ fontSize: 11.5, color: colors.violetLight }}>{CATS[selCat].name} ✕</Text>
+              <Text style={{ fontSize: 11.5, fontFamily: fonts.medium, color: '#0A0A0B' }}>{CATS[selCat].name} ✕</Text>
             </Pressable>
+          ) : (
+            <Text style={{ fontSize: 12, color: colors.textDim40 }}>See all</Text>
           )}
         </View>
         <View style={{ gap: 4 }}>
@@ -177,9 +191,7 @@ export function DashboardScreen() {
                   width: 34,
                   height: 34,
                   borderRadius: 12,
-                  backgroundColor: t.color + '22',
-                  borderWidth: 1,
-                  borderColor: t.color + '55',
+                  backgroundColor: colors.iconBg,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
@@ -205,38 +217,33 @@ export function DashboardScreen() {
         </View>
         <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={{ width: 14, height: 3, borderRadius: 2, backgroundColor: colors.mint }} />
+            <View style={{ width: 14, height: 3, borderRadius: 2, backgroundColor: '#78ADEE' }} />
             <Text style={{ fontSize: 11, color: colors.textDim60 }}>This month</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={{ width: 14, height: 0, borderTopWidth: 2, borderStyle: 'dashed', borderTopColor: 'rgba(233,237,242,.4)' }} />
+            <View style={{ width: 14, height: 0, borderTopWidth: 2, borderStyle: 'dashed', borderTopColor: 'rgba(245,245,247,.35)' }} />
             <Text style={{ fontSize: 11, color: colors.textDim60 }}>3-month average</Text>
           </View>
         </View>
       </View>
 
-      <Pressable
-        onPress={store.openAfford}
-        style={{
-          backgroundColor: 'rgba(157,140,255,.08)',
-          borderWidth: 1,
-          borderColor: 'rgba(157,140,255,.35)',
-          borderRadius: 20,
-          padding: 15,
-          paddingHorizontal: 16,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 12,
-        }}
-      >
-        <View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(157,140,255,.2)', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name="scale" size={22} color={colors.violetLight} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.violetText }}>Can I afford this?</Text>
-          <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 1 }}>Simulate a purchase against your savings</Text>
-        </View>
-        <Icon name="chev" size={20} color={colors.textDim40} />
+      <Pressable onPress={store.openAfford}>
+        <LinearGradient
+          colors={GRAD}
+          locations={GRAD_LOCATIONS}
+          start={{ x: 0, y: 0.1 }}
+          end={{ x: 1, y: -0.1 }}
+          style={{ borderRadius: 20, padding: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}
+        >
+          <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: colors.mintDark, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="spark" size={18} color="#FFFFFF" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: '#0A0A0B' }}>Can I afford this?</Text>
+            <Text style={{ fontSize: 11.5, color: 'rgba(10,10,11,.6)', marginTop: 1 }}>Simulate a purchase against your savings</Text>
+          </View>
+          <Icon name="arrowNE" size={20} color="rgba(10,10,11,.7)" />
+        </LinearGradient>
       </Pressable>
 
       <Pressable
@@ -251,9 +258,9 @@ export function DashboardScreen() {
                 width: 30,
                 height: 30,
                 borderRadius: 10,
-                backgroundColor: '#1C212B',
+                backgroundColor: colors.iconBg,
                 borderWidth: 1,
-                borderColor: s.color + '66',
+                borderColor: 'rgba(255,255,255,.1)',
                 alignItems: 'center',
                 justifyContent: 'center',
                 marginLeft: i ? -8 : 0,

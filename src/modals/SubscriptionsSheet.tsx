@@ -42,9 +42,7 @@ export function SubscriptionsSheet() {
                         width: 38,
                         height: 38,
                         borderRadius: 13,
-                        backgroundColor: s.color + '22',
-                        borderWidth: 1,
-                        borderColor: s.color + '55',
+                        backgroundColor: colors.iconBg,
                         alignItems: 'center',
                         justifyContent: 'center',
                         opacity: s.off ? 0.5 : 1,
@@ -85,7 +83,7 @@ export function SubscriptionsSheet() {
                       <Text style={{ fontSize: 12, color: colors.textDim60 }}>Mute alerts</Text>
                     </View>
                     <Pressable onPress={() => store.toggleSubOff(s.id)}>
-                      <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: s.off ? colors.mint : colors.violetLight, paddingVertical: 4, paddingHorizontal: 6 }}>
+                      <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: s.off ? colors.mint : colors.text, paddingVertical: 4, paddingHorizontal: 6 }}>
                         {s.off ? 'Undo' : 'Log cancelled'}
                       </Text>
                     </Pressable>

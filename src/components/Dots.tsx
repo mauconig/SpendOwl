@@ -1,7 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, View } from 'react-native';
 
-function Dot({ delay }: { delay: number }) {
+const COLORS = ['#F0A878', '#FFFFFF', '#78ADEE'];
+
+function Dot({ delay, color }: { delay: number; color: string }) {
   const o = useRef(new Animated.Value(0.2)).current;
 
   useEffect(() => {
@@ -15,15 +17,15 @@ function Dot({ delay }: { delay: number }) {
     return () => loop.stop();
   }, [delay, o]);
 
-  return <Animated.View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#4DF0B8', opacity: o }} />;
+  return <Animated.View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: color, opacity: o }} />;
 }
 
 export function Dots() {
   return (
     <View style={{ flexDirection: 'row', gap: 4 }}>
-      <Dot delay={0} />
-      <Dot delay={200} />
-      <Dot delay={400} />
+      {COLORS.map((c, i) => (
+        <Dot key={c} delay={i * 200} color={c} />
+      ))}
     </View>
   );
 }

@@ -20,7 +20,7 @@ export const GLOW = true;
 
 export type { Currency };
 type CardState = { tax: boolean; ok: boolean };
-type Nav = 'pager' | 'vault' | 'settings';
+type Nav = 'pager' | 'chat' | 'vault' | 'settings';
 
 function fmt(cur: Currency, eur: number, usd: number, pyg: number) {
   if (cur === 'EUR') return '€' + eur.toFixed(2);
@@ -34,6 +34,8 @@ interface SpendOwlStore {
   page: 0 | 1;
   setNav: (n: Nav) => void;
   setPage: (p: 0 | 1) => void;
+  toggleChat: () => void;
+  goDash: () => void;
 
   // chat
   messages: Msg[];
@@ -221,10 +223,15 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   }, [invOpen]);
 
   const scanFirst = useCallback(() => {
-    setNav('pager');
-    setPage(0);
+    setNav('chat');
     setAttachment(true);
     setTouched(true);
+  }, []);
+
+  const toggleChat = useCallback(() => setNav(prev => (prev === 'chat' ? 'pager' : 'chat')), []);
+  const goDash = useCallback(() => {
+    setNav('pager');
+    setPage(1);
   }, []);
 
   const toggleSubMute = useCallback((id: string) => setSubs(prev => prev.map(s => (s.id === id ? { ...s, muted: !s.muted } : s))), []);
@@ -235,6 +242,8 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     page,
     setNav,
     setPage,
+    toggleChat,
+    goDash,
 
     messages: msgsBase(),
     input,

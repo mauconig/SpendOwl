@@ -7,6 +7,7 @@ import { InvoiceDetail } from './modals/InvoiceDetail';
 import { SubscriptionsSheet } from './modals/SubscriptionsSheet';
 import { ChatScreen } from './screens/ChatScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
+import { HomeScreen } from './screens/HomeScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { VaultScreen } from './screens/VaultScreen';
 import { useSpendOwl } from './store/SpendOwlContext';
@@ -42,13 +43,14 @@ export function RootScreen() {
             contentOffset={{ x: store.page * width, y: 0 }}
           >
             <View style={{ width }}>
-              <ChatScreen />
+              <HomeScreen />
             </View>
             <View style={{ width }}>
               <DashboardScreen />
             </View>
           </ScrollView>
         )}
+        {store.nav === 'chat' && <ChatScreen />}
         {store.nav === 'vault' && <VaultScreen />}
         {store.nav === 'settings' && <SettingsScreen />}
       </View>

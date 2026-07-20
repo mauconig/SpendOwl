@@ -41,23 +41,28 @@ export function TrendChart() {
     <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
       <Defs>
         <LinearGradient id="soArea" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0%" stopColor="#4DF0B8" stopOpacity={0.22} />
-          <Stop offset="100%" stopColor="#4DF0B8" stopOpacity={0} />
+          <Stop offset="0%" stopColor="#78ADEE" stopOpacity={0.25} />
+          <Stop offset="100%" stopColor="#78ADEE" stopOpacity={0} />
+        </LinearGradient>
+        <LinearGradient id="soLine" x1="0" y1="0" x2="1" y2="0">
+          <Stop offset="0%" stopColor="#F0A878" />
+          <Stop offset="55%" stopColor="#FFFFFF" />
+          <Stop offset="100%" stopColor="#78ADEE" />
         </LinearGradient>
       </Defs>
       <Line x1={L} y1={H - B} x2={W - R} y2={H - B} stroke="rgba(255,255,255,.08)" />
-      <Path d={`M${X(0)},${Y(0)}L${X(30)},${Y(2560)}`} stroke="rgba(233,237,242,.32)" strokeWidth={1.5} strokeDasharray="4 5" fill="none" />
+      <Path d={`M${X(0)},${Y(0)}L${X(30)},${Y(2560)}`} stroke="rgba(245,245,247,.3)" strokeWidth={1.5} strokeDasharray="4 5" fill="none" />
       <Path d={area} fill="url(#soArea)" />
-      <Path d={d} stroke="#4DF0B8" strokeWidth={2.5} fill="none" strokeLinecap="round" />
-      <Circle cx={last[0]} cy={last[1]} r={4} fill="#4DF0B8" />
-      <SvgText x={L} y={H - 6} fontSize={10} fill="rgba(233,237,242,.45)">
-        JUL 1
+      <Path d={d} stroke="url(#soLine)" strokeWidth={2.5} fill="none" strokeLinecap="round" />
+      <Circle cx={last[0]} cy={last[1]} r={4} fill="#FFFFFF" />
+      <SvgText x={L} y={H - 6} fontSize={10} fill="rgba(245,245,247,.4)">
+        Jul 1
       </SvgText>
-      <SvgText x={last[0]} y={last[1] - 11} fontSize={10} fill="#4DF0B8" textAnchor="middle">
-        TODAY
+      <SvgText x={last[0]} y={last[1] - 11} fontSize={10} fill="#FFFFFF" textAnchor="middle" fontWeight="700">
+        Today
       </SvgText>
-      <SvgText x={W - R} y={H - 6} fontSize={10} fill="rgba(233,237,242,.45)" textAnchor="end">
-        JUL 31
+      <SvgText x={W - R} y={H - 6} fontSize={10} fill="rgba(245,245,247,.4)" textAnchor="end">
+        Jul 31
       </SvgText>
     </Svg>
   );

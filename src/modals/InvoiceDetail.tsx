@@ -4,7 +4,7 @@ import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { Paper } from '../components/Paper';
 import { Toggle } from '../components/Toggle';
 import { Icon } from '../icons';
-import { colors, fonts, moneyFont } from '../theme';
+import { GRAD, GRAD_LOCATIONS, colors, fonts, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
 function Field({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
@@ -40,18 +40,18 @@ export function InvoiceDetail() {
           </View>
 
           {isWarn ? (
-            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: 'rgba(255,196,107,.08)', borderWidth: 1, borderColor: 'rgba(255,196,107,.3)', borderRadius: 14, padding: 11, paddingHorizontal: 13 }}>
+            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: colors.card, borderWidth: 1, borderColor: 'rgba(250,204,21,.35)', borderRadius: 16, padding: 12, paddingHorizontal: 14 }}>
               <Icon name="warn" size={18} color={colors.amber} />
-              <Text style={{ flex: 1, fontSize: 12.5, lineHeight: 18, color: colors.textDim75 }}>
-                <Text style={{ fontFamily: fonts.bold, color: colors.amberText }}>Needs review. </Text>
+              <Text style={{ flex: 1, fontSize: 12.5, lineHeight: 18, color: colors.textDim70 }}>
+                <Text style={{ fontFamily: fonts.bold, color: colors.amber }}>Needs review. </Text>
                 VAT number missing — add it below or approve as-is.
               </Text>
             </View>
           ) : (
-            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: 'rgba(77,240,184,.07)', borderWidth: 1, borderColor: 'rgba(77,240,184,.3)', borderRadius: 14, padding: 11, paddingHorizontal: 13 }}>
+            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: 'rgba(74,222,128,.3)', borderRadius: 16, padding: 12, paddingHorizontal: 14 }}>
               <Icon name="check" size={18} color={colors.mint} />
-              <Text style={{ fontSize: 12.5, color: colors.textDim75 }}>
-                <Text style={{ fontFamily: fonts.bold, color: colors.mintText }}>Logged automatically</Text> · matched from the scan
+              <Text style={{ fontSize: 12.5, color: colors.textDim70 }}>
+                <Text style={{ fontFamily: fonts.bold, color: colors.mint }}>Logged automatically</Text> · matched from the scan
               </Text>
             </View>
           )}
@@ -63,11 +63,11 @@ export function InvoiceDetail() {
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
             <Field label="CATEGORY" value={inv.cat} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
-            <Field label="VAT ID" value={isWarn ? 'Missing — tap to add' : 'ESB-84920115'} valueColor={isWarn ? colors.amberText : colors.text} />
+            <Field label="VAT ID" value={isWarn ? 'Missing — tap to add' : 'ESB-84920115'} valueColor={isWarn ? colors.amber : colors.text} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }}>
               <Text style={{ fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 1, color: colors.textDim45 }}>TOTAL</Text>
-              <Text style={{ fontSize: 24, fontFamily: moneyFont(store.baseCur, 'bold'), color: colors.violetLight }}>
+              <Text style={{ fontSize: 24, fontFamily: moneyFont(store.baseCur, 'bold'), color: '#FFFFFF' }}>
                 {store.baseCur === 'USD' ? inv.usd : store.baseCur === 'PYG' ? inv.pyg : inv.amount}
               </Text>
             </View>
@@ -83,8 +83,8 @@ export function InvoiceDetail() {
 
           {isWarn && (
             <Pressable onPress={store.approveInvoice}>
-              <LinearGradient colors={[colors.mintDeep, colors.mint]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ borderRadius: 999, paddingVertical: 12, alignItems: 'center' }}>
-                <Text style={{ color: colors.mintDark, fontFamily: fonts.bold, fontSize: 14 }}>Approve & log</Text>
+              <LinearGradient colors={GRAD} locations={GRAD_LOCATIONS} start={{ x: 0, y: 0.1 }} end={{ x: 1, y: -0.1 }} style={{ borderRadius: 999, paddingVertical: 13, alignItems: 'center' }}>
+                <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 14 }}>Approve & log</Text>
               </LinearGradient>
             </Pressable>
           )}

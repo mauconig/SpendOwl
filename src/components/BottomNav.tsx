@@ -1,64 +1,76 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, IconName } from '../icons';
-import { colors, fonts } from '../theme';
+import { colors } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
-type TabId = 'chat' | 'dashboard' | 'vault' | 'settings';
+type TabId = 'home' | 'dashboard' | 'vault' | 'settings';
 
 export function BottomNav() {
   const store = useSpendOwl();
   const insets = useSafeAreaInsets();
-  const active: TabId = store.nav === 'pager' ? (store.page === 0 ? 'chat' : 'dashboard') : store.nav;
+  const active: TabId | null =
+    store.nav === 'pager' ? (store.page === 0 ? 'home' : 'dashboard') : store.nav === 'vault' || store.nav === 'settings' ? store.nav : null;
 
-  const items: { id: TabId; label: string; icon: IconName; onTap: () => void }[] = [
-    { id: 'chat', label: 'Chat', icon: 'chat', onTap: () => { store.setNav('pager'); store.setPage(0); } },
-    { id: 'dashboard', label: 'Dashboard', icon: 'pie', onTap: () => { store.setNav('pager'); store.setPage(1); } },
-    { id: 'vault', label: 'Vault', icon: 'folder', onTap: () => store.setNav('vault') },
-    { id: 'settings', label: 'Settings', icon: 'gear', onTap: () => store.setNav('settings') },
+  const navLeft: { id: TabId; icon: IconName; onTap: () => void }[] = [
+    { id: 'home', icon: 'home', onTap: () => { store.setNav('pager'); store.setPage(0); } },
+    { id: 'dashboard', icon: 'bars', onTap: store.goDash },
+  ];
+  const navRight: { id: TabId; icon: IconName; onTap: () => void }[] = [
+    { id: 'vault', icon: 'folder', onTap: () => store.setNav('vault') },
+    { id: 'settings', icon: 'gear', onTap: () => store.setNav('settings') },
   ];
 
   return (
-    <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 12) }}>
-      <View
-        style={{
-          flexDirection: 'row',
-          backgroundColor: colors.navBg,
-          borderRadius: 999,
-          borderWidth: 1,
-          borderColor: 'rgba(255,255,255,.08)',
-          paddingHorizontal: 8,
-          paddingVertical: 6,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.35,
-          shadowRadius: 16,
-          elevation: Platform.OS === 'android' ? 12 : 0,
-        }}
-      >
-        {items.map(n => {
-          const isActive = active === n.id;
-          return (
-            <Pressable key={n.id} onPress={n.onTap} style={{ flex: 1, alignItems: 'center', gap: 3, paddingVertical: 6 }}>
-              <View
-                style={{
-                  width: 58,
-                  height: 30,
-                  borderRadius: 16,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: isActive ? 'rgba(77,240,184,.14)' : 'transparent',
-                }}
-              >
-                <Icon name={n.icon} size={22} color={isActive ? colors.mint : colors.textDim50} />
-              </View>
-              <Text style={{ fontSize: 11, fontFamily: isActive ? fonts.bold : fonts.regular, color: isActive ? colors.mint : colors.textDim50 }}>
-                {n.label}
-              </Text>
+    <View style={{ paddingHorizontal: 10, paddingTop: 14, paddingBottom: Math.max(insets.bottom, 16) }}>
+      <View style={{ position: 'relative' }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: colors.navBg,
+            borderTopWidth: 1,
+            borderTopColor: colors.navBorder,
+          }}
+        >
+          {navLeft.map(n => (
+            <Pressable key={n.id} onPress={n.onTap} style={{ flex: 1, alignItems: 'center', paddingVertical: 6 }}>
+              <Icon name={n.icon} size={22} color={active === n.id ? '#FFFFFF' : colors.textDim40} />
             </Pressable>
-          );
-        })}
+          ))}
+          <View style={{ width: 68, flexShrink: 0 }} />
+          {navRight.map(n => (
+            <Pressable key={n.id} onPress={n.onTap} style={{ flex: 1, alignItems: 'center', paddingVertical: 6 }}>
+              <Icon name={n.icon} size={22} color={active === n.id ? '#FFFFFF' : colors.textDim40} />
+            </Pressable>
+          ))}
+        </View>
+
+        <Pressable onPress={store.toggleChat} style={{ position: 'absolute', left: '50%', top: -22, marginLeft: -28 }}>
+          <LinearGradient
+            colors={['#FFFFFF', '#CADEF7', '#78ADEE', '#F0A878']}
+            start={{ x: 0.3, y: 0.2 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              borderWidth: 5,
+              borderColor: '#050506',
+              alignItems: 'center',
+              justifyContent: 'center',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.55,
+              shadowRadius: 22,
+              elevation: Platform.OS === 'android' ? 12 : 0,
+            }}
+          >
+            <Icon name="spark" size={26} color="#0A0A0B" />
+          </LinearGradient>
+        </Pressable>
       </View>
     </View>
   );

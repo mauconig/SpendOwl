@@ -44,10 +44,10 @@ export type Subscription = {
 
 export function subsSeed(): Subscription[] {
   return [
-    { id: 'sp', name: 'Spotify', color: '#4DF0B8', price: 10.99, day: '3rd', muted: false, off: false },
-    { id: 'nf', name: 'Netflix', color: '#FF8FB8', price: 13.99, day: '12th', muted: false, off: false },
-    { id: 'ic', name: 'iCloud+', color: '#6FB6FF', price: 2.99, day: '18th', muted: true, off: false },
-    { id: 'gym', name: 'Basic Fit', color: '#FFC46B', price: 24.99, day: '25th', muted: false, off: false },
+    { id: 'sp', name: 'Spotify', color: '#4ADE80', price: 10.99, day: '3rd', muted: false, off: false },
+    { id: 'nf', name: 'Netflix', color: '#F0A878', price: 13.99, day: '12th', muted: false, off: false },
+    { id: 'ic', name: 'iCloud+', color: '#78ADEE', price: 2.99, day: '18th', muted: true, off: false },
+    { id: 'gym', name: 'Basic Fit', color: '#C9B8F5', price: 24.99, day: '25th', muted: false, off: false },
   ];
 }
 

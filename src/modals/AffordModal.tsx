@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 import { SlideUp } from '../components/FadeIn';
-import { colors, fonts, formatMoney, moneyFont } from '../theme';
+import { GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
 import { AFFORD_OPTS, SAVINGS_TODAY, useSpendOwl } from '../store/SpendOwlContext';
 
 export function AffordModal() {
@@ -14,10 +14,10 @@ export function AffordModal() {
 
   const verdict =
     after > 1500
-      ? { t: 'Yes — comfortably within your buffer.', c: colors.mint, bg: 'rgba(77,240,184,.08)', bd: 'rgba(77,240,184,.35)' }
+      ? { t: 'Yes — comfortably within your buffer.', c: colors.mint, bg: colors.card, bd: 'rgba(74,222,128,.35)' }
       : after > 500
-        ? { t: 'Yes, but it’ll be tight this month.', c: colors.amberText, bg: 'rgba(255,196,107,.08)', bd: 'rgba(255,196,107,.35)' }
-        : { t: 'I’d wait — this cuts deep into your buffer.', c: colors.rose, bg: 'rgba(255,143,163,.08)', bd: 'rgba(255,143,163,.35)' };
+        ? { t: 'Yes, but it’ll be tight this month.', c: colors.amber, bg: colors.card, bd: 'rgba(250,204,21,.35)' }
+        : { t: 'I’d wait — this cuts deep into your buffer.', c: colors.rose, bg: colors.card, bd: 'rgba(248,113,113,.35)' };
 
   return (
     <Modal visible={store.affordOpen} transparent animationType="fade" onRequestClose={store.closeAfford}>
@@ -50,15 +50,13 @@ export function AffordModal() {
                       style={{
                         flex: 1,
                         alignItems: 'center',
-                        paddingVertical: 8,
+                        paddingVertical: 9,
                         paddingHorizontal: 4,
                         borderRadius: 12,
-                        borderWidth: 1,
-                        borderColor: active ? 'rgba(157,140,255,.6)' : 'rgba(255,255,255,.1)',
-                        backgroundColor: active ? 'rgba(157,140,255,.16)' : 'transparent',
+                        backgroundColor: active ? '#F2F2F4' : colors.iconBg,
                       }}
                     >
-                      <Text style={{ fontSize: 11.5, fontFamily: moneyFont(baseCur, 'medium'), color: active ? colors.violetText : colors.textDim60 }}>
+                      <Text style={{ fontSize: 11.5, fontFamily: moneyFont(baseCur, 'bold'), color: active ? '#0A0A0B' : colors.textDim60 }}>
                         {o.name} {formatMoney(o.v, baseCur, 0)}
                       </Text>
                     </Pressable>
@@ -72,18 +70,19 @@ export function AffordModal() {
                     <Text style={{ fontSize: 12, color: colors.textDim65 }}>Savings today</Text>
                     <Text style={{ fontSize: 12, fontFamily: moneyFont(baseCur, 'bold'), color: colors.mint }}>{formatMoney(SAVINGS_TODAY, baseCur, 0)}</Text>
                   </View>
-                  <View style={{ height: 12, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.07)', overflow: 'hidden' }}>
-                    <LinearGradient colors={[colors.mintDeep, colors.mint]} style={{ height: '100%', width: '100%', borderRadius: 999 }} />
+                  <View style={{ height: 12, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
+                    <View style={{ height: '100%', width: '100%', borderRadius: 999, backgroundColor: colors.mint }} />
                   </View>
                 </View>
                 <View>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                     <Text style={{ fontSize: 12, color: colors.textDim65 }}>After purchase</Text>
-                    <Text style={{ fontSize: 12, fontFamily: moneyFont(baseCur, 'bold'), color: colors.violetLight }}>{formatMoney(after, baseCur, 0)}</Text>
+                    <Text style={{ fontSize: 12, fontFamily: moneyFont(baseCur, 'bold'), color: colors.text }}>{formatMoney(after, baseCur, 0)}</Text>
                   </View>
-                  <View style={{ height: 12, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.07)', overflow: 'hidden' }}>
+                  <View style={{ height: 12, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
                     <LinearGradient
-                      colors={['#8B7CF6', '#B7A8FF']}
+                      colors={GRAD}
+                      locations={GRAD_LOCATIONS}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={{ height: '100%', width: `${Math.max((after / SAVINGS_TODAY) * 100, 3)}%`, borderRadius: 999 }}
@@ -96,11 +95,8 @@ export function AffordModal() {
                 <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: verdict.c, textAlign: 'center' }}>{verdict.t}</Text>
               </View>
 
-              <Pressable
-                onPress={store.closeAfford}
-                style={{ alignItems: 'center', paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,.14)' }}
-              >
-                <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: colors.textDim75 }}>Done</Text>
+              <Pressable onPress={store.closeAfford} style={{ alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: '#F2F2F4' }}>
+                <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: '#0A0A0B' }}>Done</Text>
               </Pressable>
             </SlideUp>
           </Pressable>

@@ -26,12 +26,10 @@ function CurPill({ label, active, onPress }: { label: string; active: boolean; o
         paddingVertical: 5,
         paddingHorizontal: 12,
         borderRadius: 999,
-        backgroundColor: active ? 'rgba(77,240,184,.14)' : 'transparent',
-        borderWidth: 1,
-        borderColor: active ? 'rgba(77,240,184,.5)' : 'rgba(255,255,255,.12)',
+        backgroundColor: active ? '#F2F2F4' : 'transparent',
       }}
     >
-      <Text style={{ fontFamily: fonts.mono, fontSize: 11, color: active ? colors.mint : colors.textDim45 }}>{label}</Text>
+      <Text style={{ fontFamily: fonts.bold, fontSize: 10.5, color: active ? '#0A0A0B' : colors.textDim45 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -45,17 +43,17 @@ export function SettingsScreen() {
 
       <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
         <LinearGradient
-          colors={[colors.violet, colors.mint]}
+          colors={['#F0A878', '#78ADEE']}
           style={{ width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' }}
         >
-          <Text style={{ fontSize: 19, fontFamily: fonts.bold, color: '#0B0D11' }}>M</Text>
+          <Text style={{ fontSize: 19, fontFamily: fonts.bold, color: '#0A0A0B' }}>M</Text>
         </LinearGradient>
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 15, fontFamily: fonts.bold, color: colors.text }}>Maya Fernández</Text>
           <Text style={{ fontSize: 12, color: colors.textDim50, marginTop: 1 }}>maya@freelance.eu</Text>
         </View>
-        <View style={{ borderWidth: 1, borderColor: 'rgba(77,240,184,.35)', borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9 }}>
-          <Text style={{ fontFamily: fonts.mono, fontSize: 10.5, color: colors.mint }}>FREELANCE</Text>
+        <View style={{ backgroundColor: '#F2F2F4', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 }}>
+          <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: '#0A0A0B' }}>Freelance</Text>
         </View>
       </View>
 
@@ -63,7 +61,7 @@ export function SettingsScreen() {
         <Row
           label="Base currency"
           right={
-            <View style={{ flexDirection: 'row', gap: 4 }}>
+            <View style={{ flexDirection: 'row', gap: 4, backgroundColor: colors.iconBg, borderRadius: 999, padding: 3 }}>
               <CurPill label="EUR" active={store.baseCur === 'EUR'} onPress={() => store.setBaseCur('EUR')} />
               <CurPill label="USD" active={store.baseCur === 'USD'} onPress={() => store.setBaseCur('USD')} />
               <CurPill label="PYG" active={store.baseCur === 'PYG'} onPress={() => store.setBaseCur('PYG')} />

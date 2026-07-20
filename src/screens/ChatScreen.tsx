@@ -1,7 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useRef } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { Badge } from '../components/Badge';
 import { FadeIn } from '../components/FadeIn';
 import { Laser } from '../components/Laser';
 import { Dots } from '../components/Dots';
@@ -10,7 +9,7 @@ import { PulseDot } from '../components/PulseDot';
 import { Toggle } from '../components/Toggle';
 import { Wave } from '../components/Wave';
 import { Icon } from '../icons';
-import { CATS, CatKey, colors, fonts, moneyFont } from '../theme';
+import { CATS, CatKey, GRAD, GRAD_LOCATIONS, colors, fonts, moneyFont } from '../theme';
 import { Msg } from '../store/mockData';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
@@ -23,42 +22,45 @@ function CardMessage({ m }: { m: Extract<Msg, { type: 'card' }> }) {
       style={{
         alignSelf: 'flex-start',
         width: '88%',
-        backgroundColor: '#181C25',
+        backgroundColor: colors.card,
         borderWidth: 1,
-        borderColor: 'rgba(157,140,255,.28)',
-        borderRadius: 16,
+        borderColor: colors.cardBorder,
+        borderRadius: 22,
         borderTopLeftRadius: 6,
-        padding: 14,
-        paddingTop: 14,
-        paddingBottom: 12,
-        gap: 10,
+        padding: 15,
+        paddingTop: 15,
+        paddingBottom: 13,
+        gap: 11,
       }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: cat.color }} />
-        <Text style={{ fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 1.2, color: colors.textDim55 }}>{cat.name.toUpperCase()}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ width: 26, height: 26, borderRadius: 9, backgroundColor: cat.color + '26', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ color: cat.color, fontSize: 12, fontFamily: fonts.bold }}>{cat.name[0]}</Text>
+        </View>
+        <Text style={{ fontSize: 12, color: colors.textDim50 }}>{cat.name}</Text>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
         <View style={{ flexShrink: 1 }}>
-          <Text style={{ fontSize: 15.5, fontFamily: fonts.bold, color: '#F2F5FA' }}>{m.merchant}</Text>
-          <Text style={{ fontSize: 12, color: colors.textDim50, marginTop: 2 }}>{m.note}</Text>
+          <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: '#FFFFFF' }}>{m.merchant}</Text>
+          <Text style={{ fontSize: 12, color: colors.textDim45, marginTop: 2 }}>{m.note}</Text>
         </View>
-        <Text style={{ fontSize: 26, fontFamily: moneyFont(store.baseCur, 'bold'), color: colors.violetLight }}>{store.fmt(store.baseCur, m.eur, m.usd, m.pyg)}</Text>
+        <Text style={{ fontSize: 27, fontFamily: moneyFont(store.baseCur, 'bold'), letterSpacing: -0.5, color: '#FFFFFF' }}>{store.fmt(store.baseCur, m.eur, m.usd, m.pyg)}</Text>
       </View>
-      <View style={{ height: 1, backgroundColor: colors.hairline }} />
+      <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ fontSize: 13, color: colors.textDim75 }}>Business expense</Text>
+        <Text style={{ fontSize: 13, color: colors.textDim70 }}>Business expense</Text>
         <Toggle on={card.tax} onToggle={() => store.setCard(m.id, { tax: !card.tax })} />
       </View>
       {!card.ok ? (
         <Pressable onPress={() => store.setCard(m.id, { ok: true })}>
           <LinearGradient
-            colors={[colors.mintDeep, colors.mint]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={{ marginTop: 2, borderRadius: 999, paddingVertical: 10, alignItems: 'center' }}
+            colors={GRAD}
+            locations={GRAD_LOCATIONS}
+            start={{ x: 0, y: 0.1 }}
+            end={{ x: 1, y: -0.1 }}
+            style={{ marginTop: 2, borderRadius: 999, paddingVertical: 11, alignItems: 'center' }}
           >
-            <Text style={{ color: colors.mintDark, fontFamily: fonts.bold, fontSize: 13.5 }}>Approve & log</Text>
+            <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 13.5 }}>Approve & log</Text>
           </LinearGradient>
         </Pressable>
       ) : (
@@ -69,10 +71,9 @@ function CardMessage({ m }: { m: Extract<Msg, { type: 'card' }> }) {
             alignItems: 'center',
             justifyContent: 'center',
             gap: 6,
-            borderWidth: 1,
-            borderColor: 'rgba(77,240,184,.4)',
+            backgroundColor: colors.iconBg,
             borderRadius: 999,
-            paddingVertical: 9,
+            paddingVertical: 10,
           }}
         >
           <Icon name="check" size={15} color={colors.mint} />
@@ -92,15 +93,13 @@ function MessageBubble({ m }: { m: Msg }) {
             alignSelf: 'flex-start',
             maxWidth: '84%',
             backgroundColor: colors.bubbleAi,
-            borderWidth: 1,
-            borderColor: colors.bubbleAiBorder,
-            padding: 10,
-            paddingHorizontal: 14,
-            borderRadius: 18,
+            padding: 11,
+            paddingHorizontal: 15,
+            borderRadius: 20,
             borderTopLeftRadius: 6,
           }}
         >
-          <Text style={{ fontSize: 14.5, lineHeight: 21, color: '#DDE3EA' }}>{m.text}</Text>
+          <Text style={{ fontSize: 14.5, lineHeight: 21, color: '#E7E7EA' }}>{m.text}</Text>
         </View>
       </FadeIn>
     );
@@ -112,15 +111,13 @@ function MessageBubble({ m }: { m: Msg }) {
           style={{
             maxWidth: '78%',
             backgroundColor: colors.bubbleUser,
-            borderWidth: 1,
-            borderColor: colors.bubbleUserBorder,
-            padding: 10,
-            paddingHorizontal: 14,
-            borderRadius: 18,
+            padding: 11,
+            paddingHorizontal: 15,
+            borderRadius: 20,
             borderTopRightRadius: 6,
           }}
         >
-          <Text style={{ fontSize: 14.5, lineHeight: 21, color: '#EAFFF7' }}>{m.text}</Text>
+          <Text style={{ fontSize: 14.5, lineHeight: 21, color: colors.bubbleUserText, fontFamily: fonts.medium }}>{m.text}</Text>
         </View>
       </FadeIn>
     );
@@ -134,17 +131,15 @@ function MessageBubble({ m }: { m: Msg }) {
             alignItems: 'center',
             gap: 10,
             backgroundColor: colors.bubbleUser,
-            borderWidth: 1,
-            borderColor: colors.bubbleUserBorder,
-            padding: 10,
-            paddingHorizontal: 14,
-            borderRadius: 18,
+            padding: 11,
+            paddingHorizontal: 15,
+            borderRadius: 20,
             borderTopRightRadius: 6,
           }}
         >
-          <Icon name="mic" size={16} color={colors.mintText} />
-          <Wave animated={false} color={colors.mintText} n={18} />
-          <Text style={{ fontFamily: fonts.mono, fontSize: 11.5, color: colors.textDim70 }}>{m.dur}</Text>
+          <Icon name="mic" size={16} color={colors.bubbleUserText} />
+          <Wave animated={false} color={colors.bubbleUserText} n={18} />
+          <Text style={{ fontFamily: fonts.mono, fontSize: 11.5, color: 'rgba(16,16,19,.6)' }}>{m.dur}</Text>
         </View>
       </FadeIn>
     );
@@ -152,40 +147,38 @@ function MessageBubble({ m }: { m: Msg }) {
   if (m.type === 'receipt') {
     return (
       <FadeIn style={{ alignItems: 'flex-end', gap: 5 }}>
-        <View style={{ width: 100, height: 128, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,.12)' }}>
+        <View style={{ width: 100, height: 128, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,.12)' }}>
           <Paper seed={1} />
         </View>
-        <Text style={{ fontSize: 10.5, color: colors.textDim45, fontFamily: fonts.mono }}>factura_0717.jpg</Text>
+        <Text style={{ fontSize: 10.5, color: colors.textDim40 }}>factura_0717.jpg</Text>
       </FadeIn>
     );
   }
   if (m.type === 'scanning') {
     return (
       <FadeIn>
-        <View
-          style={{
-            alignSelf: 'flex-start',
-            flexDirection: 'row',
-            gap: 12,
-            alignItems: 'center',
-            backgroundColor: colors.bubbleAi,
-            borderWidth: 1,
-            borderColor: 'rgba(77,240,184,.28)',
-            borderRadius: 18,
-            borderTopLeftRadius: 6,
-            padding: 12,
-          }}
+        <LinearGradient
+          colors={GRAD}
+          locations={GRAD_LOCATIONS}
+          start={{ x: 0, y: 0.1 }}
+          end={{ x: 1, y: -0.1 }}
+          style={{ alignSelf: 'flex-start', borderRadius: 21, borderTopLeftRadius: 7, padding: 1 }}
         >
-          <View style={{ position: 'relative', width: 62, height: 80, borderRadius: 8, overflow: 'hidden' }}>
-            <Paper seed={1} />
-            <Laser />
+          <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: colors.card, borderRadius: 20, borderTopLeftRadius: 6, padding: 12 }}>
+            <View style={{ position: 'relative', width: 62, height: 80, borderRadius: 9, overflow: 'hidden' }}>
+              <Paper seed={1} />
+              <Laser />
+            </View>
+            <View style={{ gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Icon name="spark" size={14} color="#FFFFFF" />
+                <Text style={{ fontSize: 13.5, fontFamily: fonts.bold, color: '#F5F5F7' }}>Reading your factura</Text>
+              </View>
+              <Text style={{ fontSize: 11.5, color: colors.textDim50 }}>Pulling merchant, total & VAT…</Text>
+              <Dots />
+            </View>
           </View>
-          <View style={{ gap: 6 }}>
-            <Text style={{ fontSize: 13.5, fontFamily: fonts.medium, color: colors.mintText2 }}>Reading your factura</Text>
-            <Text style={{ fontSize: 11.5, color: colors.textDim50 }}>Pulling merchant, total & VAT…</Text>
-            <Dots />
-          </View>
-        </View>
+        </LinearGradient>
       </FadeIn>
     );
   }
@@ -216,29 +209,24 @@ export function ChatScreen() {
 
       {store.attachment && (
         <FadeIn style={{ paddingHorizontal: 14, paddingBottom: 6, flexDirection: 'row', alignItems: 'flex-end' }}>
-          <View style={{ width: 62, height: 78, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(77,240,184,.4)' }}>
+          <View style={{ width: 62, height: 78, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,.25)' }}>
             <Paper seed={1} />
             <Pressable
               onPress={store.removeAttachment}
-              style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(8,10,13,.85)', alignItems: 'center', justifyContent: 'center' }}
+              style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(5,5,6,.85)', alignItems: 'center', justifyContent: 'center' }}
             >
               <Icon name="close" size={11} color={colors.text} />
             </Pressable>
           </View>
-          <Text style={{ marginLeft: 10, marginBottom: 4, fontSize: 11, color: colors.textDim50, fontFamily: fonts.mono }}>
-            factura_0717.jpg · ready to send
-          </Text>
+          <Text style={{ marginLeft: 10, marginBottom: 4, fontSize: 11, color: colors.textDim45 }}>factura_0717.jpg · ready to send</Text>
         </FadeIn>
       )}
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6, paddingBottom: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 6, paddingBottom: 10 }}>
         {!store.recording ? (
           <>
-            <Pressable
-              onPress={store.attach}
-              style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.input, borderWidth: 1, borderColor: 'rgba(255,255,255,.08)', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Icon name="cam" size={20} color="rgba(233,237,242,.75)" />
+            <Pressable onPress={store.attach} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.bubbleAi, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="cam" size={20} color="rgba(245,245,247,.75)" />
             </Pressable>
             <View
               style={{
@@ -247,8 +235,6 @@ export function ChatScreen() {
                 alignItems: 'center',
                 gap: 6,
                 backgroundColor: colors.input,
-                borderWidth: 1,
-                borderColor: colors.inputBorder,
                 borderRadius: 999,
                 paddingLeft: 16,
                 paddingRight: 6,
@@ -259,7 +245,7 @@ export function ChatScreen() {
                 value={store.input}
                 onChangeText={store.setInput}
                 placeholder="Message your coach…"
-                placeholderTextColor="rgba(233,237,242,.38)"
+                placeholderTextColor="rgba(245,245,247,.35)"
                 onSubmitEditing={store.send}
                 style={{ flex: 1, color: colors.text, fontSize: 14.5 }}
               />
@@ -271,24 +257,21 @@ export function ChatScreen() {
                   borderRadius: 17,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: hasContent ? undefined : 'transparent',
-                  overflow: 'hidden',
+                  backgroundColor: hasContent ? '#F2F2F4' : 'transparent',
                 }}
               >
-                {hasContent ? (
-                  <LinearGradient colors={['#B7A8FF', '#9D8CFF']} style={{ position: 'absolute', width: 34, height: 34, borderRadius: 17 }} />
-                ) : null}
-                <Icon name="send" size={16} color={hasContent ? '#0B0D11' : 'rgba(233,237,242,.35)'} />
+                <Icon name="send" size={16} color={hasContent ? '#0A0A0B' : 'rgba(245,245,247,.3)'} />
               </Pressable>
             </View>
             <Pressable onPress={store.startRec}>
               <LinearGradient
-                colors={[colors.mintDeep, colors.mint]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+                colors={GRAD}
+                locations={GRAD_LOCATIONS}
+                start={{ x: 0.2, y: 0 }}
+                end={{ x: 0.8, y: 1 }}
                 style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}
               >
-                <Icon name="mic" size={21} color={colors.mintDark} />
+                <Icon name="mic" size={21} color="#0A0A0B" />
               </LinearGradient>
             </Pressable>
           </>
@@ -296,39 +279,30 @@ export function ChatScreen() {
           <>
             <Pressable
               onPress={() => store.endRec(false)}
-              style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.input, borderWidth: 1, borderColor: 'rgba(255,255,255,.08)', alignItems: 'center', justifyContent: 'center' }}
+              style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.bubbleAi, alignItems: 'center', justifyContent: 'center' }}
             >
-              <Icon name="close" size={18} color="rgba(233,237,242,.7)" />
+              <Icon name="close" size={18} color="rgba(245,245,247,.7)" />
             </Pressable>
-            <View
-              style={{
-                flex: 1,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 10,
-                backgroundColor: 'rgba(77,240,184,.09)',
-                borderWidth: 1,
-                borderColor: 'rgba(77,240,184,.35)',
-                borderRadius: 999,
-                paddingHorizontal: 16,
-                minHeight: 44,
-              }}
+            <LinearGradient
+              colors={GRAD}
+              locations={GRAD_LOCATIONS}
+              start={{ x: 0, y: 0.1 }}
+              end={{ x: 1, y: -0.1 }}
+              style={{ flex: 1, borderRadius: 999, padding: 1 }}
             >
-              <PulseDot color={colors.rose} />
-              <View style={{ flex: 1, overflow: 'hidden' }}>
-                <Wave animated color={colors.mint} n={28} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#101012', borderRadius: 999, paddingHorizontal: 15, minHeight: 42 }}>
+                <PulseDot color={colors.rose} />
+                <View style={{ flex: 1, overflow: 'hidden' }}>
+                  <Wave animated color="#F5F5F7" n={28} />
+                </View>
+                <Text style={{ fontFamily: fonts.mono, fontSize: 12, color: '#F5F5F7' }}>0:{String(store.recSecs).padStart(2, '0')}</Text>
               </View>
-              <Text style={{ fontFamily: fonts.mono, fontSize: 12, color: colors.mintText2 }}>0:{String(store.recSecs).padStart(2, '0')}</Text>
-            </View>
-            <Pressable onPress={() => store.endRec(true)}>
-              <LinearGradient
-                colors={[colors.mintDeep, colors.mint]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}
-              >
-                <Icon name="check" size={21} color={colors.mintDark} />
-              </LinearGradient>
+            </LinearGradient>
+            <Pressable
+              onPress={() => store.endRec(true)}
+              style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#F2F2F4', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Icon name="check" size={21} color="#0A0A0B" />
             </Pressable>
           </>
         )}

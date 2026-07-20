@@ -1,10 +1,11 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Badge } from '../components/Badge';
 import { Paper } from '../components/Paper';
 import { FadeIn } from '../components/FadeIn';
 import { Icon } from '../icons';
-import { colors, fonts, moneyFont } from '../theme';
+import { GRAD, GRAD_LOCATIONS, colors, fonts, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
 export function VaultScreen() {
@@ -20,29 +21,31 @@ export function VaultScreen() {
 
       {items.length === 0 ? (
         <View style={{ marginTop: 44, alignItems: 'center', gap: 14, paddingHorizontal: 24 }}>
-          <View
-            style={{
-              width: 96,
-              height: 96,
-              borderRadius: 30,
-              borderWidth: 1.5,
-              borderColor: 'rgba(77,240,184,.4)',
-              borderStyle: 'dashed',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: 'rgba(77,240,184,.05)',
-            }}
+          <LinearGradient
+            colors={GRAD}
+            locations={GRAD_LOCATIONS}
+            start={{ x: 0, y: 0.1 }}
+            end={{ x: 1, y: -0.1 }}
+            style={{ width: 96, height: 96, borderRadius: 48, padding: 1 }}
           >
-            <Icon name="cam" size={34} color="rgba(77,240,184,.75)" />
-          </View>
+            <View style={{ flex: 1, borderRadius: 48, backgroundColor: '#101012', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="cam" size={34} color="#F5F5F7" />
+            </View>
+          </LinearGradient>
           <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>Your vault is empty</Text>
           <Text style={{ fontSize: 13, lineHeight: 20, color: colors.textDim55, textAlign: 'center' }}>
             Snap a factura in chat and I’ll file it here — logged, categorised and ready for tax season.
           </Text>
           <Pressable onPress={store.scanFirst}>
-            <View style={{ marginTop: 4, backgroundColor: colors.mint, paddingVertical: 11, paddingHorizontal: 22, borderRadius: 999 }}>
-              <Text style={{ color: colors.mintDark, fontFamily: fonts.bold, fontSize: 13.5 }}>Scan your first factura</Text>
-            </View>
+            <LinearGradient
+              colors={GRAD}
+              locations={GRAD_LOCATIONS}
+              start={{ x: 0, y: 0.1 }}
+              end={{ x: 1, y: -0.1 }}
+              style={{ marginTop: 4, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 999 }}
+            >
+              <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 13.5 }}>Scan your first factura</Text>
+            </LinearGradient>
           </Pressable>
         </View>
       ) : (
