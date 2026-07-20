@@ -4,7 +4,7 @@ import { Badge } from '../components/Badge';
 import { Paper } from '../components/Paper';
 import { FadeIn } from '../components/FadeIn';
 import { Icon } from '../icons';
-import { colors, fonts } from '../theme';
+import { colors, fonts, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
 export function VaultScreen() {
@@ -49,6 +49,7 @@ export function VaultScreen() {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           {items.map(v => {
             const status = store.vaultPatch[v.id] ?? v.status;
+            const displayAmount = store.baseCur === 'USD' ? v.usd : store.baseCur === 'PYG' ? v.pyg : v.amount;
             return (
               <FadeIn key={v.id} style={{ width: '30%', gap: 6 }}>
                 <Pressable onPress={() => store.openInvoice(v.id)}>
@@ -61,8 +62,8 @@ export function VaultScreen() {
                   <Text style={{ fontSize: 12, fontFamily: fonts.medium, color: colors.text, marginTop: 6 }} numberOfLines={1}>
                     {v.merchant}
                   </Text>
-                  <Text style={{ fontSize: 10, color: colors.textDim45, fontFamily: fonts.mono, marginTop: -3 }}>
-                    {v.date} · {v.amount}
+                  <Text style={{ fontSize: 10, color: colors.textDim45, fontFamily: moneyFont(store.baseCur, 'mono'), marginTop: -3 }}>
+                    {v.date} · {displayAmount}
                   </Text>
                 </Pressable>
               </FadeIn>

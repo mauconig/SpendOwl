@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { CatKey, PYG_PER_USD, formatPYG } from '../theme';
+import { CatKey, Currency, PYG_PER_USD, formatPYG } from '../theme';
 import {
   AFFORD_OPTS,
   Msg,
@@ -18,7 +18,7 @@ const FIRST_RUN = false;
 const OVER_BUDGET = false;
 export const GLOW = true;
 
-export type Currency = 'EUR' | 'USD' | 'PYG';
+export type { Currency };
 type CardState = { tax: boolean; ok: boolean };
 type Nav = 'pager' | 'vault' | 'settings';
 

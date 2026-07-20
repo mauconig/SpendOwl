@@ -3,13 +3,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 import { SlideUp } from '../components/FadeIn';
-import { colors, fonts } from '../theme';
+import { colors, fonts, formatMoney, moneyFont } from '../theme';
 import { AFFORD_OPTS, SAVINGS_TODAY, useSpendOwl } from '../store/SpendOwlContext';
 
 export function AffordModal() {
   const store = useSpendOwl();
   const opt = AFFORD_OPTS[store.affordSel];
   const after = SAVINGS_TODAY - opt.v;
+  const baseCur = store.baseCur;
 
   const verdict =
     after > 1500
@@ -44,7 +45,7 @@ export function AffordModal() {
                   const active = store.affordSel === i;
                   return (
                     <Pressable
-                      key={o.label}
+                      key={o.name}
                       onPress={() => store.setAffordSel(i)}
                       style={{
                         flex: 1,
@@ -57,7 +58,9 @@ export function AffordModal() {
                         backgroundColor: active ? 'rgba(157,140,255,.16)' : 'transparent',
                       }}
                     >
-                      <Text style={{ fontSize: 11.5, fontFamily: fonts.medium, color: active ? colors.violetText : colors.textDim60 }}>{o.label}</Text>
+                      <Text style={{ fontSize: 11.5, fontFamily: moneyFont(baseCur, 'medium'), color: active ? colors.violetText : colors.textDim60 }}>
+                        {o.name} {formatMoney(o.v, baseCur, 0)}
+                      </Text>
                     </Pressable>
                   );
                 })}
@@ -67,7 +70,7 @@ export function AffordModal() {
                 <View>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                     <Text style={{ fontSize: 12, color: colors.textDim65 }}>Savings today</Text>
-                    <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: colors.mint }}>€{SAVINGS_TODAY.toLocaleString('en-US')}</Text>
+                    <Text style={{ fontSize: 12, fontFamily: moneyFont(baseCur, 'bold'), color: colors.mint }}>{formatMoney(SAVINGS_TODAY, baseCur, 0)}</Text>
                   </View>
                   <View style={{ height: 12, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.07)', overflow: 'hidden' }}>
                     <LinearGradient colors={[colors.mintDeep, colors.mint]} style={{ height: '100%', width: '100%', borderRadius: 999 }} />
@@ -76,7 +79,7 @@ export function AffordModal() {
                 <View>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                     <Text style={{ fontSize: 12, color: colors.textDim65 }}>After purchase</Text>
-                    <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: colors.violetLight }}>€{after.toLocaleString('en-US')}</Text>
+                    <Text style={{ fontSize: 12, fontFamily: moneyFont(baseCur, 'bold'), color: colors.violetLight }}>{formatMoney(after, baseCur, 0)}</Text>
                   </View>
                   <View style={{ height: 12, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.07)', overflow: 'hidden' }}>
                     <LinearGradient

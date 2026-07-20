@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@expo-google-fonts/noto-sans": "^0.4.2",
+    "@expo-google-fonts/noto-sans-mono": "^0.4.2",
     "@expo-google-fonts/roboto": "^0.4.3",
     "@expo-google-fonts/roboto-mono": "^0.4.2",
     "@expo/metro-runtime": "~6.1.2",

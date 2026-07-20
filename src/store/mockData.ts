@@ -88,9 +88,9 @@ export const TX: TxRow[] = [
 ];
 
 export const AFFORD_OPTS = [
-  { label: 'Headphones €129', v: 129 },
-  { label: 'Monitor €349', v: 349 },
-  { label: 'Laptop €899', v: 899 },
+  { name: 'Headphones', v: 129 },
+  { name: 'Monitor', v: 349 },
+  { name: 'Laptop', v: 899 },
 ];
 
 export const SAVINGS_TODAY = 2140;

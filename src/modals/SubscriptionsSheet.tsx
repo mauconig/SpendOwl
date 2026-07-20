@@ -2,13 +2,14 @@ import React from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SlideUp } from '../components/FadeIn';
 import { Toggle } from '../components/Toggle';
-import { colors, fonts } from '../theme';
+import { colors, fonts, formatMoney, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
 export function SubscriptionsSheet() {
   const store = useSpendOwl();
   const active = store.subs.filter(s => !s.off);
   const total = active.reduce((a, s) => a + s.price, 0);
+  const baseCur = store.baseCur;
 
   return (
     <Modal visible={store.subsOpen} transparent animationType="fade" onRequestClose={store.closeSubs}>
@@ -30,7 +31,7 @@ export function SubscriptionsSheet() {
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,.2)', alignSelf: 'center', marginBottom: 14 }} />
             <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
               <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>Subscriptions</Text>
-              <Text style={{ fontFamily: fonts.mono, fontSize: 12, color: colors.mint }}>€{total.toFixed(2)} / MO</Text>
+              <Text style={{ fontFamily: moneyFont(baseCur, 'mono'), fontSize: 12, color: colors.mint }}>{formatMoney(total, baseCur, 2)} / MO</Text>
             </View>
             <ScrollView style={{ gap: 10 }} contentContainerStyle={{ gap: 10 }}>
               {store.subs.map(s => (
@@ -70,12 +71,12 @@ export function SubscriptionsSheet() {
                     <Text
                       style={{
                         fontSize: 13,
-                        fontFamily: fonts.bold,
+                        fontFamily: moneyFont(baseCur, 'bold'),
                         color: s.off ? 'rgba(233,237,242,.35)' : colors.text,
                         textDecorationLine: s.off ? 'line-through' : 'none',
                       }}
                     >
-                      €{s.price.toFixed(2)}/mo
+                      {formatMoney(s.price, baseCur, 2)}/mo
                     </Text>
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 9, borderTopWidth: 1, borderTopColor: colors.cardBorder }}>

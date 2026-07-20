@@ -4,15 +4,29 @@ import { Donut } from '../components/Donut';
 import { Glow } from '../components/Glow';
 import { TrendChart } from '../components/TrendChart';
 import { Icon } from '../icons';
-import { CATS, CatKey, colors, fonts } from '../theme';
+import { CATS, CatKey, Currency, colors, convertFromEUR, fonts, formatMoney, formatPYG, moneyFont } from '../theme';
 import { TX } from '../store/mockData';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
 const CAT_KEYS: CatKey[] = ['food', 'bills', 'shopping', 'transport'];
 
+function donutValueFontSize(text: string): number {
+  if (text.length <= 7) return 24;
+  if (text.length <= 9) return 19;
+  if (text.length <= 11) return 16;
+  return 13;
+}
+
+function heroSplit(eur: number, cur: Currency): { main: string; frac: string | null } {
+  if (cur === 'PYG') return { main: formatPYG(convertFromEUR(eur, cur)), frac: null };
+  const symbol = cur === 'EUR' ? '€' : '$';
+  const [intPart, fracPart] = convertFromEUR(eur, cur).toFixed(2).split('.');
+  return { main: symbol + Number(intPart).toLocaleString('en-US'), frac: '.' + fracPart };
+}
+
 export function DashboardScreen() {
   const store = useSpendOwl();
-  const { selCat, setSelCat, overBudget } = store;
+  const { selCat, setSelCat, overBudget, baseCur } = store;
 
   const txList = TX.filter(t => !selCat || t.cat === selCat).map(t => {
     const cat = CATS[t.cat];
@@ -21,7 +35,7 @@ export function DashboardScreen() {
       merchant: t.merchant,
       letter: t.merchant[0],
       meta: `${t.date} · ${cat.name}`,
-      amt: `${inc ? '+€' : '−€'}${Math.abs(t.amt).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      amt: (inc ? '+' : '−') + formatMoney(Math.abs(t.amt), baseCur, 2),
       inc,
       color: cat.color,
     };
@@ -29,6 +43,7 @@ export function DashboardScreen() {
 
   const subsActive = store.subs.filter(s => !s.off);
   const subsTotal = subsActive.reduce((a, s) => a + s.price, 0);
+  const hero = heroSplit(overBudget ? 86.4 : 1283.65, baseCur);
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 14 }}>
@@ -36,12 +51,14 @@ export function DashboardScreen() {
         <Glow width={280} height={200} color={overBudget ? colors.rose : colors.mint} id="heroGlow" />
         <Text style={{ fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 2, color: colors.textDim55 }}>SAFE TO SPEND · JULY</Text>
         {!overBudget ? (
-          <Text style={{ fontSize: 46, fontFamily: fonts.bold, marginTop: 4, color: '#F2FBF7' }}>
-            €1,283<Text style={{ fontSize: 26, fontFamily: fonts.medium, color: colors.textDim55 }}>.65</Text>
+          <Text style={{ fontSize: 46, fontFamily: moneyFont(baseCur, 'bold'), marginTop: 4, color: '#F2FBF7' }}>
+            {hero.main}
+            {hero.frac && <Text style={{ fontSize: 26, fontFamily: moneyFont(baseCur, 'medium'), color: colors.textDim55 }}>{hero.frac}</Text>}
           </Text>
         ) : (
-          <Text style={{ fontSize: 46, fontFamily: fonts.bold, marginTop: 4, color: colors.rose }}>
-            −€86<Text style={{ fontSize: 26, fontFamily: fonts.medium, color: 'rgba(255,143,163,.7)' }}>.40</Text>
+          <Text style={{ fontSize: 46, fontFamily: moneyFont(baseCur, 'bold'), marginTop: 4, color: colors.rose }}>
+            −{hero.main}
+            {hero.frac && <Text style={{ fontSize: 26, fontFamily: moneyFont(baseCur, 'medium'), color: 'rgba(255,143,163,.7)' }}>{hero.frac}</Text>}
           </Text>
         )}
         <View style={{ marginTop: 10, height: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
@@ -55,7 +72,7 @@ export function DashboardScreen() {
           />
         </View>
         <Text style={{ marginTop: 7, fontSize: 11.5, color: colors.textDim50, fontFamily: fonts.mono }}>
-          {overBudget ? '104% OF €2,400 · 14 DAYS LEFT' : '47% OF €2,400 · 14 DAYS LEFT'}
+          {overBudget ? '104%' : '47%'} OF {formatMoney(2400, baseCur, 0)} · 14 DAYS LEFT
         </Text>
         {overBudget && (
           <View
@@ -76,7 +93,7 @@ export function DashboardScreen() {
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.amberText }}>Budget exceeded</Text>
               <Text style={{ fontSize: 12, color: colors.textDim60, marginTop: 2, lineHeight: 17 }}>
-                You’re €86.40 past July’s budget. I can draft a catch-up plan for the last two weeks.
+                You’re {formatMoney(86.4, baseCur, 2)} past July’s budget. I can draft a catch-up plan for the last two weeks.
               </Text>
             </View>
           </View>
@@ -94,9 +111,18 @@ export function DashboardScreen() {
             <Text style={{ fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1.5, color: colors.textDim50 }}>
               {selCat ? CATS[selCat].name.toUpperCase() : 'SPENT · JULY'}
             </Text>
-            <Text style={{ fontSize: 24, fontFamily: fonts.bold, color: colors.text, marginTop: 3 }}>
-              {selCat ? `€${CATS[selCat].amount.toFixed(0)}` : '€1,116'}
-            </Text>
+            {(() => {
+              const donutValue = formatMoney(selCat ? CATS[selCat].amount : 1116, baseCur, 0);
+              return (
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  style={{ fontSize: donutValueFontSize(donutValue), fontFamily: moneyFont(baseCur, 'bold'), color: colors.text, marginTop: 3, maxWidth: 128, textAlign: 'center' }}
+                >
+                  {donutValue}
+                </Text>
+              );
+            })()}
           </View>
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
@@ -124,7 +150,7 @@ export function DashboardScreen() {
                 <Text style={{ flex: 1, fontSize: 12, color: colors.text }} numberOfLines={1}>
                   {c.name}
                 </Text>
-                <Text style={{ fontSize: 12, fontFamily: fonts.medium, color: colors.textDim70 }}>€{c.amount.toFixed(0)}</Text>
+                <Text style={{ fontSize: 12, fontFamily: moneyFont(baseCur, 'medium'), color: colors.textDim70 }}>{formatMoney(c.amount, baseCur, 0)}</Text>
               </Pressable>
             );
           })}
@@ -166,7 +192,7 @@ export function DashboardScreen() {
                 </Text>
                 <Text style={{ fontSize: 11, color: colors.textDim45, marginTop: 1 }}>{t.meta}</Text>
               </View>
-              <Text style={{ fontSize: 13.5, fontFamily: fonts.bold, color: t.inc ? colors.mint : colors.text }}>{t.amt}</Text>
+              <Text style={{ fontSize: 13.5, fontFamily: moneyFont(baseCur, 'bold'), color: t.inc ? colors.mint : colors.text }}>{t.amt}</Text>
             </View>
           ))}
         </View>
@@ -239,8 +265,8 @@ export function DashboardScreen() {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.text }}>Subscriptions</Text>
-          <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 1 }}>
-            {subsActive.length} active · €{subsTotal.toFixed(2)}/mo
+          <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 1, fontFamily: moneyFont(baseCur, 'regular') }}>
+            {subsActive.length} active · {formatMoney(subsTotal, baseCur, 2)}/mo
           </Text>
         </View>
         <Icon name="chev" size={20} color={colors.textDim40} />

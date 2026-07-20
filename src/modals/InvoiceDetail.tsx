@@ -4,7 +4,7 @@ import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { Paper } from '../components/Paper';
 import { Toggle } from '../components/Toggle';
 import { Icon } from '../icons';
-import { colors, fonts } from '../theme';
+import { colors, fonts, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
 function Field({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
@@ -67,7 +67,7 @@ export function InvoiceDetail() {
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }}>
               <Text style={{ fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 1, color: colors.textDim45 }}>TOTAL</Text>
-              <Text style={{ fontSize: 24, fontFamily: fonts.bold, color: colors.violetLight }}>
+              <Text style={{ fontSize: 24, fontFamily: moneyFont(store.baseCur, 'bold'), color: colors.violetLight }}>
                 {store.baseCur === 'USD' ? inv.usd : store.baseCur === 'PYG' ? inv.pyg : inv.amount}
               </Text>
             </View>

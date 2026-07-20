@@ -10,7 +10,7 @@ import { PulseDot } from '../components/PulseDot';
 import { Toggle } from '../components/Toggle';
 import { Wave } from '../components/Wave';
 import { Icon } from '../icons';
-import { CATS, CatKey, colors, fonts } from '../theme';
+import { CATS, CatKey, colors, fonts, moneyFont } from '../theme';
 import { Msg } from '../store/mockData';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
@@ -43,7 +43,7 @@ function CardMessage({ m }: { m: Extract<Msg, { type: 'card' }> }) {
           <Text style={{ fontSize: 15.5, fontFamily: fonts.bold, color: '#F2F5FA' }}>{m.merchant}</Text>
           <Text style={{ fontSize: 12, color: colors.textDim50, marginTop: 2 }}>{m.note}</Text>
         </View>
-        <Text style={{ fontSize: 26, fontFamily: fonts.bold, color: colors.violetLight }}>{store.fmt(store.baseCur, m.eur, m.usd, m.pyg)}</Text>
+        <Text style={{ fontSize: 26, fontFamily: moneyFont(store.baseCur, 'bold'), color: colors.violetLight }}>{store.fmt(store.baseCur, m.eur, m.usd, m.pyg)}</Text>
       </View>
       <View style={{ height: 1, backgroundColor: colors.hairline }} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>

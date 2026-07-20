@@ -1,5 +1,7 @@
 import { Roboto_400Regular, Roboto_500Medium, Roboto_700Bold } from '@expo-google-fonts/roboto';
 import { RobotoMono_400Regular, RobotoMono_500Medium } from '@expo-google-fonts/roboto-mono';
+import { NotoSans_400Regular, NotoSans_500Medium, NotoSans_700Bold } from '@expo-google-fonts/noto-sans';
+import { NotoSansMono_400Regular } from '@expo-google-fonts/noto-sans-mono';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -18,6 +20,10 @@ export default function App() {
     Roboto_700Bold,
     RobotoMono_400Regular,
     RobotoMono_500Medium,
+    NotoSans_400Regular,
+    NotoSans_500Medium,
+    NotoSans_700Bold,
+    NotoSansMono_400Regular,
   });
 
   const onLayout = useCallback(async () => {
