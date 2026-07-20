@@ -13,7 +13,7 @@ export function VaultScreen() {
   const items = store.vaultItems;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 24 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 24 }}>
       <Text style={{ fontSize: 22, fontFamily: fonts.bold, color: colors.text }}>Factura Vault</Text>
       <Text style={{ fontSize: 12, color: colors.textDim50, marginTop: 3, marginBottom: 16, fontFamily: fonts.mono }}>
         {items.length === 0 ? 'JULY · NOTHING FILED YET' : `${items.length} FILED · JULY`}

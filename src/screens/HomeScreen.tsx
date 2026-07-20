@@ -51,7 +51,7 @@ export function HomeScreen() {
   ];
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 24, gap: 12 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 24, gap: 12 }}>
       <Text style={{ fontSize: 22, fontFamily: fonts.bold, color: colors.text, letterSpacing: -0.3 }}>Welcome back!</Text>
 
       <Pressable onPress={() => store.setNav('chat')}>

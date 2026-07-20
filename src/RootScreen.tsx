@@ -2,7 +2,9 @@ import React, { useEffect, useRef } from 'react';
 import { Dimensions, NativeScrollEvent, NativeSyntheticEvent, ScrollView, View } from 'react-native';
 import { BottomNav } from './components/BottomNav';
 import { Header } from './components/Header';
+import { AddCardSheet } from './modals/AddCardSheet';
 import { AffordModal } from './modals/AffordModal';
+import { CardPayoffModal } from './modals/CardPayoffModal';
 import { InvoiceDetail } from './modals/InvoiceDetail';
 import { SubscriptionsSheet } from './modals/SubscriptionsSheet';
 import { ChatScreen } from './screens/ChatScreen';
@@ -36,16 +38,17 @@ export function RootScreen() {
         {store.nav === 'pager' && (
           <ScrollView
             ref={scrollRef}
+            style={{ flex: 1 }}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             onMomentumScrollEnd={onMomentumEnd}
             contentOffset={{ x: store.page * width, y: 0 }}
           >
-            <View style={{ width }}>
+            <View style={{ width, flex: 1 }}>
               <HomeScreen />
             </View>
-            <View style={{ width }}>
+            <View style={{ width, flex: 1 }}>
               <DashboardScreen />
             </View>
           </ScrollView>
@@ -59,6 +62,8 @@ export function RootScreen() {
       <AffordModal />
       <SubscriptionsSheet />
       <InvoiceDetail />
+      <AddCardSheet />
+      <CardPayoffModal />
     </View>
   );
 }

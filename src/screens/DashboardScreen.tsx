@@ -1,12 +1,14 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { CreditCardsSection } from '../components/CreditCardsSection';
 import { Donut } from '../components/Donut';
 import { TrendChart } from '../components/TrendChart';
 import { Icon } from '../icons';
 import { CATS, CatKey, Currency, GRAD, GRAD_LOCATIONS, colors, convertFromEUR, fonts, formatMoney, formatPYG, moneyFont } from '../theme';
 import { TX } from '../store/mockData';
 import { useSpendOwl } from '../store/SpendOwlContext';
+import { cardInterestMonthly } from '../utils/payoff';
 
 const CAT_KEYS: CatKey[] = ['food', 'bills', 'shopping', 'transport'];
 
@@ -28,6 +30,12 @@ export function DashboardScreen() {
   const store = useSpendOwl();
   const { selCat, setSelCat, overBudget, baseCur } = store;
 
+  const debtAmount = cardInterestMonthly(store.creditCards);
+  const hasDebt = debtAmount > 0;
+  const legendKeys: CatKey[] = hasDebt ? [...CAT_KEYS, 'debt'] : CAT_KEYS;
+  const amountFor = (k: CatKey) => (k === 'debt' ? debtAmount : CATS[k].amount);
+  const donutTotal = 1116 + (hasDebt ? debtAmount : 0);
+
   const txList = TX.filter(t => !selCat || t.cat === selCat).map(t => {
     const cat = CATS[t.cat];
     const inc = t.amt > 0;
@@ -46,7 +54,7 @@ export function DashboardScreen() {
   const hero = heroSplit(overBudget ? 86.4 : 1283.65, baseCur);
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 14 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 14 }}>
       <View style={{ backgroundColor: colors.card, borderRadius: 24, padding: 20, paddingBottom: 18 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 13, color: colors.textDim50 }}>Safe to Spend · July</Text>
@@ -118,13 +126,13 @@ export function DashboardScreen() {
           <Text style={{ fontSize: 11, color: colors.textDim40 }}>tap a slice</Text>
         </View>
         <View style={{ alignItems: 'center', paddingVertical: 10 }}>
-          <Donut selCat={selCat} onSelect={setSelCat} />
+          <Donut selCat={selCat} onSelect={setSelCat} extra={{ amount: debtAmount }} />
           <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{ fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1.5, color: colors.textDim50 }}>
               {selCat ? CATS[selCat].name.toUpperCase() : 'SPENT · JULY'}
             </Text>
             {(() => {
-              const donutValue = formatMoney(selCat ? CATS[selCat].amount : 1116, baseCur, 0);
+              const donutValue = formatMoney(selCat ? amountFor(selCat) : donutTotal, baseCur, 0);
               return (
                 <Text
                   numberOfLines={1}
@@ -138,7 +146,7 @@ export function DashboardScreen() {
           </View>
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-          {CAT_KEYS.map(k => {
+          {legendKeys.map(k => {
             const c = CATS[k];
             const isSel = selCat === k;
             return (
@@ -162,7 +170,7 @@ export function DashboardScreen() {
                 <Text style={{ flex: 1, fontSize: 12, color: colors.text }} numberOfLines={1}>
                   {c.name}
                 </Text>
-                <Text style={{ fontSize: 12, fontFamily: moneyFont(baseCur, 'medium'), color: colors.textDim70 }}>{formatMoney(c.amount, baseCur, 0)}</Text>
+                <Text style={{ fontSize: 12, fontFamily: moneyFont(baseCur, 'medium'), color: colors.textDim70 }}>{formatMoney(amountFor(k), baseCur, 0)}</Text>
               </Pressable>
             );
           })}
@@ -226,6 +234,8 @@ export function DashboardScreen() {
           </View>
         </View>
       </View>
+
+      <CreditCardsSection />
 
       <Pressable onPress={store.openAfford}>
         <LinearGradient

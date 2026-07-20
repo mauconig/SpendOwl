@@ -22,6 +22,8 @@ export const IC = {
   arrowNE: 'M9 5v2h6.59L4 18.59 5.41 20 17 8.41V15h2V5z',
   trendUp: 'M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z',
   trendDown: 'M16 18l2.29-2.29-4.88-4.88-4 4L2 7.41 3.41 6l6 6 4-4 6.3 6.29L22 12v6z',
+  card: 'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z',
+  plus: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z',
 } as const;
 
 export type IconName = keyof typeof IC;

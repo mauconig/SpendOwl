@@ -2,11 +2,14 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { CatKey, Currency, PYG_PER_USD, formatPYG } from '../theme';
 import {
   AFFORD_OPTS,
+  CARD_COLORS,
+  CreditCard,
   Msg,
   REPLIES,
   SAVINGS_TODAY,
   Subscription,
   VaultItem,
+  creditCardsSeed,
   demoMsgs,
   firstMsgs,
   subsSeed,
@@ -60,6 +63,17 @@ interface SpendOwlStore {
   selCat: CatKey | null;
   setSelCat: (c: CatKey | null) => void;
 
+  // credit cards
+  creditCards: CreditCard[];
+  addCardOpen: boolean;
+  openAddCard: () => void;
+  closeAddCard: () => void;
+  addCreditCard: (input: { name: string; last4: string; balance: number; limit: number; apr: number }) => void;
+  removeCreditCard: (id: string) => void;
+  payoffCardId: string | null;
+  openPayoff: (id: string) => void;
+  closePayoff: () => void;
+
   // afford modal
   affordOpen: boolean;
   affordSel: number;
@@ -107,6 +121,11 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const [recSecs, setRecSecs] = useState(0);
   const [cards, setCards] = useState<Record<string, CardState>>({});
   const [selCat, setSelCat] = useState<CatKey | null>(null);
+
+  const [creditCards, setCreditCards] = useState<CreditCard[]>(() => creditCardsSeed());
+  const [addCardOpen, setAddCardOpen] = useState(false);
+  const [payoffCardId, setPayoffCardId] = useState<string | null>(null);
+  const cardIdRef = useRef(100);
 
   const [affordOpen, setAffordOpen] = useState(false);
   const [affordSel, setAffordSel] = useState(1);
@@ -237,6 +256,14 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const toggleSubMute = useCallback((id: string) => setSubs(prev => prev.map(s => (s.id === id ? { ...s, muted: !s.muted } : s))), []);
   const toggleSubOff = useCallback((id: string) => setSubs(prev => prev.map(s => (s.id === id ? { ...s, off: !s.off } : s))), []);
 
+  const addCreditCard = useCallback((input: { name: string; last4: string; balance: number; limit: number; apr: number }) => {
+    const id = 'cc' + cardIdRef.current++;
+    setCreditCards(prev => [...prev, { id, color: CARD_COLORS[prev.length % CARD_COLORS.length], ...input }]);
+  }, []);
+  const removeCreditCard = useCallback((id: string) => setCreditCards(prev => prev.filter(c => c.id !== id)), []);
+  const openPayoff = useCallback((id: string) => setPayoffCardId(id), []);
+  const closePayoff = useCallback(() => setPayoffCardId(null), []);
+
   const value: SpendOwlStore = {
     nav,
     page,
@@ -265,6 +292,16 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     overBudget: OVER_BUDGET,
     selCat,
     setSelCat,
+
+    creditCards,
+    addCardOpen,
+    openAddCard: () => setAddCardOpen(true),
+    closeAddCard: () => setAddCardOpen(false),
+    addCreditCard,
+    removeCreditCard,
+    payoffCardId,
+    openPayoff,
+    closePayoff,
 
     affordOpen,
     affordSel,

@@ -75,6 +75,25 @@ export function vaultBaseSeed(firstRun: boolean): VaultItem[] {
   ];
 }
 
+export type CreditCard = {
+  id: string;
+  name: string;
+  last4: string;
+  balance: number;
+  limit: number;
+  apr: number;
+  color: string;
+};
+
+export const CARD_COLORS = ['#F0A878', '#78ADEE', '#C9B8F5', '#4ADE80'];
+
+export function creditCardsSeed(): CreditCard[] {
+  return [
+    { id: 'cc1', name: 'Visa Signature', last4: '4471', balance: 1240, limit: 5000, apr: 22.99, color: '#78ADEE' },
+    { id: 'cc2', name: 'Mastercard World', last4: '8823', balance: 430, limit: 2500, apr: 19.99, color: '#F0A878' },
+  ];
+}
+
 export type TxRow = { merchant: string; cat: CatKey; amt: number; date: string };
 
 export const TX: TxRow[] = [

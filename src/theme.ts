@@ -52,6 +52,9 @@ export const CATS = {
   shopping: { name: 'Shopping', color: '#C9B8F5', amount: 236.4 },
   transport: { name: 'Transport', color: '#E4E4E7', amount: 148.9 },
   income: { name: 'Income', color: '#4ADE80', amount: 0 },
+  // Placeholder amount — the real value is always computed live from `creditCards`
+  // via `cardInterestMonthly` (src/utils/payoff.ts), never read directly from here.
+  debt: { name: 'Card interest', color: '#F87171', amount: 0 },
 } as const;
 
 export type CatKey = keyof typeof CATS;

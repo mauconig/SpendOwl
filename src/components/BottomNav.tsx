@@ -24,7 +24,7 @@ export function BottomNav() {
   ];
 
   return (
-    <View style={{ paddingHorizontal: 10, paddingTop: 14, paddingBottom: Math.max(insets.bottom, 16) }}>
+    <View style={{ paddingHorizontal: 10, paddingTop: 14, paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.navBg }}>
       <View style={{ position: 'relative' }}>
         <View
           style={{
@@ -36,13 +36,13 @@ export function BottomNav() {
           }}
         >
           {navLeft.map(n => (
-            <Pressable key={n.id} onPress={n.onTap} style={{ flex: 1, alignItems: 'center', paddingVertical: 6 }}>
+            <Pressable key={n.id} onPress={n.onTap} style={{ flex: 1, alignItems: 'center', paddingVertical: 15 }}>
               <Icon name={n.icon} size={22} color={active === n.id ? '#FFFFFF' : colors.textDim40} />
             </Pressable>
           ))}
           <View style={{ width: 68, flexShrink: 0 }} />
           {navRight.map(n => (
-            <Pressable key={n.id} onPress={n.onTap} style={{ flex: 1, alignItems: 'center', paddingVertical: 6 }}>
+            <Pressable key={n.id} onPress={n.onTap} style={{ flex: 1, alignItems: 'center', paddingVertical: 15 }}>
               <Icon name={n.icon} size={22} color={active === n.id ? '#FFFFFF' : colors.textDim40} />
             </Pressable>
           ))}
