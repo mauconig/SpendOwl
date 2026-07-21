@@ -39,6 +39,8 @@ interface SpendOwlStore {
   setPage: (p: 0 | 1) => void;
   toggleChat: () => void;
   goDash: () => void;
+  bottomNavHeight: number;
+  setBottomNavHeight: (h: number) => void;
 
   // chat
   messages: Msg[];
@@ -112,6 +114,7 @@ const SpendOwlCtx = createContext<SpendOwlStore | null>(null);
 export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const [nav, setNav] = useState<Nav>('pager');
   const [page, setPage] = useState<0 | 1>(0);
+  const [bottomNavHeight, setBottomNavHeight] = useState(0);
 
   const [messages, setMessagesState] = useState<Msg[] | null>(null);
   const [input, setInput] = useState('');
@@ -159,9 +162,12 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const msgsBase = useCallback((): Msg[] => messages ?? (FIRST_RUN ? firstMsgs() : demoMsgs()), [messages]);
+  // Uses the functional setState form so delayed pushes (via `after`) always
+  // build on the latest messages, not a stale closure from whenever the
+  // enclosing send()/endRec() call happened to be created.
   const pushM = useCallback(
-    (items: Msg[]) => setMessagesState([...msgsBase(), ...items]),
-    [msgsBase]
+    (items: Msg[]) => setMessagesState(prev => [...(prev ?? (FIRST_RUN ? firstMsgs() : demoMsgs())), ...items]),
+    []
   );
 
   const cardFor = useCallback((id: string): CardState => cards[id] ?? { tax: false, ok: false }, [cards]);
@@ -271,6 +277,8 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     setPage,
     toggleChat,
     goDash,
+    bottomNavHeight,
+    setBottomNavHeight,
 
     messages: msgsBase(),
     input,

@@ -24,7 +24,10 @@ export function BottomNav() {
   ];
 
   return (
-    <View style={{ paddingHorizontal: 10, paddingTop: 2, paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.navBg }}>
+    <View
+      onLayout={e => store.setBottomNavHeight(e.nativeEvent.layout.height)}
+      style={{ paddingHorizontal: 10, paddingTop: 2, paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.navBg }}
+    >
       <View style={{ position: 'relative' }}>
         <View
           style={{

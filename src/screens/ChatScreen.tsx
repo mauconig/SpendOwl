@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useRef, useState } from 'react';
-import { Keyboard, KeyboardEvent, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useRef } from 'react';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { FadeIn } from '../components/FadeIn';
 import { Laser } from '../components/Laser';
 import { Dots } from '../components/Dots';
@@ -8,6 +8,7 @@ import { Paper } from '../components/Paper';
 import { PulseDot } from '../components/PulseDot';
 import { Toggle } from '../components/Toggle';
 import { Wave } from '../components/Wave';
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { Icon } from '../icons';
 import { CATS, CatKey, GRAD, GRAD_LOCATIONS, colors, fonts, moneyFont } from '../theme';
 import { Msg } from '../store/mockData';
@@ -189,34 +190,20 @@ function MessageBubble({ m }: { m: Msg }) {
   );
 }
 
-function useKeyboardHeight() {
-  const [height, setHeight] = useState(0);
-
-  useEffect(() => {
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const onShow = (e: KeyboardEvent) => setHeight(e.endCoordinates.height);
-    const onHide = () => setHeight(0);
-    const showSub = Keyboard.addListener(showEvt, onShow);
-    const hideSub = Keyboard.addListener(hideEvt, onHide);
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  return height;
-}
-
 export function ChatScreen() {
   const store = useSpendOwl();
   const scrollRef = useRef<ScrollView>(null);
   const keyboardHeight = useKeyboardHeight();
+  // BottomNav stays mounted (still reserving its own space) even though the
+  // keyboard visually covers it, so only the portion of the keyboard taller
+  // than BottomNav actually needs compensating here. A little extra breathing
+  // room keeps the input from sitting flush against the keyboard's top edge.
+  const bottomPadding = keyboardHeight > 0 ? Math.max(keyboardHeight - store.bottomNavHeight, 0) + 12 : 0;
 
   const hasContent = store.input.trim().length > 0 || store.attachment;
 
   return (
-    <View style={{ flex: 1, paddingBottom: keyboardHeight }}>
+    <View style={{ flex: 1, paddingBottom: bottomPadding }}>
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
