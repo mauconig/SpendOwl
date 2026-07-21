@@ -4,6 +4,7 @@ import { Modal, Pressable, Text, TextInput, View } from 'react-native';
 import { SlideUp } from '../components/FadeIn';
 import { GRAD, GRAD_LOCATIONS, colors, fonts } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
+import { formatThousands, parseThousands } from '../utils/moneyInput';
 
 function Field({ label, value, onChangeText, placeholder, keyboardType, maxLength }: {
   label: string;
@@ -33,15 +34,15 @@ export function AddCardSheet() {
   const store = useSpendOwl();
   const [name, setName] = useState('');
   const [last4, setLast4] = useState('');
-  const [balance, setBalance] = useState('');
-  const [limit, setLimit] = useState('');
+  const [balanceDigits, setBalanceDigits] = useState('');
+  const [limitDigits, setLimitDigits] = useState('');
   const [apr, setApr] = useState('');
 
   const reset = () => {
     setName('');
     setLast4('');
-    setBalance('');
-    setLimit('');
+    setBalanceDigits('');
+    setLimitDigits('');
     setApr('');
   };
 
@@ -50,11 +51,13 @@ export function AddCardSheet() {
     reset();
   };
 
-  const canSubmit = name.trim().length > 0 && last4.trim().length > 0 && Number(balance) >= 0 && Number(limit) > 0 && Number(apr) >= 0;
+  const balance = parseThousands(balanceDigits);
+  const limit = parseThousands(limitDigits);
+  const canSubmit = name.trim().length > 0 && last4.trim().length > 0 && balance >= 0 && limit > 0 && Number(apr) >= 0;
 
   const submit = () => {
     if (!canSubmit) return;
-    store.addCreditCard({ name: name.trim(), last4: last4.trim(), balance: Number(balance), limit: Number(limit), apr: Number(apr) });
+    store.addCreditCard({ name: name.trim(), last4: last4.trim(), balance, limit, apr: Number(apr) });
     close();
   };
 
@@ -80,8 +83,20 @@ export function AddCardSheet() {
 
             <Field label="Card name" value={name} onChangeText={setName} placeholder="Visa Platinum" />
             <Field label="Last 4 digits" value={last4} onChangeText={setLast4} placeholder="1234" keyboardType="number-pad" maxLength={4} />
-            <Field label="Balance owed" value={balance} onChangeText={setBalance} placeholder="0.00" keyboardType="decimal-pad" />
-            <Field label="Credit limit" value={limit} onChangeText={setLimit} placeholder="0.00" keyboardType="decimal-pad" />
+            <Field
+              label="Balance owed"
+              value={formatThousands(balanceDigits)}
+              onChangeText={v => setBalanceDigits(v.replace(/\D/g, ''))}
+              placeholder="0"
+              keyboardType="number-pad"
+            />
+            <Field
+              label="Credit limit"
+              value={formatThousands(limitDigits)}
+              onChangeText={v => setLimitDigits(v.replace(/\D/g, ''))}
+              placeholder="0"
+              keyboardType="number-pad"
+            />
             <Field label="APR / interest rate (%)" value={apr} onChangeText={setApr} placeholder="24.99" keyboardType="decimal-pad" />
 
             <Pressable onPress={submit} disabled={!canSubmit} style={{ opacity: canSubmit ? 1 : 0.4 }}>

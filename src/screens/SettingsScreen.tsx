@@ -38,7 +38,7 @@ export function SettingsScreen() {
   const store = useSpendOwl();
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 24, gap: 14 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 64, gap: 14 }}>
       <Text style={{ fontSize: 22, fontFamily: fonts.bold, color: colors.text }}>Settings</Text>
 
       <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}>

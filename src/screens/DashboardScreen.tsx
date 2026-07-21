@@ -54,7 +54,7 @@ export function DashboardScreen() {
   const hero = heroSplit(overBudget ? 86.4 : 1283.65, baseCur);
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 14 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 64, gap: 14 }}>
       <View style={{ backgroundColor: colors.card, borderRadius: 24, padding: 20, paddingBottom: 18 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 13, color: colors.textDim50 }}>Safe to Spend · July</Text>

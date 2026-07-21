@@ -20,11 +20,11 @@ export function BottomNav() {
   ];
   const navRight: { id: TabId; icon: IconName; onTap: () => void }[] = [
     { id: 'vault', icon: 'folder', onTap: () => store.setNav('vault') },
-    { id: 'settings', icon: 'gear', onTap: () => store.setNav('settings') },
+    { id: 'settings', icon: 'person', onTap: () => store.setNav('settings') },
   ];
 
   return (
-    <View style={{ paddingHorizontal: 10, paddingTop: 14, paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.navBg }}>
+    <View style={{ paddingHorizontal: 10, paddingTop: 2, paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.navBg }}>
       <View style={{ position: 'relative' }}>
         <View
           style={{
