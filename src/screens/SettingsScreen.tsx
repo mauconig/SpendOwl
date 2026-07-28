@@ -1,6 +1,7 @@
+import { useClerk, useUser } from '@clerk/expo';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { Toggle } from '../components/Toggle';
 import { colors, fonts } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
@@ -36,6 +37,21 @@ function CurPill({ label, active, onPress }: { label: string; active: boolean; o
 
 export function SettingsScreen() {
   const store = useSpendOwl();
+  const { user } = useUser();
+  const { signOut } = useClerk();
+
+  const email = user?.primaryEmailAddress?.emailAddress ?? '';
+  // Clerk accounts created with email+password carry no name, so fall back to
+  // the email local-part rather than rendering an empty row.
+  const displayName = user?.fullName?.trim() || email.split('@')[0] || 'Your account';
+  const initial = displayName.charAt(0).toUpperCase();
+
+  const confirmSignOut = () => {
+    Alert.alert('Sign out', 'You will need to sign in again to reach your data.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
+    ]);
+  };
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 64, gap: 14 }}>
@@ -46,11 +62,15 @@ export function SettingsScreen() {
           colors={['#F0A878', '#78ADEE']}
           style={{ width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' }}
         >
-          <Text style={{ fontSize: 19, fontFamily: fonts.bold, color: '#0A0A0B' }}>M</Text>
+          <Text style={{ fontSize: 19, fontFamily: fonts.bold, color: '#0A0A0B' }}>{initial}</Text>
         </LinearGradient>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 15, fontFamily: fonts.bold, color: colors.text }}>Maya Fernández</Text>
-          <Text style={{ fontSize: 12, color: colors.textDim50, marginTop: 1 }}>maya@freelance.eu</Text>
+          <Text style={{ fontSize: 15, fontFamily: fonts.bold, color: colors.text }} numberOfLines={1}>
+            {displayName}
+          </Text>
+          <Text style={{ fontSize: 12, color: colors.textDim50, marginTop: 1 }} numberOfLines={1}>
+            {email}
+          </Text>
         </View>
         <View style={{ backgroundColor: '#F2F2F4', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 }}>
           <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: '#0A0A0B' }}>Freelance</Text>
@@ -81,6 +101,20 @@ export function SettingsScreen() {
         <Divider />
         <Row label="Training on my data" right={<Text style={{ fontSize: 13, color: colors.textDim50 }}>Off</Text>} />
       </View>
+
+      <Pressable
+        onPress={confirmSignOut}
+        style={{
+          backgroundColor: colors.card,
+          borderWidth: 1,
+          borderColor: colors.cardBorder,
+          borderRadius: 20,
+          paddingVertical: 15,
+          alignItems: 'center',
+        }}
+      >
+        <Text style={{ fontSize: 14, fontFamily: fonts.medium, color: colors.rose }}>Sign out</Text>
+      </Pressable>
 
       <Text style={{ textAlign: 'center', fontSize: 11, color: colors.textDim30, fontFamily: fonts.mono, marginTop: 4 }}>SpendOwl 2.4.1</Text>
     </ScrollView>

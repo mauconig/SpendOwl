@@ -3,6 +3,7 @@
     "name": "SpendOwl",
     "slug": "spendowl",
     "version": "1.0.0",
+    "scheme": "spendowl",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -24,7 +25,10 @@
     },
     "plugins": [
       "expo-font",
-      "expo-splash-screen"
+      "expo-splash-screen",
+      "expo-secure-store",
+      "@clerk/expo",
+      "expo-web-browser"
     ]
   }
 }

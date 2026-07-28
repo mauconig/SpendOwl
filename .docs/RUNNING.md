@@ -10,7 +10,39 @@ workflow). You need Node.js installed; everything else (Expo CLI) runs via
 npm install
 ```
 
-## 2. Run it
+## 2. Set up Clerk credentials
+
+Authentication runs on [Clerk](https://clerk.com). The app throws on boot
+without a publishable key, so this step is required — it is not optional
+scaffolding.
+
+Create `.env.local` in the project root:
+
+```env
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+```
+
+Get the key from the Clerk Dashboard → **API keys** for the `SpendOwl`
+application. The `EXPO_PUBLIC_` prefix matters: Metro only inlines env vars
+with that prefix into the client bundle.
+
+If you have the Clerk CLI installed (`npm install -g clerk`), you can pull it
+instead of copying by hand:
+
+```sh
+clerk auth login
+clerk init --app app_3H8ZQgGPsC4OVOPSBtZL5BANlVL
+clerk env pull
+```
+
+`.env.local` is gitignored (`.env*.local`) and must stay that way. `clerk env
+pull` also writes `CLERK_SECRET_KEY` — that key is unused by this client-only
+app and must never be renamed to an `EXPO_PUBLIC_*` variable, which would bake
+it into the shipped bundle.
+
+Run `clerk doctor` at any point to check the CLI, the link, and the env file.
+
+## 3. Run it
 
 Pick whichever target you want to test on:
 
@@ -48,9 +80,15 @@ interactions work.
 - **"Port 8081 is being used by another process"** — either stop whatever's
   using it, or run `npx expo start --web --port <otherport>`.
 - **Fonts look wrong / app looks unstyled at first launch** — the app holds
-  the splash screen until the Roboto/Roboto Mono Google Fonts finish
-  loading (`App.tsx`); this should resolve within a second on a normal
-  connection.
+  the splash screen until the Roboto, Roboto Mono, and Noto Sans Google Fonts
+  finish loading, *and* until Clerk has restored any cached session
+  (`App.tsx`); this should resolve within a second on a normal connection.
+- **"Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY"** — step 2 above hasn't been
+  done, or the dev server was started before `.env.local` existed. Restart
+  `npm start`; env files are read at server start, not on reload.
+- **Stuck signed in / want a clean slate** — sign out from the Settings tab.
+  The session lives in the device keychain via `expo-secure-store`, so it
+  survives app restarts and reloads by design.
 
 ## Type-checking
 
@@ -58,7 +96,9 @@ interactions work.
 npx tsc --noEmit
 ```
 
-There is no backend and no real AI/OCR integration — all chat replies,
-receipt scans, and voice transcriptions are simulated with fixed delays and
-canned data (see `src/store/mockData.ts` and `src/store/SpendOwlContext.tsx`
-if you want to change the demo content).
+Authentication is real (Clerk). Everything behind it is still mocked — there
+is no backend and no real AI/OCR integration, so all chat replies, receipt
+scans, and voice transcriptions are simulated with fixed delays and canned
+data (see `src/store/mockData.ts` and `src/store/SpendOwlContext.tsx` if you
+want to change the demo content). Note that the mock data is identical for
+every account: signing in as a different user shows the same fixtures.

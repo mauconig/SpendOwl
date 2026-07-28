@@ -5,10 +5,47 @@ expenses (by text, voice note, or receipt photo), plus a dashboard, a receipt
 vault, and settings. This repo is a React Native (Expo) implementation of a
 design comp (`SpendOwl.dc.html`) originally built in Claude's design tool.
 
-The app currently runs entirely on **mocked data** — there is no real backend,
-AI, or OCR yet. Every "AI reply," receipt scan, and voice transcription is a
-canned response fired after a `setTimeout`, so the full experience can be
-demoed end-to-end without any network calls.
+**Authentication is real** — Clerk (`@clerk/expo`): email + password with an
+emailed verification code, plus Google and Apple. Everything behind the
+sign-in wall still runs on
+**mocked data**: there is no real backend, AI, or OCR yet. Every "AI reply,"
+receipt scan, and voice transcription is a canned response fired after a
+`setTimeout`, and the fixtures are the same for every account.
+
+## Authentication
+
+`App.tsx` wraps the app in `<ClerkProvider>` with the `expo-secure-store`
+token cache, so sessions are encrypted in the device keychain and survive
+restarts. A `Gate` component inside the provider reads `useAuth()` and either
+renders `AuthScreen` (signed out) or the usual `SpendOwlProvider` +
+`RootScreen` (signed in); it also holds the splash screen until Clerk has
+finished restoring a cached session.
+
+`src/screens/AuthScreen.tsx` is a custom flow built on `useSignIn()` /
+`useSignUp()` — not Clerk's prebuilt components, which need a native dev build
+and would break Expo Go. It uses the current method-based v4 API
+(`signIn.password()`, `signUp.verifications.verifyEmailCode()`,
+`finalize()`), *not* the legacy `setActive`/`prepareFirstFactor` shape, and
+renders a `nativeID="clerk-captcha"` mount point because the instance has bot
+protection enabled. Sign-out lives at the bottom of the Settings screen.
+
+Note that the app deliberately does **not** use Expo Router, so none of
+Clerk's router-based examples apply — `finalize()` is called with no
+`navigate` argument and the UI switches over because `useAuth()` re-renders.
+
+Google and Apple go through `useSSO()` — the *browser* flow (`expo-auth-session`
++ `expo-web-browser`), which is the only social option that works in Expo Go.
+Clerk's fully-native Google/Apple sheets (`@clerk/expo/google`, `/apple`) would
+need a custom dev build, and the native Apple sheet is iOS-only. SSO is also
+the one flow that still uses `setActive({ session })` rather than `finalize()`.
+The `"scheme": "spendowl"` entry in `app.json` is the deep-link target for the
+OAuth redirect and must stay.
+
+Both providers currently run on **Clerk's shared development credentials**, so
+they work with zero provider-side setup — but that only applies to the dev
+instance. Production needs a real Google Cloud OAuth client, and for Apple an
+Apple Developer Program membership plus an App ID, Services ID, and signing
+key. See `.docs/BACKEND.md` before shipping.
 
 ## Screens
 
@@ -26,8 +63,10 @@ demoed end-to-end without any network calls.
 - **Factura Vault** (`src/screens/VaultScreen.tsx`) — a grid of scanned
   receipts with an ok/needs-review badge; tapping one opens the full invoice
   detail view.
-- **Settings** (`src/screens/SettingsScreen.tsx`) — profile, base currency,
-  budget alerts, biometric lock toggle, and static preference rows.
+- **Settings** (`src/screens/SettingsScreen.tsx`) — profile (the real signed-in
+  Clerk user's name and email, no longer the hardcoded "Maya Fernández"), base
+  currency, budget alerts, biometric lock toggle, static preference rows, and
+  sign-out.
 
 Two full-screen/sheet overlays live outside the four tabs and can be opened
 from the Dashboard: the **"Can I afford this?"** sandbox modal
