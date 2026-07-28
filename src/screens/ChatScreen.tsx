@@ -10,8 +10,8 @@ import { Toggle } from '../components/Toggle';
 import { Wave } from '../components/Wave';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { Icon } from '../icons';
-import { CATS, CatKey, GRAD, GRAD_LOCATIONS, colors, fonts, moneyFont } from '../theme';
-import { Msg } from '../store/mockData';
+import { CATS, CatKey, GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
+import { Msg } from '../store/constants';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
 function CardMessage({ m }: { m: Extract<Msg, { type: 'card' }> }) {
@@ -45,7 +45,7 @@ function CardMessage({ m }: { m: Extract<Msg, { type: 'card' }> }) {
           <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: '#FFFFFF' }}>{m.merchant}</Text>
           <Text style={{ fontSize: 12, color: colors.textDim45, marginTop: 2 }}>{m.note}</Text>
         </View>
-        <Text style={{ fontSize: 27, fontFamily: moneyFont(store.baseCur, 'bold'), letterSpacing: -0.5, color: '#FFFFFF' }}>{store.fmt(store.baseCur, m.eur, m.usd, m.pyg)}</Text>
+        <Text style={{ fontSize: 27, fontFamily: moneyFont(store.baseCur, 'bold'), letterSpacing: -0.5, color: '#FFFFFF' }}>{formatMoney(m.amountEur, store.baseCur, 2)}</Text>
       </View>
       <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>

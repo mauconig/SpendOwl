@@ -5,7 +5,7 @@ import { Badge } from '../components/Badge';
 import { Paper } from '../components/Paper';
 import { FadeIn } from '../components/FadeIn';
 import { Icon } from '../icons';
-import { GRAD, GRAD_LOCATIONS, colors, fonts, moneyFont } from '../theme';
+import { GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
 export function VaultScreen() {
@@ -51,8 +51,8 @@ export function VaultScreen() {
       ) : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           {items.map(v => {
-            const status = store.vaultPatch[v.id] ?? v.status;
-            const displayAmount = store.baseCur === 'USD' ? v.usd : store.baseCur === 'PYG' ? v.pyg : v.amount;
+            const status = v.status;
+            const displayAmount = formatMoney(v.amountEur, store.baseCur, 2);
             return (
               <FadeIn key={v.id} style={{ width: '30%', gap: 6 }}>
                 <Pressable onPress={() => store.openInvoice(v.id)}>

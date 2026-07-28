@@ -1,5 +1,24 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { CatKey, Currency, PYG_PER_USD, formatPYG } from '../theme';
+import {
+  useAddCreditCard,
+  useAddMessage,
+  useAddReceipt,
+  useAddTransaction,
+  useApproveReceipt,
+  useCreditCards,
+  useMessages,
+  useReceipts,
+  useRemoveCreditCard,
+  useSubscriptions,
+  useSummary,
+  useTransactions,
+  useUpdateSettings,
+  useUpdateSubscription,
+  useSettings,
+} from '../api/hooks';
+import { eurToMinor, minorToEur, type ApiSummary, type ApiTransaction } from '../api/types';
+import { CatKey, Currency } from '../theme';
+import { ordinalDay, shortDate } from '../utils/date';
 import {
   AFFORD_OPTS,
   CARD_COLORS,
@@ -9,27 +28,14 @@ import {
   SAVINGS_TODAY,
   Subscription,
   VaultItem,
-  creditCardsSeed,
-  demoMsgs,
-  firstMsgs,
-  subsSeed,
-  vaultBaseSeed,
-} from './mockData';
+  paperSeed,
+} from './constants';
 
-// Design-time toggles in the original comp — fixed here for the real app.
-const FIRST_RUN = false;
-const OVER_BUDGET = false;
 export const GLOW = true;
 
 export type { Currency };
 type CardState = { tax: boolean; ok: boolean };
 export type Nav = 'pager' | 'chat' | 'vault' | 'settings';
-
-function fmt(cur: Currency, eur: number, usd: number, pyg: number) {
-  if (cur === 'EUR') return '€' + eur.toFixed(2);
-  if (cur === 'USD') return '$' + usd.toFixed(2);
-  return formatPYG(pyg);
-}
 
 interface SpendOwlStore {
   // shell
@@ -41,6 +47,11 @@ interface SpendOwlStore {
   goDash: () => void;
   bottomNavHeight: number;
   setBottomNavHeight: (h: number) => void;
+
+  // load state — the app used to assume data was always present
+  loading: boolean;
+  error: string | null;
+  retry: () => void;
 
   // chat
   messages: Msg[];
@@ -58,9 +69,10 @@ interface SpendOwlStore {
   firstRun: boolean;
   cardFor: (id: string) => CardState;
   setCard: (id: string, patch: Partial<CardState>) => void;
-  fmt: (cur: Currency, eur: number, usd: number, pyg: number) => string;
 
   // dashboard
+  summary: ApiSummary | null;
+  transactions: ApiTransaction[];
   overBudget: boolean;
   selCat: CatKey | null;
   setSelCat: (c: CatKey | null) => void;
@@ -93,7 +105,6 @@ interface SpendOwlStore {
 
   // vault / invoice detail
   vaultItems: VaultItem[];
-  vaultPatch: Record<string, 'ok' | 'warn'>;
   invOpen: string | null;
   openInvoice: (id: string) => void;
   closeInvoice: () => void;
@@ -112,11 +123,10 @@ interface SpendOwlStore {
 const SpendOwlCtx = createContext<SpendOwlStore | null>(null);
 
 export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
+  // ---- UI-only state. Never persisted; resetting it on reload is correct. ----
   const [nav, setNav] = useState<Nav>('pager');
   const [page, setPage] = useState<0 | 1>(0);
   const [bottomNavHeight, setBottomNavHeight] = useState(0);
-
-  const [messages, setMessagesState] = useState<Msg[] | null>(null);
   const [input, setInput] = useState('');
   const [attachment, setAttachment] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -124,27 +134,44 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const [recSecs, setRecSecs] = useState(0);
   const [cards, setCards] = useState<Record<string, CardState>>({});
   const [selCat, setSelCat] = useState<CatKey | null>(null);
-
-  const [creditCards, setCreditCards] = useState<CreditCard[]>(() => creditCardsSeed());
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [payoffCardId, setPayoffCardId] = useState<string | null>(null);
-  const cardIdRef = useRef(100);
-
   const [affordOpen, setAffordOpen] = useState(false);
   const [affordSel, setAffordSel] = useState(1);
-
-  const [subs, setSubs] = useState<Subscription[]>(() => subsSeed());
   const [subsOpen, setSubsOpen] = useState(false);
-
-  const [vaultExtra, setVaultExtra] = useState<VaultItem[]>([]);
-  const [vaultPatch, setVaultPatch] = useState<Record<string, 'ok' | 'warn'>>({});
   const [invOpen, setInvOpen] = useState<string | null>(null);
+  // 'scanning' is a transient animation, never persisted — it lives here until
+  // the (currently fake) scan resolves into a real card message.
+  const [pendingScans, setPendingScans] = useState<string[]>([]);
 
-  const [baseCur, setBaseCur] = useState<Currency>('EUR');
-  const [notif, setNotif] = useState(true);
-  const [bio, setBio] = useState(false);
+  // ---- Server state ----
+  const transactionsQuery = useTransactions();
+  const summaryQuery = useSummary();
+  const cardsQuery = useCreditCards();
+  const subsQuery = useSubscriptions();
+  const receiptsQuery = useReceipts();
+  const messagesQuery = useMessages();
+  const settingsQuery = useSettings();
 
-  const midRef = useRef(100);
+  const addTransaction = useAddTransaction();
+  const addCard = useAddCreditCard();
+  const removeCard = useRemoveCreditCard();
+  const updateSubscription = useUpdateSubscription();
+  const approveReceipt = useApproveReceipt();
+  const addReceipt = useAddReceipt();
+  const addMessage = useAddMessage();
+  const updateSettings = useUpdateSettings();
+
+  const queries = [transactionsQuery, summaryQuery, cardsQuery, subsQuery, receiptsQuery, messagesQuery, settingsQuery];
+  const loading = queries.some(q => q.isLoading);
+  const firstError = queries.find(q => q.error)?.error;
+  const error = firstError instanceof Error ? firstError.message : null;
+
+  const retry = useCallback(() => {
+    queries.forEach(q => void q.refetch());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactionsQuery.refetch, summaryQuery.refetch, cardsQuery.refetch, subsQuery.refetch, receiptsQuery.refetch, messagesQuery.refetch, settingsQuery.refetch]);
+
   const replyIxRef = useRef(0);
   const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -161,51 +188,147 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     timersRef.current.push(setTimeout(fn, ms));
   }, []);
 
-  const msgsBase = useCallback((): Msg[] => messages ?? (FIRST_RUN ? firstMsgs() : demoMsgs()), [messages]);
-  // Uses the functional setState form so delayed pushes (via `after`) always
-  // build on the latest messages, not a stale closure from whenever the
-  // enclosing send()/endRec() call happened to be created.
-  const pushM = useCallback(
-    (items: Msg[]) => setMessagesState(prev => [...(prev ?? (FIRST_RUN ? firstMsgs() : demoMsgs())), ...items]),
-    []
+  // ---- API -> view models ----
+  const settings = settingsQuery.data;
+  const baseCur: Currency = settings?.baseCurrency ?? 'EUR';
+
+  const creditCards = useMemo<CreditCard[]>(
+    () =>
+      (cardsQuery.data ?? []).map(c => ({
+        id: c.id,
+        name: c.name,
+        last4: c.last4,
+        balance: minorToEur(c.balanceMinor),
+        limit: minorToEur(c.limitMinor),
+        apr: c.apr,
+        color: c.color,
+      })),
+    [cardsQuery.data]
   );
 
+  const subs = useMemo<Subscription[]>(
+    () =>
+      (subsQuery.data ?? []).map(s => ({
+        id: s.id,
+        name: s.name,
+        color: s.color,
+        price: minorToEur(s.priceMinor),
+        day: ordinalDay(s.dayOfMonth),
+        dayOfMonth: s.dayOfMonth,
+        muted: s.muted,
+        off: s.off,
+      })),
+    [subsQuery.data]
+  );
+
+  const vaultItems = useMemo<VaultItem[]>(
+    () =>
+      (receiptsQuery.data ?? []).map(r => ({
+        id: r.id,
+        merchant: r.merchant,
+        date: shortDate(r.occurredAt),
+        occurredAt: r.occurredAt,
+        amountEur: Math.abs(minorToEur(r.amountMinor)),
+        status: r.status,
+        seed: paperSeed(r.id),
+        cat: r.category,
+      })),
+    [receiptsQuery.data]
+  );
+
+  const serverMessages = useMemo<Msg[]>(
+    () =>
+      (messagesQuery.data ?? []).map((m): Msg => {
+        switch (m.kind) {
+          case 'user':
+            return { id: m.id, type: 'user', text: m.payload.text ?? '' };
+          case 'voice':
+            return { id: m.id, type: 'voice', dur: m.payload.dur ?? '0:04' };
+          case 'receipt':
+            return { id: m.id, type: 'receipt' };
+          case 'card':
+            return {
+              id: m.id,
+              type: 'card',
+              merchant: m.payload.merchant ?? 'Unknown',
+              cat: m.payload.cat ?? 'food',
+              amountEur: Math.abs(minorToEur(m.payload.amountMinor ?? 0)),
+              note: m.payload.note ?? '',
+            };
+          default:
+            return { id: m.id, type: 'ai', text: m.payload.text ?? '' };
+        }
+      }),
+    [messagesQuery.data]
+  );
+
+  const messages = useMemo<Msg[]>(
+    () => [...serverMessages, ...pendingScans.map((id): Msg => ({ id, type: 'scanning' }))],
+    [serverMessages, pendingScans]
+  );
+
+  // ---- Actions ----
   const cardFor = useCallback((id: string): CardState => cards[id] ?? { tax: false, ok: false }, [cards]);
+
   const setCard = useCallback(
-    (id: string, patch: Partial<CardState>) =>
-      setCards(prev => ({ ...prev, [id]: { ...(prev[id] ?? { tax: false, ok: false }), ...patch } })),
-    []
+    (id: string, patch: Partial<CardState>) => {
+      setCards(prev => ({ ...prev, [id]: { ...(prev[id] ?? { tax: false, ok: false }), ...patch } }));
+
+      // "Approve & log" now actually writes a transaction, rather than only
+      // flipping a local flag.
+      if (patch.ok) {
+        const message = serverMessages.find(m => m.id === id);
+        if (message?.type === 'card') {
+          addTransaction.mutate({
+            merchant: message.merchant,
+            category: message.cat,
+            amountMinor: -eurToMinor(message.amountEur),
+            note: message.note,
+            taxDeductible: cards[id]?.tax ?? false,
+          });
+        }
+      }
+    },
+    [serverMessages, cards, addTransaction]
   );
 
   const send = useCallback(() => {
     if (attachment) {
-      const sid = 's' + midRef.current++;
-      const rid = 'r' + midRef.current;
-      pushM([{ id: rid, type: 'receipt' }, { id: sid, type: 'scanning' }]);
+      const scanId = `scan-${Date.now()}`;
       setAttachment(false);
       setInput('');
+      addMessage.mutate({ kind: 'receipt', payload: {} });
+      setPendingScans(prev => [...prev, scanId]);
+
+      // Fake scan: fixed delay, fixed result. Real OCR is the next slice.
       after(2600, () => {
-        setMessagesState(prev =>
-          (prev ?? []).map(m =>
-            m.id === sid
-              ? { id: sid, type: 'card', merchant: 'Mercado Central', cat: 'food', eur: 23.8, usd: 25.9, pyg: Math.round(25.9 * PYG_PER_USD), note: '3 items · Groceries · scanned' }
-              : m
-          )
-        );
-        setVaultExtra(prev => [
-          { id: 'vx' + sid, merchant: 'Mercado Central', date: 'Jul 17', amount: '€23.80', usd: '$25.90', pyg: formatPYG(25.9 * PYG_PER_USD), status: 'ok', seed: 2, cat: 'Food & Drink' },
-          ...prev,
-        ]);
+        setPendingScans(prev => prev.filter(id => id !== scanId));
+        addMessage.mutate({
+          kind: 'card',
+          payload: {
+            merchant: 'Mercado Central',
+            cat: 'food',
+            amountMinor: -2380,
+            note: '3 items · Groceries · scanned',
+          },
+        });
+        addReceipt.mutate({
+          merchant: 'Mercado Central',
+          amountMinor: -2380,
+          category: 'Food & Drink',
+          status: 'ok',
+        });
       });
       return;
     }
+
     const text = input.trim();
     if (!text) return;
-    pushM([{ id: 'u' + midRef.current++, type: 'user', text }]);
     setInput('');
-    const r = REPLIES[replyIxRef.current++ % REPLIES.length];
-    after(900, () => pushM([{ id: 'a' + midRef.current++, type: 'ai', text: r }]));
-  }, [attachment, input, pushM, after]);
+    addMessage.mutate({ kind: 'user', payload: { text } });
+    const reply = REPLIES[replyIxRef.current++ % REPLIES.length] ?? REPLIES[0]!;
+    after(900, () => addMessage.mutate({ kind: 'ai', payload: { text: reply } }));
+  }, [attachment, input, addMessage, addReceipt, after]);
 
   const startRec = useCallback(() => {
     setRecording(true);
@@ -220,16 +343,23 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
       setRecSecs(secsNow => {
         const secs = Math.max(secsNow, 4);
         if (commit) {
-          const vid = 'v' + midRef.current++;
-          pushM([{ id: vid, type: 'voice', dur: '0:' + String(secs).padStart(2, '0') }]);
+          addMessage.mutate({ kind: 'voice', payload: { dur: `0:${String(secs).padStart(2, '0')}` } });
           after(1400, () =>
-            pushM([{ id: 'c' + midRef.current++, type: 'card', merchant: 'Blue Bottle Coffee', cat: 'food', eur: 4.5, usd: 4.9, pyg: Math.round(4.9 * PYG_PER_USD), note: 'Voice note · transcribed' }])
+            addMessage.mutate({
+              kind: 'card',
+              payload: {
+                merchant: 'Blue Bottle Coffee',
+                cat: 'food',
+                amountMinor: -450,
+                note: 'Voice note · transcribed',
+              },
+            })
           );
         }
         return 0;
       });
     },
-    [pushM, after]
+    [addMessage, after]
   );
 
   const attach = useCallback(() => {
@@ -237,15 +367,11 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     setTouched(true);
   }, []);
 
-  const vaultBase = useMemo(() => vaultBaseSeed(FIRST_RUN), []);
-  const vaultItems = useMemo(() => [...vaultExtra, ...vaultBase], [vaultExtra, vaultBase]);
-
   const openInvoice = useCallback((id: string) => setInvOpen(id), []);
   const closeInvoice = useCallback(() => setInvOpen(null), []);
   const approveInvoice = useCallback(() => {
-    if (!invOpen) return;
-    setVaultPatch(prev => ({ ...prev, [invOpen]: 'ok' }));
-  }, [invOpen]);
+    if (invOpen) approveReceipt.mutate(invOpen);
+  }, [invOpen, approveReceipt]);
 
   const scanFirst = useCallback(() => {
     setNav('chat');
@@ -259,16 +385,37 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     setPage(1);
   }, []);
 
-  const toggleSubMute = useCallback((id: string) => setSubs(prev => prev.map(s => (s.id === id ? { ...s, muted: !s.muted } : s))), []);
-  const toggleSubOff = useCallback((id: string) => setSubs(prev => prev.map(s => (s.id === id ? { ...s, off: !s.off } : s))), []);
+  const toggleSubMute = useCallback(
+    (id: string) => {
+      const sub = subs.find(s => s.id === id);
+      if (sub) updateSubscription.mutate({ id, muted: !sub.muted });
+    },
+    [subs, updateSubscription]
+  );
 
-  const addCreditCard = useCallback((input: { name: string; last4: string; balance: number; limit: number; apr: number }) => {
-    const id = 'cc' + cardIdRef.current++;
-    setCreditCards(prev => [...prev, { id, color: CARD_COLORS[prev.length % CARD_COLORS.length], ...input }]);
-  }, []);
-  const removeCreditCard = useCallback((id: string) => setCreditCards(prev => prev.filter(c => c.id !== id)), []);
-  const openPayoff = useCallback((id: string) => setPayoffCardId(id), []);
-  const closePayoff = useCallback(() => setPayoffCardId(null), []);
+  const toggleSubOff = useCallback(
+    (id: string) => {
+      const sub = subs.find(s => s.id === id);
+      if (sub) updateSubscription.mutate({ id, off: !sub.off });
+    },
+    [subs, updateSubscription]
+  );
+
+  const addCreditCard = useCallback(
+    (input: { name: string; last4: string; balance: number; limit: number; apr: number }) => {
+      addCard.mutate({
+        name: input.name,
+        last4: input.last4,
+        balanceMinor: eurToMinor(input.balance),
+        limitMinor: eurToMinor(input.limit),
+        apr: input.apr,
+        color: CARD_COLORS[creditCards.length % CARD_COLORS.length]!,
+      });
+    },
+    [addCard, creditCards.length]
+  );
+
+  const summary = summaryQuery.data ?? null;
 
   const value: SpendOwlStore = {
     nav,
@@ -280,7 +427,11 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     bottomNavHeight,
     setBottomNavHeight,
 
-    messages: msgsBase(),
+    loading,
+    error,
+    retry,
+
+    messages,
     input,
     setInput,
     attachment,
@@ -292,12 +443,13 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     endRec,
     send,
     touched,
-    firstRun: FIRST_RUN,
+    firstRun: !loading && serverMessages.length === 0,
     cardFor,
     setCard,
-    fmt,
 
-    overBudget: OVER_BUDGET,
+    summary,
+    transactions: transactionsQuery.data ?? [],
+    overBudget: summary?.overBudget ?? false,
     selCat,
     setSelCat,
 
@@ -306,10 +458,10 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     openAddCard: () => setAddCardOpen(true),
     closeAddCard: () => setAddCardOpen(false),
     addCreditCard,
-    removeCreditCard,
+    removeCreditCard: (id: string) => removeCard.mutate(id),
     payoffCardId,
-    openPayoff,
-    closePayoff,
+    openPayoff: (id: string) => setPayoffCardId(id),
+    closePayoff: () => setPayoffCardId(null),
 
     affordOpen,
     affordSel,
@@ -325,7 +477,6 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     toggleSubOff,
 
     vaultItems,
-    vaultPatch,
     invOpen,
     openInvoice,
     closeInvoice,
@@ -333,11 +484,11 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     scanFirst,
 
     baseCur,
-    setBaseCur,
-    notif,
-    toggleNotif: () => setNotif(v => !v),
-    bio,
-    toggleBio: () => setBio(v => !v),
+    setBaseCur: (c: Currency) => updateSettings.mutate({ baseCurrency: c }),
+    notif: settings?.notif ?? true,
+    toggleNotif: () => updateSettings.mutate({ notif: !(settings?.notif ?? true) }),
+    bio: settings?.bio ?? false,
+    toggleBio: () => updateSettings.mutate({ bio: !(settings?.bio ?? false) }),
   };
 
   return <SpendOwlCtx.Provider value={value}>{children}</SpendOwlCtx.Provider>;

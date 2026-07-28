@@ -1,5 +1,6 @@
 import { ClerkProvider, useAuth } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NotoSans_400Regular, NotoSans_500Medium, NotoSans_700Bold } from '@expo-google-fonts/noto-sans';
 import { NotoSansMono_400Regular } from '@expo-google-fonts/noto-sans-mono';
 import { Roboto_400Regular, Roboto_500Medium, Roboto_700Bold } from '@expo-google-fonts/roboto';
@@ -11,7 +12,8 @@ import React, { useEffect } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { RootScreen } from './src/RootScreen';
-import { SpendOwlProvider } from './src/store/SpendOwlContext';
+import { SpendOwlProvider, useSpendOwl } from './src/store/SpendOwlContext';
+import { ErrorScreen, LoadingScreen } from './src/screens/LoadingScreen';
 import { colors } from './src/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -37,10 +39,26 @@ function Gate() {
 
   return (
     <SpendOwlProvider>
-      <RootScreen />
+      <DataGate />
     </SpendOwlProvider>
   );
 }
+
+// Inside SpendOwlProvider so it can see the query state. The screens below it
+// all assume their data exists, so nothing renders until the first load
+// resolves — and a failed load says so instead of showing zeroes.
+function DataGate() {
+  const { loading, error, retry } = useSpendOwl();
+  if (loading) return <LoadingScreen />;
+  if (error) return <ErrorScreen message={error} onRetry={retry} />;
+  return <RootScreen />;
+}
+
+// Retry once on failure: the common case is the phone briefly losing the dev
+// server, not a genuinely bad request.
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
+});
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -60,10 +78,12 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: colors.screenBg }} edges={['top', 'left', 'right']}>
-          <Gate />
-          <StatusBar style="light" />
-        </SafeAreaView>
+        <QueryClientProvider client={queryClient}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: colors.screenBg }} edges={['top', 'left', 'right']}>
+            <Gate />
+            <StatusBar style="light" />
+          </SafeAreaView>
+        </QueryClientProvider>
       </ClerkProvider>
     </SafeAreaProvider>
   );

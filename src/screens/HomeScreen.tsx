@@ -2,53 +2,93 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Icon } from '../icons';
-import { GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
+import { CATS, GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
+import { minorToEur } from '../api/types';
 import { useSpendOwl } from '../store/SpendOwlContext';
+import { monthLong } from '../utils/date';
+
+type Insight = {
+  title: string;
+  body: string;
+  cta: string;
+  icon: 'trendUp' | 'trendDown' | 'pie' | 'bars' | 'warn';
+  iconColor: string;
+  onTap: () => void;
+};
 
 export function HomeScreen() {
   const store = useSpendOwl();
-  const { baseCur } = store;
+  const { baseCur, summary } = store;
 
-  const insights = [
-    {
-      title: "You're pacing well",
-      body: `${formatMoney(38, baseCur, 0)} under your usual spend this week. Safe to spend: ${formatMoney(1283, baseCur, 0)}.`,
+  const spent = minorToEur(summary?.spentMinor ?? 0);
+  const income = minorToEur(summary?.incomeMinor ?? 0);
+  const safeToSpend = minorToEur(summary?.safeToSpendMinor ?? 0);
+  const paceDelta = minorToEur(summary?.paceDeltaMinor ?? 0);
+  const monthName = monthLong(summary?.month ?? '');
+
+  // Every card below is derived from live data. The old versions were fixed
+  // strings, including one that deep-linked to a hardcoded fixture id.
+  const insights: Insight[] = [];
+
+  if (summary) {
+    const underPace = paceDelta >= 0;
+    insights.push({
+      title: underPace ? "You're pacing well" : 'Spending above pace',
+      body: `${formatMoney(Math.abs(paceDelta), baseCur, 0)} ${underPace ? 'under' : 'over'} your budget pace this month. Safe to spend: ${formatMoney(safeToSpend, baseCur, 0)}.`,
       cta: 'Ask the coach',
-      icon: 'trendUp' as const,
-      iconColor: colors.mint,
+      icon: underPace ? 'trendUp' : 'trendDown',
+      iconColor: underPace ? colors.mint : colors.rose,
       onTap: () => store.setNav('chat'),
-    },
-    {
-      title: 'Food is running hot',
-      body: '12% above June — mostly weekday lunches. I can set a soft cap.',
-      cta: 'Set a cap in chat',
-      icon: 'pie' as const,
-      iconColor: '#F0A878',
-      onTap: () => store.setNav('chat'),
-    },
-    {
-      title: '3 renewals this week',
-      body: `Spotify, iCloud+ and Basic Fit renew before Sunday — ${formatMoney(38.97, baseCur, 2)} total.`,
+    });
+
+    const top = summary.categories.filter(c => c.key !== 'income')[0];
+    if (top && spent > 0) {
+      const share = Math.round((minorToEur(top.spentMinor) / spent) * 100);
+      insights.push({
+        title: `${CATS[top.key].name} leads your spend`,
+        body: `${formatMoney(minorToEur(top.spentMinor), baseCur, 0)} so far — ${share}% of everything you've spent in ${monthName}.`,
+        cta: 'Set a cap in chat',
+        icon: 'pie',
+        iconColor: CATS[top.key].color,
+        onTap: () => store.setNav('chat'),
+      });
+    }
+  }
+
+  const upcoming = store.subs.filter(s => !s.off && s.dayOfMonth >= new Date().getDate()).slice(0, 3);
+  if (upcoming.length > 0) {
+    insights.push({
+      title: `${upcoming.length} renewal${upcoming.length === 1 ? '' : 's'} still to come`,
+      body: `${upcoming.map(s => s.name).join(', ')} renew${upcoming.length === 1 ? 's' : ''} later this month — ${formatMoney(
+        upcoming.reduce((sum, s) => sum + s.price, 0),
+        baseCur,
+        2
+      )} total.`,
       cta: 'Review subscriptions',
-      icon: 'bars' as const,
+      icon: 'bars',
       iconColor: '#78ADEE',
       onTap: () => {
         store.goDash();
         store.openSubs();
       },
-    },
-    {
-      title: '1 factura needs review',
-      body: `IKEA (${formatMoney(89.9, baseCur, 2)}) is missing its VAT number.`,
+    });
+  }
+
+  const needsReview = store.vaultItems.filter(v => v.status === 'warn');
+  const firstReview = needsReview[0];
+  if (firstReview) {
+    insights.push({
+      title: `${needsReview.length} factura${needsReview.length === 1 ? '' : 's'} need${needsReview.length === 1 ? 's' : ''} review`,
+      body: `${firstReview.merchant} (${formatMoney(firstReview.amountEur, baseCur, 2)}) is missing its VAT number.`,
       cta: 'Open in vault',
-      icon: 'warn' as const,
+      icon: 'warn',
       iconColor: colors.amber,
       onTap: () => {
         store.setNav('vault');
-        store.openInvoice('v3');
+        store.openInvoice(firstReview.id);
       },
-    },
-  ];
+    });
+  }
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 64, gap: 12 }}>
@@ -75,12 +115,12 @@ export function HomeScreen() {
 
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <Pressable onPress={store.goDash} style={{ flex: 1, backgroundColor: colors.card, borderRadius: 20, padding: 14, paddingHorizontal: 16 }}>
-          <Text style={{ fontSize: 12, color: colors.textDim50 }}>Spent · July</Text>
-          <Text style={{ fontSize: 22, fontFamily: moneyFont(baseCur, 'bold'), color: colors.text, marginTop: 4 }}>{formatMoney(1116, baseCur, 0)}</Text>
+          <Text style={{ fontSize: 12, color: colors.textDim50 }}>Spent · {monthName}</Text>
+          <Text style={{ fontSize: 22, fontFamily: moneyFont(baseCur, 'bold'), color: colors.text, marginTop: 4 }}>{formatMoney(spent, baseCur, 0)}</Text>
         </Pressable>
         <Pressable onPress={store.goDash} style={{ flex: 1, backgroundColor: colors.card, borderRadius: 20, padding: 14, paddingHorizontal: 16 }}>
-          <Text style={{ fontSize: 12, color: colors.textDim50 }}>Income · July</Text>
-          <Text style={{ fontSize: 22, fontFamily: moneyFont(baseCur, 'bold'), color: colors.mint, marginTop: 4 }}>{formatMoney(1850, baseCur, 0)}</Text>
+          <Text style={{ fontSize: 12, color: colors.textDim50 }}>Income · {monthName}</Text>
+          <Text style={{ fontSize: 22, fontFamily: moneyFont(baseCur, 'bold'), color: colors.mint, marginTop: 4 }}>{formatMoney(income, baseCur, 0)}</Text>
         </Pressable>
       </View>
 

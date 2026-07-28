@@ -5,12 +5,45 @@ expenses (by text, voice note, or receipt photo), plus a dashboard, a receipt
 vault, and settings. This repo is a React Native (Expo) implementation of a
 design comp (`SpendOwl.dc.html`) originally built in Claude's design tool.
 
-**Authentication is real** — Clerk (`@clerk/expo`): email + password with an
-emailed verification code, plus Google and Apple. Everything behind the
-sign-in wall still runs on
-**mocked data**: there is no real backend, AI, or OCR yet. Every "AI reply,"
-receipt scan, and voice transcription is a canned response fired after a
-`setTimeout`, and the fixtures are the same for every account.
+**Authentication and data are both real.** Clerk (`@clerk/expo`) handles
+sign-in — email + password with an emailed code, plus Google and Apple — and a
+Hono + Postgres API in `server/` owns everything else, scoped per Clerk user.
+Two accounts see entirely separate data, and it survives app restarts.
+
+Still simulated: the AI coach's replies, receipt scanning, and voice
+transcription remain canned results on fixed delays. The server persists them
+but does not generate them — no LLM and no OCR are wired up yet.
+
+## Backend
+
+`server/` is a separate Node package (its own `package.json`, excluded from the
+app's `tsconfig.json` and from Metro via `metro.config.js`). It runs TypeScript
+directly on Node's native type stripping, so there is no build step.
+
+- **`server/src/migrations.ts`** — ordered migrations applied at boot under a
+  Postgres advisory lock. Tables: `users`, `transactions`, `receipts`,
+  `subscriptions`, `credit_cards`, `messages`.
+- **`server/src/auth.ts`** — verifies the Clerk session token via
+  `@clerk/backend`'s `verifyToken`; the `sub` claim is the user id. Every query
+  scopes on it, and it is the only tenancy mechanism, so a route that forgets
+  to filter by `user_id` leaks another account's data.
+- **`server/src/seed.ts`** — on the first authenticated request from an unknown
+  user, creates their row and seeds a month of demo data. Lazy provisioning
+  means no Clerk webhooks are needed.
+- **`GET /api/summary`** is the important one: safe-to-spend, budget progress,
+  pace, per-category totals and the cumulative trend series, all `SUM()`ed from
+  real rows. These used to be hardcoded literals in the UI.
+
+**Money is stored as integer EUR cents** everywhere, never floats. The client
+converts at the render boundary with the existing `formatMoney()`. This
+replaced the old fixtures' hand-computed `eur`/`usd`/`pyg` triples on every row.
+
+On the client, `@tanstack/react-query` holds server state and
+`SpendOwlContext.tsx` keeps its original `useSpendOwl()` surface — screens read
+the same shapes as before, mapped from the API in one place. UI-only state
+(nav, modal flags, chat input, recording) stays local `useState`.
+`src/api/client.ts` derives the API host from the Metro dev-server address,
+because Expo Go runs on the phone where `localhost` is the phone itself.
 
 ## Authentication
 
@@ -49,55 +82,78 @@ key. See `.docs/BACKEND.md` before shipping.
 
 ## Screens
 
+Five destinations, all on one horizontal pager (see Root composition below):
+
+- **Home** (`src/screens/HomeScreen.tsx`) — spent/income tiles for the current
+  month and a list of "for you today" insight cards. Every card is derived from
+  live data: budget pace, the top spending category and its share, upcoming
+  subscription renewals, and facturas needing review (which deep-links to a
+  real receipt id).
+- **Dashboard** (`src/screens/DashboardScreen.tsx`) — safe-to-spend hero number
+  and budget progress bar, a tappable category donut, a filterable transaction
+  list, a spending-trajectory chart with a budget-pace reference line, the
+  credit-cards section, a "Can I afford this?" sandbox, and a subscriptions
+  summary. All figures come from `GET /api/summary`.
 - **Chat** (`src/screens/ChatScreen.tsx`) — the coach conversation. Supports:
   - Typing a message and getting a canned AI reply.
-  - Attaching a "photo" of a receipt (`factura`) and sending it, which shows a
-    scanning animation and then a swipeable expense card.
+  - Attaching a "photo" of a receipt (`factura`), which shows a scanning
+    animation and then resolves to an expense card.
   - Recording a voice note, which produces a transcribed expense card.
-  - Expense cards let you flip currency (EUR/USD), mark as a tax-deductible
-    business expense, and approve & log them.
-- **Dashboard** (`src/screens/DashboardScreen.tsx`) — safe-to-spend hero
-  number and progress bar, a tappable category donut chart, a filterable
-  recent-transactions list, a spending-trajectory line chart, a "Can I afford
-  this?" sandbox, and a subscriptions summary.
+  - Expense cards can be marked tax-deductible and approved — "approve & log"
+    writes a real transaction via `POST /api/transactions`.
 - **Factura Vault** (`src/screens/VaultScreen.tsx`) — a grid of scanned
   receipts with an ok/needs-review badge; tapping one opens the full invoice
   detail view.
 - **Settings** (`src/screens/SettingsScreen.tsx`) — profile (the real signed-in
-  Clerk user's name and email, no longer the hardcoded "Maya Fernández"), base
-  currency, budget alerts, biometric lock toggle, static preference rows, and
-  sign-out.
+  Clerk user's name and email), base currency, budget alerts, biometric lock
+  toggle, static preference rows, and sign-out.
 
-Two full-screen/sheet overlays live outside the four tabs and can be opened
-from the Dashboard: the **"Can I afford this?"** sandbox modal
-(`src/modals/AffordModal.tsx`) and the **Subscriptions** bottom sheet
-(`src/modals/SubscriptionsSheet.tsx`). Tapping a vault item opens
-**Invoice detail** (`src/modals/InvoiceDetail.tsx`).
+Five overlays live outside the pager: the **"Can I afford this?"** sandbox
+(`src/modals/AffordModal.tsx`), the **Subscriptions** sheet
+(`src/modals/SubscriptionsSheet.tsx`), **Add card**
+(`src/modals/AddCardSheet.tsx`) and the **payoff calculator**
+(`src/modals/CardPayoffModal.tsx`) — both reached from the Dashboard's cards
+section — and **Invoice detail** (`src/modals/InvoiceDetail.tsx`), opened by
+tapping a vault item.
+
+Note the payoff modal is a *calculator* only: it models payment schedules using
+`src/utils/payoff.ts` but does not record a payment. `POST
+/api/credit-cards/:id/payoff` exists and works if you want to wire that up.
 
 ## Architecture
 
 - **State**: a single React Context store (`src/store/SpendOwlContext.tsx`,
-  exposed via the `useSpendOwl()` hook) holds all app state — chat messages,
-  the current tab/page, recording state, expense-card edits, the afford-modal
-  selection, subscriptions, vault items, and settings toggles. Screens and
-  modals all read/write through this one hook, so state (e.g. a receipt
-  scanned in Chat) is shared consistently across the Dashboard and Vault.
-- **Mock data**: `src/store/mockData.ts` holds the seed data (demo chat
-  messages, canned AI replies, the transaction list, subscriptions, vault
-  items) — this is the only place to edit if you want to change the demo
-  content.
-- **Theme**: `src/theme.ts` has the color palette, category colors/amounts,
-  and font family names.
+  exposed via the `useSpendOwl()` hook) is still the one thing screens and
+  modals read from, but it is now a thin layer over React Query rather than
+  the source of truth. It maps API responses (integer cents) to the view
+  models the screens already render (EUR numbers, ordinal days, formatted
+  dates), and keeps UI-only state local.
+- **API layer**: `src/api/` — `client.ts` (fetch wrapper, Clerk token, host
+  detection), `hooks.ts` (React Query queries and mutations), `types.ts` (wire
+  shapes plus `minorToEur`/`eurToMinor`).
+- **Demo content**: lives server-side in `server/src/seed.ts`, not in the app.
+  `src/store/constants.ts` holds what genuinely is client-side constant — the
+  `Msg` union, the canned `REPLIES`, the afford-modal options.
+- **Theme**: `src/theme.ts` has the color palette, category colors, and font
+  family names. It deliberately holds **no** amounts — category spend totals
+  used to live here and now come from `GET /api/summary`.
 - **Icons**: `src/icons.tsx` renders the app's icon set from raw SVG path
   data via `react-native-svg`.
-- **Shared UI components** live in `src/components/` (toggle switch,
-  currency pills, the animated voice waveform, the scanning laser overlay,
-  the donut and trend charts, the receipt "paper" placeholder graphic, the
+- **Shared UI components** live in `src/components/` (toggle switch, the
+  animated voice waveform, the scanning laser overlay, the donut and trend
+  charts — both of which take their data as props — the receipt "paper"
+  placeholder, the credit-cards section, the Google/Apple brand marks, the
   header, and the bottom nav bar).
-- **Root composition**: `src/RootScreen.tsx` renders the header, a
-  horizontally-paged Chat/Dashboard view (swipe or tap the bottom nav to
-  switch), the Vault/Settings screens, the bottom nav, and mounts the three
-  modals.
+- **Root composition**: `src/RootScreen.tsx` puts all five destinations on a
+  single horizontal `ScrollView` pager in bottom-nav order (Home, Dashboard,
+  Chat, Vault, Settings), so tapping the nav and swiping animate through the
+  same transition. It renders the header, the pager, the bottom nav, and
+  mounts the five modals.
+- **Load gate**: `App.tsx` nests `SafeAreaProvider` → `ClerkProvider` →
+  `QueryClientProvider` → `Gate` (signed in?) → `SpendOwlProvider` →
+  `DataGate` (data loaded?). Screens below `DataGate` can assume their data
+  exists; `src/screens/LoadingScreen.tsx` covers the first load and the
+  can't-reach-the-API case.
 
 ## Notable implementation choices
 

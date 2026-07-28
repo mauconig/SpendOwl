@@ -6,8 +6,9 @@ import { Donut } from '../components/Donut';
 import { TrendChart } from '../components/TrendChart';
 import { Icon } from '../icons';
 import { CATS, CatKey, Currency, GRAD, GRAD_LOCATIONS, colors, convertFromEUR, fonts, formatMoney, formatPYG, moneyFont } from '../theme';
-import { TX } from '../store/mockData';
+import { minorToEur } from '../api/types';
 import { useSpendOwl } from '../store/SpendOwlContext';
+import { monthLong, monthShort, relativeDayLabel } from '../utils/date';
 import { cardInterestMonthly } from '../utils/payoff';
 
 const CAT_KEYS: CatKey[] = ['food', 'bills', 'shopping', 'transport'];
@@ -30,28 +31,49 @@ export function DashboardScreen() {
   const store = useSpendOwl();
   const { selCat, setSelCat, overBudget, baseCur } = store;
 
+  const summary = store.summary;
+
+  // Card interest stays a client-side derivation from the live card balances —
+  // it isn't a transaction, so the server's category totals don't include it.
   const debtAmount = cardInterestMonthly(store.creditCards);
   const hasDebt = debtAmount > 0;
   const legendKeys: CatKey[] = hasDebt ? [...CAT_KEYS, 'debt'] : CAT_KEYS;
-  const amountFor = (k: CatKey) => (k === 'debt' ? debtAmount : CATS[k].amount);
-  const donutTotal = 1116 + (hasDebt ? debtAmount : 0);
 
-  const txList = TX.filter(t => !selCat || t.cat === selCat).map(t => {
-    const cat = CATS[t.cat];
-    const inc = t.amt > 0;
-    return {
-      merchant: t.merchant,
-      letter: t.merchant[0],
-      meta: `${t.date} · ${cat.name}`,
-      amt: (inc ? '+' : '−') + formatMoney(Math.abs(t.amt), baseCur, 2),
-      inc,
-      color: cat.color,
-    };
-  });
+  const spentByCat = new Map<CatKey, number>(
+    (summary?.categories ?? []).map(c => [c.key, minorToEur(c.spentMinor)])
+  );
+  const amountFor = (k: CatKey) => (k === 'debt' ? debtAmount : (spentByCat.get(k) ?? 0));
+  const donutSlices = legendKeys.map(key => ({ key, amount: amountFor(key) }));
+  const donutTotal = donutSlices.reduce((sum, s) => sum + s.amount, 0);
+
+  const txList = store.transactions
+    .filter(t => !selCat || t.category === selCat)
+    .map(t => {
+      const cat = CATS[t.category];
+      const inc = t.amountMinor > 0;
+      return {
+        id: t.id,
+        merchant: t.merchant,
+        letter: t.merchant[0],
+        meta: `${relativeDayLabel(t.occurredAt)} · ${cat.name}`,
+        amt: (inc ? '+' : '−') + formatMoney(Math.abs(minorToEur(t.amountMinor)), baseCur, 2),
+        inc,
+        color: cat.color,
+      };
+    });
 
   const subsActive = store.subs.filter(s => !s.off);
   const subsTotal = subsActive.reduce((a, s) => a + s.price, 0);
-  const hero = heroSplit(overBudget ? 86.4 : 1283.65, baseCur);
+
+  const budget = minorToEur(summary?.budgetMinor ?? 0);
+  const spent = minorToEur(summary?.spentMinor ?? 0);
+  const safeToSpend = minorToEur(summary?.safeToSpendMinor ?? 0);
+  const paceDelta = minorToEur(summary?.paceDeltaMinor ?? 0);
+  const percentOfBudget = summary?.percentOfBudget ?? 0;
+  const daysLeft = summary?.daysLeft ?? 0;
+  const hero = heroSplit(overBudget ? spent - budget : safeToSpend, baseCur);
+  const monthKey = summary?.month ?? '';
+  const monthName = monthLong(monthKey);
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 64, gap: 14 }}>
@@ -74,14 +96,16 @@ export function DashboardScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
           <Icon name={overBudget ? 'trendDown' : 'trendUp'} size={16} color={overBudget ? colors.rose : colors.mint} />
           <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: overBudget ? colors.rose : colors.mint }}>
-            {overBudget ? `${formatMoney(86.4, baseCur, 2)} over budget (4%)` : `${formatMoney(38, baseCur, 0)} under pace (3.1%)`}
+            {overBudget
+              ? `${formatMoney(spent - budget, baseCur, 2)} over budget (${(percentOfBudget - 100).toFixed(0)}%)`
+              : `${formatMoney(Math.abs(paceDelta), baseCur, 0)} ${paceDelta >= 0 ? 'under' : 'over'} pace (${Math.abs(summary?.pacePercent ?? 0).toFixed(1)}%)`}
           </Text>
         </View>
         <View style={{ marginTop: 14, height: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
           <View
             style={{
               height: '100%',
-              width: overBudget ? '100%' : '46.5%',
+              width: `${Math.min(Math.max(percentOfBudget, 0), 100)}%`,
               borderRadius: 999,
               backgroundColor: overBudget ? colors.rose : undefined,
             }}
@@ -92,7 +116,8 @@ export function DashboardScreen() {
           </View>
         </View>
         <Text style={{ marginTop: 8, fontSize: 11.5, color: colors.textDim45 }}>
-          {overBudget ? '104%' : '47%'} of {formatMoney(2400, baseCur, 0)} · 14 days left
+          {percentOfBudget.toFixed(0)}% of {formatMoney(budget, baseCur, 0)} · {daysLeft} day
+          {daysLeft === 1 ? '' : 's'} left
         </Text>
       </View>
 
@@ -114,7 +139,8 @@ export function DashboardScreen() {
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.amber }}>Budget exceeded</Text>
             <Text style={{ fontSize: 12, color: colors.textDim55, marginTop: 2, lineHeight: 17 }}>
-              You’re {formatMoney(86.4, baseCur, 2)} past July’s budget. I can draft a catch-up plan for the last two weeks.
+              You’re {formatMoney(spent - budget, baseCur, 2)} past {monthName}’s budget. I can draft a catch-up plan for
+              the last two weeks.
             </Text>
           </View>
         </View>
@@ -126,10 +152,10 @@ export function DashboardScreen() {
           <Text style={{ fontSize: 11, color: colors.textDim40 }}>tap a slice</Text>
         </View>
         <View style={{ alignItems: 'center', paddingVertical: 10 }}>
-          <Donut selCat={selCat} onSelect={setSelCat} extra={{ amount: debtAmount }} />
+          <Donut slices={donutSlices} selCat={selCat} onSelect={setSelCat} />
           <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{ fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1.5, color: colors.textDim50 }}>
-              {selCat ? CATS[selCat].name.toUpperCase() : 'SPENT · JULY'}
+              {selCat ? CATS[selCat].name.toUpperCase() : `SPENT · ${monthName.toUpperCase()}`}
             </Text>
             {(() => {
               const donutValue = formatMoney(selCat ? amountFor(selCat) : donutTotal, baseCur, 0);
@@ -192,8 +218,8 @@ export function DashboardScreen() {
           )}
         </View>
         <View style={{ gap: 4 }}>
-          {txList.map((t, i) => (
-            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 7 }}>
+          {txList.map(t => (
+            <View key={t.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 7 }}>
               <View
                 style={{
                   width: 34,
@@ -221,7 +247,12 @@ export function DashboardScreen() {
       <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16 }}>
         <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>Spending trajectory</Text>
         <View style={{ marginTop: 12 }}>
-          <TrendChart />
+          <TrendChart
+            series={(summary?.trend ?? []).map(point => minorToEur(point.cumulativeMinor))}
+            daysInMonth={summary?.daysInMonth ?? 30}
+            budget={budget}
+            monthLabel={monthShort(monthKey)}
+          />
         </View>
         <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -230,7 +261,7 @@ export function DashboardScreen() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <View style={{ width: 14, height: 0, borderTopWidth: 2, borderStyle: 'dashed', borderTopColor: 'rgba(245,245,247,.35)' }} />
-            <Text style={{ fontSize: 11, color: colors.textDim60 }}>3-month average</Text>
+            <Text style={{ fontSize: 11, color: colors.textDim60 }}>Budget pace</Text>
           </View>
         </View>
       </View>

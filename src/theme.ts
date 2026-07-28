@@ -46,15 +46,17 @@ export const colors = {
   iconBg: '#1C1C1F',
 };
 
+// Presentation only: label and colour per category. Spend amounts used to live
+// here too, which meant a theme file was the source of truth for money — and
+// those numbers never agreed with the transaction list. Totals now come from
+// GET /api/summary, computed from real rows.
 export const CATS = {
-  food: { name: 'Food & Drink', color: '#F0A878', amount: 412.3 },
-  bills: { name: 'Bills & Subs', color: '#78ADEE', amount: 318.75 },
-  shopping: { name: 'Shopping', color: '#C9B8F5', amount: 236.4 },
-  transport: { name: 'Transport', color: '#E4E4E7', amount: 148.9 },
-  income: { name: 'Income', color: '#4ADE80', amount: 0 },
-  // Placeholder amount — the real value is always computed live from `creditCards`
-  // via `cardInterestMonthly` (src/utils/payoff.ts), never read directly from here.
-  debt: { name: 'Card interest', color: '#F87171', amount: 0 },
+  food: { name: 'Food & Drink', color: '#F0A878' },
+  bills: { name: 'Bills & Subs', color: '#78ADEE' },
+  shopping: { name: 'Shopping', color: '#C9B8F5' },
+  transport: { name: 'Transport', color: '#E4E4E7' },
+  income: { name: 'Income', color: '#4ADE80' },
+  debt: { name: 'Card interest', color: '#F87171' },
 } as const;
 
 export type CatKey = keyof typeof CATS;

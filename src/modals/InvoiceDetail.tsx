@@ -4,8 +4,9 @@ import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { Paper } from '../components/Paper';
 import { Toggle } from '../components/Toggle';
 import { Icon } from '../icons';
-import { GRAD, GRAD_LOCATIONS, colors, fonts, moneyFont } from '../theme';
+import { GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
+import { longDate } from '../utils/date';
 
 function Field({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
   return (
@@ -21,7 +22,7 @@ export function InvoiceDetail() {
   const inv = store.invOpen ? store.vaultItems.find(v => v.id === store.invOpen) : null;
   if (!inv) return null;
 
-  const status = store.vaultPatch[inv.id] ?? inv.status;
+  const status = inv.status;
   const isWarn = status === 'warn';
   const card = store.cardFor('inv-' + inv.id);
 
@@ -59,7 +60,7 @@ export function InvoiceDetail() {
           <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 18, paddingHorizontal: 16 }}>
             <Field label="MERCHANT" value={inv.merchant} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
-            <Field label="DATE" value={`${inv.date}, 2026`} />
+            <Field label="DATE" value={longDate(inv.occurredAt)} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
             <Field label="CATEGORY" value={inv.cat} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
@@ -68,7 +69,7 @@ export function InvoiceDetail() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }}>
               <Text style={{ fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 1, color: colors.textDim45 }}>TOTAL</Text>
               <Text style={{ fontSize: 24, fontFamily: moneyFont(store.baseCur, 'bold'), color: '#FFFFFF' }}>
-                {store.baseCur === 'USD' ? inv.usd : store.baseCur === 'PYG' ? inv.pyg : inv.amount}
+                {formatMoney(inv.amountEur, store.baseCur, 2)}
               </Text>
             </View>
           </View>

@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: spendowl-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: spendowl
+      POSTGRES_PASSWORD: spendowl
+      POSTGRES_DB: spendowl
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # The API runs migrations on boot, so it must not connect before Postgres
+    # is actually accepting connections — not merely started.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U spendowl -d spendowl']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

@@ -1,0 +1,26 @@
+{
+  "name": "spendowl-server",
+  "private": true,
+  "type": "module",
+  "description": "SpendOwl API — Hono + Postgres, per-user data behind Clerk auth.",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=../.env.local src/index.ts",
+    "start": "node --env-file-if-exists=../.env.local src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d"
+  },
+  "dependencies": {
+    "@clerk/backend": "^3.13.2",
+    "@hono/node-server": "^2.0.12",
+    "hono": "^4.12.32",
+    "pg": "^8.22.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.20.0",
+    "typescript": "~5.9.2"
+  }
+}

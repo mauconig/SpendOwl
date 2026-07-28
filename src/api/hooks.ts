@@ -1,0 +1,223 @@
+import { useAuth } from '@clerk/expo';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { createApi } from './client';
+import type {
+  ApiCreditCard,
+  ApiMessage,
+  ApiMessageKind,
+  ApiReceipt,
+  ApiSettings,
+  ApiSubscription,
+  ApiSummary,
+  ApiTransaction,
+} from './types';
+
+export const keys = {
+  transactions: ['transactions'] as const,
+  summary: ['summary'] as const,
+  cards: ['credit-cards'] as const,
+  subscriptions: ['subscriptions'] as const,
+  receipts: ['receipts'] as const,
+  messages: ['messages'] as const,
+  settings: ['settings'] as const,
+};
+
+function useApi() {
+  const { getToken } = useAuth();
+  return useMemo(() => createApi(getToken), [getToken]);
+}
+
+// Anything that changes money must also refresh the derived summary — the
+// hero number, donut and trend chart all come from it.
+function invalidateMoney(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: keys.summary });
+}
+
+export function useTransactions() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.transactions, queryFn: () => api.get<ApiTransaction[]>('/api/transactions') });
+}
+
+export function useSummary() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.summary, queryFn: () => api.get<ApiSummary>('/api/summary') });
+}
+
+export function useCreditCards() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.cards, queryFn: () => api.get<ApiCreditCard[]>('/api/credit-cards') });
+}
+
+export function useSubscriptions() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.subscriptions, queryFn: () => api.get<ApiSubscription[]>('/api/subscriptions') });
+}
+
+export function useReceipts() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.receipts, queryFn: () => api.get<ApiReceipt[]>('/api/receipts') });
+}
+
+export function useMessages() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.messages, queryFn: () => api.get<ApiMessage[]>('/api/messages') });
+}
+
+export function useSettings() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.settings, queryFn: () => api.get<ApiSettings>('/api/settings') });
+}
+
+export function useAddTransaction() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      merchant: string;
+      category: string;
+      amountMinor: number;
+      note?: string | null;
+      taxDeductible?: boolean;
+    }) => api.post<ApiTransaction>('/api/transactions', input),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.transactions });
+      invalidateMoney(client);
+    },
+  });
+}
+
+export function useUpdateTransaction() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: string; taxDeductible?: boolean; note?: string | null }) =>
+      api.patch<ApiTransaction>(`/api/transactions/${id}`, patch),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.transactions });
+      invalidateMoney(client);
+    },
+  });
+}
+
+export function useAddCreditCard() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      name: string;
+      last4: string;
+      balanceMinor: number;
+      limitMinor: number;
+      apr: number;
+      color: string;
+    }) => api.post<ApiCreditCard>('/api/credit-cards', input),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.cards }),
+  });
+}
+
+export function useRemoveCreditCard() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/api/credit-cards/${id}`),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.cards }),
+  });
+}
+
+export function usePayoffCreditCard() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, amountMinor }: { id: string; amountMinor: number }) =>
+      api.post<ApiCreditCard>(`/api/credit-cards/${id}/payoff`, { amountMinor }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.cards }),
+  });
+}
+
+/**
+ * Subscription toggles are optimistic: they are one-tap switches, and waiting
+ * a round-trip to move makes the control feel broken. On error the snapshot is
+ * rolled back.
+ */
+export function useUpdateSubscription() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: string; muted?: boolean; off?: boolean }) =>
+      api.patch<ApiSubscription>(`/api/subscriptions/${id}`, patch),
+    onMutate: async ({ id, ...patch }) => {
+      await client.cancelQueries({ queryKey: keys.subscriptions });
+      const previous = client.getQueryData<ApiSubscription[]>(keys.subscriptions);
+      client.setQueryData<ApiSubscription[]>(keys.subscriptions, current =>
+        current?.map(sub => (sub.id === id ? { ...sub, ...patch } : sub))
+      );
+      return { previous };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previous) client.setQueryData(keys.subscriptions, context.previous);
+    },
+    onSettled: () => void client.invalidateQueries({ queryKey: keys.subscriptions }),
+  });
+}
+
+export function useApproveReceipt() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.patch<ApiReceipt>(`/api/receipts/${id}`, { status: 'ok' }),
+    onMutate: async id => {
+      await client.cancelQueries({ queryKey: keys.receipts });
+      const previous = client.getQueryData<ApiReceipt[]>(keys.receipts);
+      client.setQueryData<ApiReceipt[]>(keys.receipts, current =>
+        current?.map(receipt => (receipt.id === id ? { ...receipt, status: 'ok' } : receipt))
+      );
+      return { previous };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previous) client.setQueryData(keys.receipts, context.previous);
+    },
+    onSettled: () => void client.invalidateQueries({ queryKey: keys.receipts }),
+  });
+}
+
+export function useAddReceipt() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { merchant: string; amountMinor: number; category: string; status?: 'ok' | 'warn' }) =>
+      api.post<ApiReceipt>('/api/receipts', input),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.receipts }),
+  });
+}
+
+export function useAddMessage() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { kind: ApiMessageKind; payload: Record<string, unknown> }) =>
+      api.post<ApiMessage>('/api/messages', input),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.messages }),
+  });
+}
+
+export function useUpdateSettings() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<ApiSettings>) => api.patch<ApiSettings>('/api/settings', patch),
+    onMutate: async patch => {
+      await client.cancelQueries({ queryKey: keys.settings });
+      const previous = client.getQueryData<ApiSettings>(keys.settings);
+      client.setQueryData<ApiSettings>(keys.settings, current => (current ? { ...current, ...patch } : current));
+      return { previous };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previous) client.setQueryData(keys.settings, context.previous);
+    },
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: keys.settings });
+      invalidateMoney(client);
+    },
+  });
+}

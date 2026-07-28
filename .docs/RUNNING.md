@@ -1,8 +1,16 @@
 # Running SpendOwl
 
-This is an [Expo](https://expo.dev) React Native app (TypeScript, managed
-workflow). You need Node.js installed; everything else (Expo CLI) runs via
-`npx` and doesn't need a separate global install.
+SpendOwl is two pieces: an [Expo](https://expo.dev) React Native app
+(TypeScript, managed workflow) and a Hono + Postgres API in `server/`. Both
+need to be running.
+
+Prerequisites:
+
+- **Node.js 22 or newer** — the server runs TypeScript directly on Node's
+  native type stripping, with no build step. Older Node cannot start it.
+- **Docker Desktop** — for the Postgres container. It must be *running*, not
+  just installed.
+- Everything else (Expo CLI) runs via `npx`; no global install needed.
 
 ## 1. Install dependencies
 
@@ -35,14 +43,43 @@ clerk init --app app_3H8ZQgGPsC4OVOPSBtZL5BANlVL
 clerk env pull
 ```
 
-`.env.local` is gitignored (`.env*.local`) and must stay that way. `clerk env
-pull` also writes `CLERK_SECRET_KEY` — that key is unused by this client-only
-app and must never be renamed to an `EXPO_PUBLIC_*` variable, which would bake
-it into the shipped bundle.
+`clerk env pull` also writes `CLERK_SECRET_KEY`. **The API requires it** — it
+is what `server/src/auth.ts` uses to verify session tokens, so the server will
+refuse to start without it. It is a server-side secret: never rename it to an
+`EXPO_PUBLIC_*` variable, which would bake it into the shipped app bundle
+where anyone can read it.
+
+`.env.local` is gitignored (`.env*.local`) and must stay that way. Both halves
+read it — Expo loads it for the app, and the server loads it via
+`node --env-file-if-exists=../.env.local`.
 
 Run `clerk doctor` at any point to check the CLI, the link, and the env file.
 
-## 3. Run it
+## 3. Start the API and its database
+
+The app no longer runs standalone — the Dashboard, Vault, chat history and
+settings all come from the API, and it will show a "Can't load your data"
+screen without it.
+
+```sh
+cd server
+npm install
+npm run db:up      # Postgres 17 in Docker (needs Docker Desktop running)
+npm run dev        # API on :8787, applies migrations on boot
+```
+
+`db:up` starts a `spendowl-db` container with a named volume, so data survives
+restarts. `npm run db:reset` destroys the volume and starts clean — the fastest
+way to get freshly seeded demo data.
+
+The API needs `CLERK_SECRET_KEY` from step 2; it reads `../.env.local`
+automatically. `DATABASE_URL` defaults to the docker-compose credentials, so
+you only need to set it if you point at a different database.
+
+The server runs TypeScript directly on Node's native type stripping (Node 22+),
+so there is no build step. `npm --prefix server run typecheck` checks it.
+
+## 4. Run it
 
 Pick whichever target you want to test on:
 
@@ -78,7 +115,15 @@ interactions work.
 ## Troubleshooting
 
 - **"Port 8081 is being used by another process"** — either stop whatever's
-  using it, or run `npx expo start --web --port <otherport>`.
+  using it, or run `npx expo start --web --port <otherport>`. Note that
+  stopping the terminal running Metro does not always kill it; on Windows,
+  `Get-NetTCPConnection -LocalPort 8081 -State Listen` finds the owning PID.
+- **`EADDRINUSE ... 0.0.0.0:8787`** — an API instance is already running. Find
+  and stop it (`Get-NetTCPConnection -LocalPort 8787 -State Listen` on
+  Windows, `lsof -i :8787` elsewhere). Then note the gotcha: `npm run dev`
+  uses `node --watch`, which does **not** retry a failed bind — it parks at
+  *"Waiting for file changes before restarting"*. Freeing the port is not
+  enough; save any file under `server/src/` to nudge it.
 - **Fonts look wrong / app looks unstyled at first launch** — the app holds
   the splash screen until the Roboto, Roboto Mono, and Noto Sans Google Fonts
   finish loading, *and* until Clerk has restored any cached session
@@ -89,16 +134,35 @@ interactions work.
 - **Stuck signed in / want a clean slate** — sign out from the Settings tab.
   The session lives in the device keychain via `expo-secure-store`, so it
   survives app restarts and reloads by design.
+- **"Can't load your data"** — the app can't reach the API. The screen prints
+  the URL it tried. Check `npm run dev` is running in `server/`, that Docker is
+  up (`docker compose ps` in `server/`), and that the phone is on the same
+  Wi-Fi as the machine. The app derives the API host from the Metro dev-server
+  address, so a VPN or a guest network that isolates clients will break it;
+  set `EXPO_PUBLIC_API_URL` to override.
+- **Dashboard shows zeroes** — the account exists but seeding didn't run.
+  Check the API log for an error on the first authenticated request.
+- **Checking what actually persisted** — go straight to the database rather
+  than guessing from the UI:
+  ```sh
+  docker exec spendowl-db psql -U spendowl -d spendowl -c "SELECT * FROM credit_cards;"
+  ```
 
 ## Type-checking
 
 ```sh
-npx tsc --noEmit
+npx tsc --noEmit                    # the app
+npm --prefix server run typecheck   # the API
 ```
 
-Authentication is real (Clerk). Everything behind it is still mocked — there
-is no backend and no real AI/OCR integration, so all chat replies, receipt
-scans, and voice transcriptions are simulated with fixed delays and canned
-data (see `src/store/mockData.ts` and `src/store/SpendOwlContext.tsx` if you
-want to change the demo content). Note that the mock data is identical for
-every account: signing in as a different user shows the same fixtures.
+The app's `tsconfig.json` excludes `server/`, and `metro.config.js` blocks it
+from the bundler — it is a separate Node package that the app never imports.
+
+Authentication (Clerk) and all persisted data (Postgres) are real, and scoped
+per account: two users see entirely separate data. Still simulated: the AI
+coach's replies, receipt scanning, and voice transcription are canned results
+on fixed delays. The server *stores* them but does not generate them — see
+`.docs/BACKEND.md` for what making those real involves.
+
+New accounts are seeded with a month of demo data on first sign-in
+(`server/src/seed.ts`), so the app opens populated rather than empty.

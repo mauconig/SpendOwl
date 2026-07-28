@@ -1,13 +1,39 @@
 # What it would take to make SpendOwl a real app
 
-Everything today lives in one client-side React Context
-(`src/store/SpendOwlContext.tsx`) with fixture data in
-`src/store/mockData.ts`. There is no network call anywhere in the app —
-"AI replies," receipt scans, and voice transcriptions are `setTimeout`s
-that swap in canned data, and all state (messages, cards, vault, settings)
-resets the moment the app reloads. Turning this into a working product
-means replacing that one file with real services. Below is what each
-mocked piece would need to become real, roughly in the order I'd build it.
+This document was written when the whole app ran on client-side fixtures. Some
+of it is now history rather than a plan — see the status box below before
+following any section.
+
+> ## Status
+>
+> **Done — §1 (accounts, database, API) and §2 (transactions & budgets).**
+> Clerk handles auth; a Hono + Postgres API in `server/` owns all data, scoped
+> per user; the client reads it through React Query behind the unchanged
+> `useSpendOwl()` hook. Transactions, budgets, category totals and the spending
+> trajectory are real, computed by `GET /api/summary`. New accounts are seeded
+> with a demo month on first sign-in. Verified: two accounts cannot see each
+> other's rows, and data survives an app restart.
+>
+> **Not done — everything else.** §3 (LLM coach), §4 (receipt OCR), §5 (voice
+> transcription), §6 (subscription *detection* — CRUD exists, detection does
+> not), §7 (live FX rates — conversion still uses the fixed rates in
+> `theme.ts`), §8 (push notifications — the `notif` toggle persists but nothing
+> reads it), §9 (biometric lock — same, `bio` persists but does not gate
+> anything).
+>
+> Also still fake: `SAVINGS_TODAY` in `src/store/constants.ts`, which the
+> "Can I afford this?" sandbox uses. There is no savings/accounts table; that
+> arrives with bank linking (§2's optional half).
+>
+> The suggested build order at the bottom remains sound for what's left.
+> **Next up is §4**, receipt capture → upload → extraction, since that is the
+> app's signature flow.
+
+Historically: everything lived in one client-side React Context
+(`src/store/SpendOwlContext.tsx`) with fixture data in `src/store/mockData.ts`
+(now deleted). There was no network call anywhere in the app, and all state
+reset the moment the app reloaded. Below is what each mocked piece needs to
+become real, roughly in the order I'd build it.
 
 ## 1. Accounts & sync (the foundation everything else needs)
 
@@ -150,7 +176,26 @@ controlling which currency conversions target.
 
 ## What can stay as-is
 
-The entire visual layer — `src/screens/`, `src/modals/`, `src/components/`
-(charts, animations, the floating-pill nav, etc.) — doesn't need to
-change shape. It's already built to read from `useSpendOwl()`; the work
-above is about making what's *behind* that hook real, not rebuilding the UI.
+Most of the visual layer — `src/modals/`, and components like the nav,
+animations and card list — reads everything through `useSpendOwl()` and did
+not change when the backend landed.
+
+> **Correction.** This section previously claimed the *entire* visual layer
+> needed no changes. That turned out to be wrong, and it was the single
+> biggest surprise in building step 1. Four files bypassed the hook and read
+> fixtures directly: `TrendChart.tsx` imported `TREND_CUR`,
+> `DashboardScreen.tsx` imported `TX`, and `Donut.tsx` read spend totals out
+> of `CATS` in `theme.ts` — a *theme* file that held money. On top of that,
+> the Dashboard's hero number, budget, pace line and progress bar were
+> hardcoded literals (`1283.65`, `2400`, `46.5%`, `'14 days left'`), as were
+> the Home screen's stat tiles and all four of its "insights" — one of which
+> deep-linked to a hardcoded fixture id that no longer exists.
+>
+> Worse, the fixtures did not agree with each other: `CATS` claimed €1,116 of
+> monthly spend while the `TX` list accounted for about €165 of it. Nothing
+> forced them to match, because nothing computed one from the other. Real
+> aggregates do have to match, which is why the seed data is a full month of
+> transactions rather than the original seven.
+>
+> Budget the UI rewiring as real work in any future slice, and be suspicious
+> of "the UI already reads from the hook" as a blanket claim.

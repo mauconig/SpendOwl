@@ -2,5 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true
-  }
+  },
+  // server/ is a separate Node package with its own tsconfig (and its own
+  // rules — it runs off Node's native type stripping, so it imports with
+  // explicit .ts extensions). Typecheck it with `npm --prefix server run
+  // typecheck`, not from here.
+  "exclude": ["node_modules", "server"]
 }
