@@ -6,15 +6,23 @@ following any section.
 
 > ## Status
 >
-> **Done — §1 (accounts, database, API) and §2 (transactions & budgets).**
-> Clerk handles auth; a Hono + Postgres API in `server/` owns all data, scoped
-> per user; the client reads it through React Query behind the unchanged
-> `useSpendOwl()` hook. Transactions, budgets, category totals and the spending
-> trajectory are real, computed by `GET /api/summary`. New accounts are seeded
-> with a demo month on first sign-in. Verified: two accounts cannot see each
-> other's rows, and data survives an app restart.
+> **Done — §1 (accounts, database, API), §2 (transactions & budgets), and
+> §3 (the AI coach).** Clerk handles auth; a Hono + Postgres API in `server/`
+> owns all data, scoped per user; the client reads it through React Query behind
+> the unchanged `useSpendOwl()` hook. Transactions, budgets, category totals and
+> the spending trajectory are real, computed by `GET /api/summary`. New accounts
+> are seeded with a demo month on first sign-in. Verified: two accounts cannot
+> see each other's rows, and data survives an app restart.
 >
-> **Not done — everything else.** §3 (LLM coach), §4 (receipt OCR), §5 (voice
+> §3 landed as `POST /api/chat` (`server/src/routes/chat.ts`) — a real
+> tool-using coach over live transaction data. It runs on **DeepSeek**, not
+> Anthropic: DeepSeek publishes an Anthropic-compatible endpoint, so the same
+> `@anthropic-ai/sdk` client talks to it and the provider is three env vars
+> (`LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`), never a code change. A turn
+> costs roughly **$0.0007** versus ~$0.037 on a frontier model, which is what
+> made the feature worth shipping at all.
+>
+> **Not done — everything else.** §4 (receipt OCR), §5 (voice
 > transcription), §6 (subscription *detection* — CRUD exists, detection does
 > not), §7 (live FX rates — conversion still uses the fixed rates in
 > `theme.ts`), §8 (push notifications — the `notif` toggle persists but nothing
@@ -27,7 +35,8 @@ following any section.
 >
 > The suggested build order at the bottom remains sound for what's left.
 > **Next up is §4**, receipt capture → upload → extraction, since that is the
-> app's signature flow.
+> app's signature flow — and the coach's tool loop is already there to hang it
+> off.
 
 Historically: everything lived in one client-side React Context
 (`src/store/SpendOwlContext.tsx`) with fixture data in `src/store/mockData.ts`
@@ -76,10 +85,32 @@ Right now there's exactly one implicit user ("Maya Fernández", hardcoded in
   own (bank consent flows, webhook ingestion, transaction categorization
   ML/rules).
 
-## 3. The AI coach (replaces the canned `REPLIES` array)
+## 3. The AI coach — **done**
 
-`send()` in `SpendOwlContext.tsx` currently just cycles through 3 fixed
-strings. A real coach needs:
+> **Shipped.** `send()` no longer cycles fixed strings; it posts to
+> `POST /api/chat`, which persists the user's message, replays ~30 messages of
+> history to the model with five tools bound to that user's rows, and persists
+> the reply. Read `server/src/routes/chat.ts` rather than the plan below.
+>
+> Three decisions worth knowing before changing it:
+>
+> - **`propose_expense` writes nothing.** It emits the existing `card` message
+>   and the user's "Approve & log" button still does the insert, so no model
+>   mistake reaches the database unreviewed. Tool descriptions say so explicitly
+>   — if you loosen that, the approve flow becomes dead code.
+> - **The tool loop is hand-written** against plain `messages.create`, not the
+>   SDK's beta `toolRunner`. The beta namespace is the least likely part of a
+>   compatibility layer to be implemented, and we are on one. Capped at 6
+>   iterations.
+> - **Tool arguments are zod-validated before execution**, with failures
+>   returned as `is_error` tool results so the model self-corrects. This matters
+>   more on a cheap model than it would on a frontier one.
+>
+> Streaming was considered and rejected: React Native's `fetch` is XHR-backed
+> and does not expose `response.body`, so SSE would need a dependency Expo Go
+> can't load. The client shows a typing indicator instead.
+
+The original plan, for context:
 
 - A backend endpoint that takes the chat history + the user's real
   transaction/budget data and calls an LLM (Claude API is the natural

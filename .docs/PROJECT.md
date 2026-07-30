@@ -10,9 +10,12 @@ sign-in — email + password with an emailed code, plus Google and Apple — and
 Hono + Postgres API in `server/` owns everything else, scoped per Clerk user.
 Two accounts see entirely separate data, and it survives app restarts.
 
-Still simulated: the AI coach's replies, receipt scanning, and voice
-transcription remain canned results on fixed delays. The server persists them
-but does not generate them — no LLM and no OCR are wired up yet.
+**The AI coach is also real.** `POST /api/chat` runs a tool-using model over the
+user's live transaction data — see the Coach section below.
+
+Still simulated: receipt scanning and voice transcription remain canned results
+on fixed delays. The server persists them but does not generate them — no OCR
+and no speech-to-text are wired up yet.
 
 ## Backend
 
@@ -44,6 +47,52 @@ the same shapes as before, mapped from the API in one place. UI-only state
 (nav, modal flags, chat input, recording) stays local `useState`.
 `src/api/client.ts` derives the API host from the Metro dev-server address,
 because Expo Go runs on the phone where `localhost` is the phone itself.
+
+## Coach
+
+`POST /api/chat` (`server/src/routes/chat.ts`) runs an entire turn server-side:
+it persists the user's message, replays the last ~30 messages as conversation
+history, calls the model with five tools scoped to that user's rows, and
+persists the reply. The client posts text and refetches — it never sees an API
+key, a tool definition, or a tool call.
+
+**It runs on DeepSeek, through `@anthropic-ai/sdk`.** DeepSeek publishes an
+Anthropic-compatible endpoint (`https://api.deepseek.com/anthropic`), so the
+provider is entirely a matter of three env vars — `LLM_API_KEY`,
+`LLM_BASE_URL` (default that endpoint), `LLM_MODEL` (default
+`deepseek-v4-flash`). Pointing this at Anthropic proper is an env change and a
+restart. A turn costs about **$0.0007** against roughly $0.037 on a frontier
+model; that ratio is why the feature exists.
+
+The tools are `get_budget_summary`, `list_transactions`, `list_subscriptions`,
+`list_credit_cards`, and `propose_expense`. The first shares `getSummary()` in
+`server/src/summary.ts` with the `/api/summary` endpoint, so the coach and the
+Dashboard can never quote different numbers for the same month.
+
+`propose_expense` is the important one: **it writes nothing.** It emits the
+existing `card` message, and the user's "Approve & log" button performs the
+insert exactly as it did when the card was faked. No model mistake reaches the
+database unreviewed, and `CardMessage` in `ChatScreen.tsx` stays load-bearing.
+
+Three implementation notes that are easy to undo by accident:
+
+- The tool loop is **hand-written** against plain `client.messages.create`, not
+  the SDK's beta `toolRunner`. We are talking to a compatibility layer, and the
+  beta namespace is the part least likely to be implemented. Capped at six
+  iterations so a model that ping-pongs between tools can't run away.
+- **No Anthropic-specific parameters are sent** — no `thinking`, no
+  `output_config.effort`, no `betas`. Only the lowest-common-denominator
+  Messages API that a shim is most likely to get right.
+- Tool arguments are **zod-validated before execution**, with failures returned
+  as `is_error` tool results so the model corrects itself rather than the turn
+  throwing. A cheaper model emits malformed arguments more often than a
+  frontier one.
+
+Streaming was considered and rejected: React Native's `fetch` is XHR-backed and
+does not expose `response.body`, so token streaming would need a dependency
+Expo Go cannot load. The client shows a typing indicator for the duration
+instead — `useSendChat` keeps its mutation pending through the messages refetch
+so the indicator hands off to the rendered reply with no gap.
 
 ## Authentication
 
@@ -95,7 +144,7 @@ Five destinations, all on one horizontal pager (see Root composition below):
   credit-cards section, a "Can I afford this?" sandbox, and a subscriptions
   summary. All figures come from `GET /api/summary`.
 - **Chat** (`src/screens/ChatScreen.tsx`) — the coach conversation. Supports:
-  - Typing a message and getting a canned AI reply.
+  - Typing a message and getting a real, tool-grounded reply (see Coach below).
   - Attaching a "photo" of a receipt (`factura`), which shows a scanning
     animation and then resolves to an expense card.
   - Recording a voice note, which produces a transcribed expense card.
@@ -133,7 +182,8 @@ Note the payoff modal is a *calculator* only: it models payment schedules using
   shapes plus `minorToEur`/`eurToMinor`).
 - **Demo content**: lives server-side in `server/src/seed.ts`, not in the app.
   `src/store/constants.ts` holds what genuinely is client-side constant — the
-  `Msg` union, the canned `REPLIES`, the afford-modal options.
+  `Msg` union and the afford-modal options. (It used to hold the coach's canned
+  `REPLIES` too; those are gone.)
 - **Theme**: `src/theme.ts` has the color palette, category colors, and font
   family names. It deliberately holds **no** amounts — category spend totals
   used to live here and now come from `GET /api/summary`.

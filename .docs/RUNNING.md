@@ -55,6 +55,30 @@ read it — Expo loads it for the app, and the server loads it via
 
 Run `clerk doctor` at any point to check the CLI, the link, and the env file.
 
+### The AI coach's key
+
+The chat coach calls an LLM, so `server/` also reads:
+
+```env
+LLM_API_KEY=sk-...
+```
+
+Unlike `CLERK_SECRET_KEY` this is **not** required to boot — it gates one
+endpoint, so without it the API starts normally and only `POST /api/chat`
+returns a 503. Everything else keeps working.
+
+It defaults to DeepSeek via its Anthropic-compatible endpoint. Override the
+other two to point somewhere else — Anthropic proper, or a bigger DeepSeek
+model — with no code change:
+
+```env
+LLM_BASE_URL=https://api.deepseek.com/anthropic   # default
+LLM_MODEL=deepseek-v4-flash                       # default
+```
+
+Note there is no `EXPO_PUBLIC_` prefix on any of these: they are server-side
+secrets and must never be inlined into the app bundle.
+
 ## 3. Start the API and its database
 
 The app no longer runs standalone — the Dashboard, Vault, chat history and
@@ -126,7 +150,7 @@ Layout on the box:
 | Path | What |
 | --- | --- |
 | `/opt/spendowl/app` | the clone; deploys `git reset --hard origin/main` onto it |
-| `/opt/spendowl/api.env` | `CLERK_SECRET_KEY`, `DATABASE_URL`, `PORT` — `chmod 600`, deliberately outside the checkout so deploys can't clobber it |
+| `/opt/spendowl/api.env` | `CLERK_SECRET_KEY`, `LLM_API_KEY`, `DATABASE_URL`, `PORT` — `chmod 600`, deliberately outside the checkout so deploys can't clobber it |
 | `/opt/spendowl/db/` | compose file + generated Postgres password |
 | `/etc/systemd/system/spendowl-api.service` | the API unit |
 | `/etc/caddy/Caddyfile` | TLS termination + reverse proxy |
