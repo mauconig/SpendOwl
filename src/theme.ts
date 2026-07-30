@@ -107,6 +107,33 @@ export function formatMoney(amount: number, cur: Currency, decimals: 0 | 2 = 2):
   return symbol + amount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
+/** Guaraní amounts are whole numbers; euros and dollars get two places. */
+export function decimalsFor(cur: Currency): 0 | 2 {
+  return cur === 'PYG' ? 0 : 2;
+}
+
+/**
+ * Stored minor units <-> the number a human actually types and reads.
+ *
+ * formatMoney above is for *rendering* and takes the already-halved value that
+ * minorToEur produces. These two are for **input**: they go straight between
+ * the stored integer and the figure in a text field, with no /100 convention in
+ * between. Someone on PYG typing 5000 means ₲5.000, which is stored as 5000;
+ * someone on EUR typing 50 means €50.00, stored as 5000.
+ *
+ * These mirror server/src/currency.ts exactly. The two must agree, or an amount
+ * edited on the phone comes back a hundred times too big.
+ */
+export function minorToDisplay(minor: number, cur: Currency): number {
+  if (cur === 'PYG') return Math.round(minor);
+  return Math.round(minor) / 100;
+}
+
+export function displayToMinor(amount: number, cur: Currency): number {
+  if (cur === 'PYG') return Math.round(amount);
+  return Math.round(amount * 100);
+}
+
 // Font family for a rendered money string — swaps to Noto Sans for PYG so
 // the ₲ glyph actually exists, otherwise keeps the app's usual Roboto weight.
 export function moneyFont(cur: Currency, weight: 'regular' | 'medium' | 'bold' | 'mono'): string {

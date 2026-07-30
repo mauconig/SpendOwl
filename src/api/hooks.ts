@@ -119,9 +119,45 @@ export function useUpdateTransaction() {
   const api = useApi();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...patch }: { id: string; taxDeductible?: boolean; note?: string | null }) =>
-      api.patch<ApiTransaction>(`/api/transactions/${id}`, patch),
+    mutationFn: ({
+      id,
+      ...patch
+    }: {
+      id: string;
+      merchant?: string;
+      category?: string;
+      amountMinor?: number;
+      occurredAt?: string;
+      note?: string | null;
+      taxDeductible?: boolean;
+    }) => api.patch<ApiTransaction>(`/api/transactions/${id}`, patch),
     onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.transactions });
+      invalidateMoney(client);
+    },
+  });
+}
+
+/**
+ * Optimistic, like the other removals: the row should go the moment it is
+ * confirmed rather than after a round trip. The money summary is invalidated
+ * too — deleting a transaction moves the hero number and the donut.
+ */
+export function useDeleteTransaction() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/api/transactions/${id}`),
+    onMutate: async id => {
+      await client.cancelQueries({ queryKey: keys.transactions });
+      const previous = client.getQueryData<ApiTransaction[]>(keys.transactions);
+      client.setQueryData<ApiTransaction[]>(keys.transactions, current => current?.filter(t => t.id !== id));
+      return { previous };
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previous) client.setQueryData(keys.transactions, context.previous);
+    },
+    onSettled: () => {
       void client.invalidateQueries({ queryKey: keys.transactions });
       invalidateMoney(client);
     },

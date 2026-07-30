@@ -7,6 +7,7 @@ import {
   useApproveReceipt,
   useCreditCards,
   useDeleteMessage,
+  useDeleteTransaction,
   useInsights,
   useMessages,
   useReceipts,
@@ -18,10 +19,11 @@ import {
   useTransactions,
   useUpdateSettings,
   useUpdateSubscription,
+  useUpdateTransaction,
   useSettings,
 } from '../api/hooks';
 import { eurToMinor, minorToEur, type ApiInsight, type ApiSummary, type ApiTransaction } from '../api/types';
-import { CatKey, Currency } from '../theme';
+import { CatKey, Currency, displayToMinor } from '../theme';
 import { ordinalDay, shortDate } from '../utils/date';
 import {
   AFFORD_OPTS,
@@ -88,6 +90,24 @@ interface SpendOwlStore {
   openTx: () => void;
   closeTx: () => void;
 
+  // Editing one transaction. `from` records which surface opened it, because
+  // the two live at different depths: the Dashboard's list is on the page, but
+  // the full history is itself a modal, and a modal can only reliably be
+  // stacked on another by rendering inside it. See TransactionDetail.
+  editTx: { id: string; from: 'dash' | 'sheet' } | null;
+  openEditTx: (id: string, from: 'dash' | 'sheet') => void;
+  closeEditTx: () => void;
+  updateTransaction: (input: {
+    id: string;
+    merchant?: string;
+    category?: CatKey;
+    amountMinor?: number;
+    occurredAt?: string;
+    note?: string | null;
+    taxDeductible?: boolean;
+  }) => void;
+  deleteTransaction: (id: string) => void;
+
   // credit cards
   creditCards: CreditCard[];
   addCardOpen: boolean;
@@ -146,6 +166,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const [cards, setCards] = useState<Record<string, CardState>>({});
   const [selCat, setSelCat] = useState<CatKey | null>(null);
   const [txOpen, setTxOpen] = useState(false);
+  const [editTx, setEditTx] = useState<{ id: string; from: 'dash' | 'sheet' } | null>(null);
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [payoffCardId, setPayoffCardId] = useState<string | null>(null);
   const [affordOpen, setAffordOpen] = useState(false);
@@ -167,6 +188,8 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const insightsQuery = useInsights();
 
   const addTransaction = useAddTransaction();
+  const updateTransactionMutation = useUpdateTransaction();
+  const deleteTransactionMutation = useDeleteTransaction();
   const addCard = useAddCreditCard();
   const removeCard = useRemoveCreditCard();
   const updateSubscription = useUpdateSubscription();
@@ -478,13 +501,19 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     (input: { name: string; balance: number; limit: number; apr: number }) => {
       addCard.mutate({
         name: input.name,
-        balanceMinor: eurToMinor(input.balance),
-        limitMinor: eurToMinor(input.limit),
+        // displayToMinor, not eurToMinor: these come from a text field, and
+        // eurToMinor always multiplies by 100. On a guaraní account that turned
+        // a typed 150.000 into a stored 15.000.000 — the card read back a
+        // hundred times too big. eurToMinor is right where the value has
+        // already been through minorToEur (the card-approval path); it is wrong
+        // for anything a person typed.
+        balanceMinor: displayToMinor(input.balance, baseCur),
+        limitMinor: displayToMinor(input.limit, baseCur),
         apr: input.apr,
         color: CARD_COLORS[creditCards.length % CARD_COLORS.length]!,
       });
     },
-    [addCard, creditCards.length]
+    [addCard, creditCards.length, baseCur]
   );
 
   const summary = summaryQuery.data ?? null;
@@ -530,6 +559,12 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     txOpen,
     openTx: () => setTxOpen(true),
     closeTx: () => setTxOpen(false),
+
+    editTx,
+    openEditTx: (id: string, from: 'dash' | 'sheet') => setEditTx({ id, from }),
+    closeEditTx: () => setEditTx(null),
+    updateTransaction: input => updateTransactionMutation.mutate(input),
+    deleteTransaction: (id: string) => deleteTransactionMutation.mutate(id),
 
     creditCards,
     addCardOpen,

@@ -232,7 +232,11 @@ export function DashboardScreen() {
         </View>
         <View style={{ gap: 4 }}>
           {visibleTx.map(t => (
-            <View key={t.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 7 }}>
+            <Pressable
+              key={t.id}
+              onPress={() => store.openEditTx(t.id, 'dash')}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 7 }}
+            >
               <View
                 style={{
                   width: 34,
@@ -252,7 +256,7 @@ export function DashboardScreen() {
                 <Text style={{ fontSize: 11, color: colors.textDim45, marginTop: 1 }}>{t.meta}</Text>
               </View>
               <Text style={{ fontSize: 13.5, fontFamily: moneyFont(baseCur, 'bold'), color: t.inc ? colors.mint : colors.text }}>{t.amt}</Text>
-            </View>
+            </Pressable>
           ))}
         </View>
         {hiddenTxCount > 0 && (

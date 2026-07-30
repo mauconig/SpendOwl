@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { ModalShell } from '../components/ModalShell';
+import { TransactionDetail } from './TransactionDetail';
 import { minorToEur, type ApiTransaction } from '../api/types';
 import { CATS, colors, fonts, formatMoney, moneyFont, type Currency } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
@@ -190,7 +191,9 @@ export function TransactionsSheet() {
                   {section.data.map((tx, i) => (
                     <View key={tx.id}>
                       {i > 0 && <View style={{ height: 1, backgroundColor: colors.hairline, marginLeft: 46 }} />}
-                      <TxRow tx={tx} baseCur={baseCur} />
+                      <Pressable onPress={() => store.openEditTx(tx.id, 'sheet')}>
+                        <TxRow tx={tx} baseCur={baseCur} />
+                      </Pressable>
                     </View>
                   ))}
                 </ScrollView>
@@ -199,6 +202,12 @@ export function TransactionsSheet() {
           </ScrollView>
         </>
       )}
+
+      {/* Rendered inside this sheet rather than alongside it at the root:
+          stacking a native Modal on another only works reliably when the
+          second one lives in the first's tree. `source` keeps this instance
+          and the Dashboard's from both claiming the same edit. */}
+      <TransactionDetail source="sheet" />
     </ModalShell>
   );
 }

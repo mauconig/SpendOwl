@@ -7,6 +7,7 @@ import { AffordModal } from './modals/AffordModal';
 import { CardPayoffModal } from './modals/CardPayoffModal';
 import { InvoiceDetail } from './modals/InvoiceDetail';
 import { SubscriptionsSheet } from './modals/SubscriptionsSheet';
+import { TransactionDetail } from './modals/TransactionDetail';
 import { TransactionsSheet } from './modals/TransactionsSheet';
 import { ChatScreen } from './screens/ChatScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
@@ -86,6 +87,7 @@ export function RootScreen() {
       <AffordModal />
       <SubscriptionsSheet />
       <TransactionsSheet />
+      <TransactionDetail source="dash" />
       <InvoiceDetail />
       <AddCardSheet />
       <CardPayoffModal />
