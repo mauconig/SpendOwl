@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '../auth.ts';
 import { query, queryOne } from '../db.ts';
+import { type Currency, decimalsFor, displayToMinor, isCurrency, minorToDisplay } from '../currency.ts';
 import { env } from '../env.ts';
 import { getSummary } from '../summary.ts';
 import { CATEGORIES } from './transactions.ts';
@@ -16,32 +17,54 @@ import { CATEGORIES } from './transactions.ts';
  * whatever comes back. The client posts text and refetches — it never sees an
  * API key, a tool definition, or a tool call.
  *
+ * Everything the model reads or writes is in the user's **display currency**.
+ * Storage is EUR cents (see ../currency.ts), but that never reaches the model:
+ * someone on PYG saying "5k" means ₲5,000, and a coach reasoning in euro cents
+ * gets that wrong every time. Conversion happens in TypeScript at this
+ * boundary, not in the model's head — float maths is exactly what it is worst at.
+ *
  * Non-streaming on purpose: React Native's fetch is XHR-backed and does not
  * expose `response.body`, so token streaming would need a dependency Expo Go
  * can't load. The client shows a typing indicator for the duration instead.
  */
 
-const MAX_ITERATIONS = 6; // hard ceiling on the tool loop — see runTurn()
+const MAX_ITERATIONS = 6; // hard ceiling on the tool loop
 const HISTORY_LIMIT = 30;
 const MAX_TOKENS = 4096;
 
 const bodySchema = z.object({ text: z.string().trim().min(1).max(2000) });
 
-const SYSTEM_PROMPT = `You are SpendOwl's finance coach: warm, concise, and concrete.
+const CURRENCY_NAMES: Record<Currency, string> = {
+  EUR: 'euros (EUR, symbol €)',
+  USD: 'US dollars (USD, symbol $)',
+  PYG: 'Paraguayan guaraní (PYG, symbol ₲)',
+};
+
+function systemPrompt(currency: Currency): string {
+  const whole =
+    decimalsFor(currency) === 0
+      ? `Guaraní has no decimal subunit: amounts are always whole numbers. Never write a decimal point in an amount. Guaraní figures are large — "5k" or "5 mil" means 5,000, and a coffee costing 25,000 is unremarkable.`
+      : `Amounts use two decimal places.`;
+
+  return `You are SpendOwl's finance coach: warm, concise, and concrete.
 
 You are talking to someone about their own money. Keep replies to a few sentences
 unless they ask for detail — this is a phone chat, not a report.
 
+CURRENCY. This user's currency is ${CURRENCY_NAMES[currency]}. Every amount your
+tools report is already in ${currency}, and every amount you write or pass to a
+tool must be in ${currency}. ${whole} Never convert between currencies and never
+mention another currency — as far as this conversation is concerned, ${currency}
+is the only one that exists.
+
 Facts about their finances come from your tools. Never guess or invent a number:
 if you need a figure, call a tool. If a tool has no answer, say so plainly.
-
-Money is stored in integer minor units (euro cents). Every tool gives you both
-the minor-unit value and a decimal euro value — quote the euro value to the user.
 
 When they mention having spent something, call propose_expense. That shows them a
 card to review and approve; it does NOT record anything. Never tell them an
 expense is logged or saved — say you've drafted it for approval. If the amount,
-merchant, or category is unclear, ask before proposing.`;
+merchant, or category is genuinely unclear, ask before proposing.`;
+}
 
 // ---------------------------------------------------------------------------
 // Tools
@@ -64,73 +87,76 @@ const toolArgs = {
   propose_expense: z.object({
     merchant: z.string().trim().min(1).max(120),
     category: z.enum(CATEGORIES),
-    // Positive cents. The sign is applied on approval, so the model never has
-    // to reason about negative numbers.
-    amountMinor: z.int().min(1),
+    // Positive, in the user's display currency. The sign is applied on
+    // approval and the conversion to stored EUR cents happens below, so the
+    // model never handles either.
+    amount: z.number().positive().finite(),
     note: z.string().trim().max(280).optional(),
   }),
 } as const;
 
 type ToolName = keyof typeof toolArgs;
 
-const tools: Anthropic.Tool[] = [
-  {
-    name: 'get_budget_summary',
-    description:
-      "This month's budget picture: amount spent, income, monthly budget, safe-to-spend, " +
-      'whether they are over budget, how far ahead or behind the flat daily pace they are, ' +
-      'days left in the month, and spend broken down by category. Call this for any question ' +
-      'about how much is left, how they are tracking, or where their money is going.',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'list_transactions',
-    description:
-      'Recent transactions, newest first. Use for questions about specific purchases, ' +
-      'merchants, or recent activity. Negative amounts are spending, positive are income.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        category: { type: 'string', enum: [...CATEGORIES], description: 'Optional category filter.' },
-        limit: { type: 'integer', description: 'How many to return. Defaults to 10, max 50.' },
-      },
+function buildTools(currency: Currency): Anthropic.Tool[] {
+  return [
+    {
+      name: 'get_budget_summary',
+      description:
+        `This month's budget picture, with every amount in ${currency}: spent, income, monthly ` +
+        'budget, safe-to-spend, whether they are over budget, how far ahead or behind the flat ' +
+        'daily pace they are, days left in the month, and spend per category. Call this for any ' +
+        'question about how much is left, how they are tracking, or where their money is going.',
+      input_schema: { type: 'object', properties: {} },
     },
-  },
-  {
-    name: 'list_subscriptions',
-    description: 'Their recurring subscriptions, with monthly price and renewal day of month.',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'list_credit_cards',
-    description: 'Their credit cards, with balance, limit and APR.',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'propose_expense',
-    description:
-      'Draft an expense for the user to review and approve. This does NOT record the ' +
-      'transaction — it shows them a card with an "Approve & log" button. Use it whenever ' +
-      'they mention money they have spent.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        merchant: { type: 'string', description: 'Who they paid, e.g. "Cafe Luna".' },
-        category: { type: 'string', enum: [...CATEGORIES] },
-        amountMinor: {
-          type: 'integer',
-          description: 'Amount in euro cents, always positive. 12.40 EUR is 1240.',
+    {
+      name: 'list_transactions',
+      description:
+        `Recent transactions, newest first, with amounts in ${currency}. Use for questions about ` +
+        'specific purchases, merchants, or recent activity. Negative amounts are spending, ' +
+        'positive are income.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          category: { type: 'string', enum: [...CATEGORIES], description: 'Optional category filter.' },
+          limit: { type: 'integer', description: 'How many to return. Defaults to 10, max 50.' },
         },
-        note: { type: 'string', description: 'Optional short context, e.g. "lunch with team".' },
       },
-      required: ['merchant', 'category', 'amountMinor'],
     },
-  },
-];
-
-/** Cents -> euros, for the human-readable half of every tool result. */
-function eur(minor: number): number {
-  return Math.round(minor) / 100;
+    {
+      name: 'list_subscriptions',
+      description: `Their recurring subscriptions, with monthly price in ${currency} and renewal day of month.`,
+      input_schema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'list_credit_cards',
+      description: `Their credit cards, with balance and limit in ${currency}, plus APR.`,
+      input_schema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'propose_expense',
+      description:
+        'Draft an expense for the user to review and approve. This does NOT record the ' +
+        'transaction — it shows them a card with an "Approve & log" button. Use it whenever ' +
+        'they mention money they have spent.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          merchant: { type: 'string', description: 'Who they paid, e.g. "Mercado Central".' },
+          category: { type: 'string', enum: [...CATEGORIES] },
+          amount: {
+            type: 'number',
+            description:
+              `A positive amount in ${currency}` +
+              (decimalsFor(currency) === 0
+                ? ', as a whole number. "5k" is 5000.'
+                : ', e.g. 12.40.'),
+          },
+          note: { type: 'string', description: 'Optional short context, e.g. "lunch with the team".' },
+        },
+        required: ['merchant', 'category', 'amount'],
+      },
+    },
+  ];
 }
 
 type Proposal = { merchant: string; cat: string; amountMinor: number; note: string };
@@ -139,7 +165,16 @@ type Proposal = { merchant: string; cat: string; amountMinor: number; note: stri
  * Runs one validated tool call. `proposals` collects propose_expense calls for
  * the caller to persist as `card` messages once the turn finishes.
  */
-async function runTool(name: ToolName, args: unknown, userId: string, proposals: Proposal[]): Promise<string> {
+async function runTool(
+  name: ToolName,
+  args: unknown,
+  userId: string,
+  currency: Currency,
+  proposals: Proposal[]
+): Promise<string> {
+  // Everything handed to the model is in the display currency, and says so.
+  const money = (minor: number) => minorToDisplay(minor, currency);
+
   switch (name) {
     case 'get_budget_summary': {
       const summary = await getSummary(userId);
@@ -147,21 +182,24 @@ async function runTool(name: ToolName, args: unknown, userId: string, proposals:
       // `trend` is a day-by-day cumulative series that exists to draw the
       // Dashboard chart. It answers no question the coach is asked, and 30 rows
       // of noise measurably hurts a smaller model's focus — so it is omitted.
-      const { trend: _trend, categories, ...rest } = summary;
       return JSON.stringify({
-        ...rest,
-        spentEur: eur(rest.spentMinor),
-        incomeEur: eur(rest.incomeMinor),
-        budgetEur: eur(rest.budgetMinor),
-        safeToSpendEur: eur(rest.safeToSpendMinor),
-        paceDeltaEur: eur(rest.paceDeltaMinor),
-        categories: categories.map(c => ({ ...c, spentEur: eur(c.spentMinor) })),
+        currency,
+        month: summary.month,
+        spent: money(summary.spentMinor),
+        income: money(summary.incomeMinor),
+        budget: money(summary.budgetMinor),
+        safeToSpend: money(summary.safeToSpendMinor),
+        overBudget: summary.overBudget,
+        percentOfBudget: Math.round(summary.percentOfBudget),
+        daysLeft: summary.daysLeft,
+        aheadOfPaceBy: money(summary.paceDeltaMinor),
+        categories: summary.categories.map(c => ({ category: c.key, spent: money(c.spentMinor) })),
       });
     }
 
     case 'list_transactions': {
       const { category, limit } = args as z.infer<(typeof toolArgs)['list_transactions']>;
-      const rows = await query(
+      const rows = await query<{ merchant: string; category: string; amountMinor: number; occurredAt: string; note: string | null }>(
         `SELECT merchant, category, amount_minor AS "amountMinor", occurred_at AS "occurredAt", note
            FROM transactions
           WHERE user_id = $1
@@ -170,36 +208,55 @@ async function runTool(name: ToolName, args: unknown, userId: string, proposals:
           LIMIT $3`,
         [userId, category ?? null, limit ?? 10]
       );
-      return JSON.stringify(
-        rows.map(r => ({ ...r, amountEur: eur(r.amountMinor as number) }))
-      );
+      return JSON.stringify({
+        currency,
+        transactions: rows.map(r => ({
+          merchant: r.merchant,
+          category: r.category,
+          amount: money(r.amountMinor),
+          date: r.occurredAt,
+          note: r.note,
+        })),
+      });
     }
 
     case 'list_subscriptions': {
       // The column is `cancelled`; the rest of the API exposes it as "off".
-      const rows = await query(
+      const rows = await query<{ name: string; priceMinor: number; dayOfMonth: number; muted: boolean; off: boolean }>(
         `SELECT name, price_minor AS "priceMinor", day_of_month AS "dayOfMonth", muted,
                 cancelled AS "off"
            FROM subscriptions WHERE user_id = $1 ORDER BY price_minor DESC`,
         [userId]
       );
-      return JSON.stringify(rows.map(r => ({ ...r, priceEur: eur(r.priceMinor as number) })));
+      return JSON.stringify({
+        currency,
+        subscriptions: rows.map(r => ({
+          name: r.name,
+          monthlyPrice: money(r.priceMinor),
+          renewsOnDay: r.dayOfMonth,
+          alertsMuted: r.muted,
+          cancelled: r.off,
+        })),
+      });
     }
 
     case 'list_credit_cards': {
-      const rows = await query(
+      const rows = await query<{ name: string; last4: string; balanceMinor: number; limitMinor: number; apr: number }>(
         `SELECT name, last4, balance_minor AS "balanceMinor",
                 credit_limit_minor AS "limitMinor", apr
            FROM credit_cards WHERE user_id = $1 ORDER BY balance_minor DESC`,
         [userId]
       );
-      return JSON.stringify(
-        rows.map(r => ({
-          ...r,
-          balanceEur: eur(r.balanceMinor as number),
-          limitEur: eur(r.limitMinor as number),
-        }))
-      );
+      return JSON.stringify({
+        currency,
+        cards: rows.map(r => ({
+          name: r.name,
+          last4: r.last4,
+          balance: money(r.balanceMinor),
+          limit: money(r.limitMinor),
+          apr: r.apr,
+        })),
+      });
     }
 
     case 'propose_expense': {
@@ -207,10 +264,11 @@ async function runTool(name: ToolName, args: unknown, userId: string, proposals:
       proposals.push({
         merchant: p.merchant,
         cat: p.category,
-        amountMinor: p.amountMinor,
+        // The one place the display currency is converted back to storage.
+        amountMinor: displayToMinor(p.amount, currency),
         note: p.note ?? '',
       });
-      return 'Expense card shown to the user for approval. It is not recorded until they tap "Approve & log". Tell them it is drafted and awaiting their approval.';
+      return `Expense card for ${p.amount} ${currency} shown to the user for approval. It is not recorded until they tap "Approve & log". Tell them it is drafted and awaiting their approval.`;
     }
   }
 }
@@ -230,7 +288,7 @@ type MessageRow = { kind: string; payload: Record<string, unknown> };
  * The Messages API tolerates both, but this endpoint is a compatibility layer,
  * so it is handed the strictest well-formed shape rather than the loosest.
  */
-function buildHistory(rows: MessageRow[]): Anthropic.MessageParam[] {
+function buildHistory(rows: MessageRow[], currency: Currency): Anthropic.MessageParam[] {
   const turns: { role: 'user' | 'assistant'; text: string }[] = [];
 
   for (const row of rows) {
@@ -243,10 +301,10 @@ function buildHistory(rows: MessageRow[]): Anthropic.MessageParam[] {
         turns.push({ role: 'assistant', text: String(payload.text ?? '').trim() });
         break;
       case 'card': {
-        const amount = eur(Number(payload.amountMinor ?? 0));
+        const amount = Math.abs(minorToDisplay(Number(payload.amountMinor ?? 0), currency));
         turns.push({
           role: 'assistant',
-          text: `[Proposed an expense card for approval: ${String(payload.merchant ?? 'Unknown')}, ${Math.abs(amount).toFixed(2)} EUR, category ${String(payload.cat ?? 'unknown')}]`,
+          text: `[Proposed an expense card for approval: ${String(payload.merchant ?? 'Unknown')}, ${amount} ${currency}, category ${String(payload.cat ?? 'unknown')}]`,
         });
         break;
       }
@@ -291,15 +349,25 @@ export const chatRoute = new Hono<AppEnv>().post('/', async c => {
   }
 
   const userId = c.get('userId');
+
+  // Read fresh each turn — the user can change it in Settings mid-conversation.
+  const settings = await queryOne<{ baseCurrency: string }>(
+    `SELECT base_currency AS "baseCurrency" FROM users WHERE id = $1`,
+    [userId]
+  );
+  const currency: Currency = isCurrency(settings?.baseCurrency) ? settings.baseCurrency : 'EUR';
+
   await insertMessage(userId, 'user', { text: parsed.data.text });
 
   const rows = await query<MessageRow>(
     `SELECT kind, payload FROM messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
     [userId, HISTORY_LIMIT]
   );
-  const messages = buildHistory(rows.reverse());
+  const messages = buildHistory(rows.reverse(), currency);
 
   const client = new Anthropic({ apiKey: env.llmApiKey, baseURL: env.llmBaseUrl });
+  const system = systemPrompt(currency);
+  const tools = buildTools(currency);
   const proposals: Proposal[] = [];
 
   let text = '';
@@ -310,7 +378,7 @@ export const chatRoute = new Hono<AppEnv>().post('/', async c => {
     let response = await client.messages.create({
       model: env.llmModel,
       max_tokens: MAX_TOKENS,
-      system: SYSTEM_PROMPT,
+      system,
       tools,
       messages,
     });
@@ -344,7 +412,7 @@ export const chatRoute = new Hono<AppEnv>().post('/', async c => {
         results.push({
           type: 'tool_result',
           tool_use_id: block.id,
-          content: await runTool(block.name as ToolName, args.data, userId, proposals),
+          content: await runTool(block.name as ToolName, args.data, userId, currency, proposals),
         });
       }
 
@@ -355,7 +423,7 @@ export const chatRoute = new Hono<AppEnv>().post('/', async c => {
       response = await client.messages.create({
         model: env.llmModel,
         max_tokens: MAX_TOKENS,
-        system: SYSTEM_PROMPT,
+        system,
         tools,
         messages,
       });

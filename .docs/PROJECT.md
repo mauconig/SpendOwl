@@ -37,9 +37,18 @@ directly on Node's native type stripping, so there is no build step.
   pace, per-category totals and the cumulative trend series, all `SUM()`ed from
   real rows. These used to be hardcoded literals in the UI.
 
-**Money is stored as integer EUR cents** everywhere, never floats. The client
-converts at the render boundary with the existing `formatMoney()`. This
-replaced the old fixtures' hand-computed `eur`/`usd`/`pyg` triples on every row.
+**Money is stored as integer minor units** everywhere, never floats. The client
+formats at the render boundary with `formatMoney()`. This replaced the old
+fixtures' hand-computed `eur`/`usd`/`pyg` triples on every row.
+
+What a minor unit *means* depends on the currency: for EUR and USD it is the
+cent, for PYG it is the guaraní, which has no subunit. So a stored `5000` reads
+as `€50.00` and as `₲5.000`. **`formatMoney()` does not convert** — changing
+base currency changes the symbol and the precision, nothing else. The rate table
+that used to live in `theme.ts` held invented demo values, so converting through
+it only added error and implied an accuracy the app never had. The server mirrors
+this rule in `server/src/currency.ts`; the two must agree or the coach will quote
+one number while the Dashboard draws another.
 
 On the client, `@tanstack/react-query` holds server state and
 `SpendOwlContext.tsx` keeps its original `useSpendOwl()` surface — screens read

@@ -80,31 +80,31 @@ const notoFonts = {
 
 export type Currency = 'EUR' | 'USD' | 'PYG';
 
-// Approximate demo exchange rates. EUR_TO_USD matches the ratio already baked
-// into the app's EUR/USD mock amounts (e.g. 12.40 EUR / 13.50 USD ≈ 1.089).
-// Guaraní has no meaningful decimal unit, and Paraguay conventionally uses
-// "." as the thousands separator.
-export const EUR_TO_USD = 1.089;
-export const PYG_PER_USD = 7500;
-export const PYG_PER_EUR = EUR_TO_USD * PYG_PER_USD;
-
+// Paraguay conventionally uses "." as the thousands separator, and guaraní has
+// no decimal subunit.
 export function formatPYG(amount: number): string {
   return '₲' + Math.round(amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
-export function convertFromEUR(eur: number, cur: Currency): number {
-  if (cur === 'EUR') return eur;
-  if (cur === 'USD') return eur * EUR_TO_USD;
-  return eur * PYG_PER_EUR;
-}
-
-// Formats an amount that's stored in EUR (dashboard/subscription mock data)
-// into the given display currency. `decimals` controls EUR/USD precision —
-// PYG is always shown as a whole number regardless.
-export function formatMoney(eur: number, cur: Currency, decimals: 0 | 2 = 2): string {
-  if (cur === 'PYG') return formatPYG(convertFromEUR(eur, cur));
+/**
+ * Renders a stored amount in the user's currency. **This does not convert.**
+ *
+ * There used to be an EUR->USD->PYG rate table here, but the rates were
+ * invented demo values, so "converting" only added error and implied an
+ * accuracy the app does not have. Changing the base currency now changes the
+ * symbol and the precision, nothing else. Real conversion needs live FX rates
+ * and per-transaction currencies — that's §7 in .docs/BACKEND.md.
+ *
+ * `amount` arrives as the stored minor-unit value divided by 100 (see
+ * minorToEur in src/api/types.ts). For EUR and USD that is already the major
+ * unit. Guaraní has no subunit — its minor unit *is* the guaraní — so the
+ * division is undone here rather than at all 20-odd call sites. That is why a
+ * stored 5000 reads back as ₲5.000 and as €50.00.
+ */
+export function formatMoney(amount: number, cur: Currency, decimals: 0 | 2 = 2): string {
+  if (cur === 'PYG') return formatPYG(amount * 100);
   const symbol = cur === 'EUR' ? '€' : '$';
-  return symbol + convertFromEUR(eur, cur).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return symbol + amount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 // Font family for a rendered money string — swaps to Noto Sans for PYG so

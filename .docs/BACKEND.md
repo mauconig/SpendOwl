@@ -24,8 +24,8 @@ following any section.
 >
 > **Not done — everything else.** §4 (receipt OCR), §5 (voice
 > transcription), §6 (subscription *detection* — CRUD exists, detection does
-> not), §7 (live FX rates — conversion still uses the fixed rates in
-> `theme.ts`), §8 (push notifications — the `notif` toggle persists but nothing
+> not), §7 (multi-currency — the app no longer converts *at all*; see below),
+> §8 (push notifications — the `notif` toggle persists but nothing
 > reads it), §9 (biometric lock — same, `bio` persists but does not gate
 > anything).
 >
@@ -165,6 +165,17 @@ Today, attaching a "receipt" just shows a static placeholder graphic for
   flip a local boolean.
 
 ## 7. Currency conversion (replaces hardcoded `eur`/`usd` pairs)
+
+> **Update: conversion was removed rather than improved.** The app used to
+> render every amount through a hardcoded EUR/USD/PYG rate table in
+> `theme.ts`. Those were invented demo values, so converting through them added
+> error and implied an accuracy the app did not have — and it made the coach
+> wrong, since a user on PYG saying "5k" means ₲5,000, not €50.
+>
+> `formatMoney()` now changes the symbol and the precision only. The minor unit
+> is the cent for EUR/USD and the guaraní for PYG, mirrored server-side in
+> `server/src/currency.ts`. Everything below still stands as the real fix; there
+> is simply no longer a fake conversion pretending to be it.
 
 Every mock transaction currently carries *both* a EUR and a USD amount
 pre-computed by hand. A real app stores the transaction in its original

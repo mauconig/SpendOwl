@@ -5,7 +5,7 @@ import { CreditCardsSection } from '../components/CreditCardsSection';
 import { Donut } from '../components/Donut';
 import { TrendChart } from '../components/TrendChart';
 import { Icon } from '../icons';
-import { CATS, CatKey, Currency, GRAD, GRAD_LOCATIONS, colors, convertFromEUR, fonts, formatMoney, formatPYG, moneyFont } from '../theme';
+import { CATS, CatKey, Currency, GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, formatPYG, moneyFont } from '../theme';
 import { minorToEur } from '../api/types';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { monthLong, monthShort, relativeDayLabel } from '../utils/date';
@@ -24,10 +24,13 @@ function donutValueFontSize(text: string): number {
   return 13;
 }
 
-function heroSplit(eur: number, cur: Currency): { main: string; frac: string | null } {
-  if (cur === 'PYG') return { main: formatPYG(convertFromEUR(eur, cur)), frac: null };
+// The hero number renders its decimals at a smaller size, so it formats itself
+// rather than going through formatMoney. Same no-conversion rule: symbol and
+// precision only, and PYG undoes the minor-unit division (see theme.ts).
+function heroSplit(amount: number, cur: Currency): { main: string; frac: string | null } {
+  if (cur === 'PYG') return { main: formatPYG(amount * 100), frac: null };
   const symbol = cur === 'EUR' ? '€' : '$';
-  const [intPart, fracPart] = convertFromEUR(eur, cur).toFixed(2).split('.');
+  const [intPart, fracPart] = amount.toFixed(2).split('.');
   return { main: symbol + Number(intPart).toLocaleString('en-US'), frac: '.' + fracPart };
 }
 
