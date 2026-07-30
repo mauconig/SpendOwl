@@ -179,8 +179,10 @@ icon — pick the one that fits: trendUp good/improving, trendDown worsening, wa
 attention, pie category mix, bars subscriptions or comparisons, card credit cards,
 spark anything else.
 
-action — where tapping the card should take them: dashboard for spending, budget and
-categories; subscriptions for renewals; chat to ask you a follow-up.${
+action — where tapping the card should take them, and it must match what your cta
+promises: dashboard for spending, budget, categories and credit cards;
+subscriptions for renewals; chat only when the cta actually invites them to talk to
+you.${
     FACTURAS_ENABLED
       ? ' Use vault for facturas and receipts, and set targetId only on a vault card, only to the exact id of a factura you were given.'
       : ' Facturas and receipt scanning are not available yet, so never mention them.'
