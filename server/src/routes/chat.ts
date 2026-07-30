@@ -678,7 +678,9 @@ export function buildHistory(rows: MessageRow[], currency: Currency): Anthropic.
         pushText('assistant', String(payload.text ?? '').trim());
         break;
       case 'voice':
-        pushText('user', '[sent a voice note]');
+        // Real transcript once transcribe.ts exists on the row; the bracketed
+        // placeholder only covers rows recorded before voice notes worked.
+        pushText('user', String(payload.text ?? '').trim() || '[sent a voice note]');
         break;
       case 'receipt':
         pushText('user', '[sent a photo of a receipt]');
@@ -689,7 +691,7 @@ export function buildHistory(rows: MessageRow[], currency: Currency): Anthropic.
   return out;
 }
 
-async function insertMessage(userId: string, kind: string, payload: Record<string, unknown>) {
+export async function insertMessage(userId: string, kind: string, payload: Record<string, unknown>) {
   await queryOne(`INSERT INTO messages (user_id, kind, payload) VALUES ($1, $2, $3) RETURNING id`, [
     userId,
     kind,
@@ -698,31 +700,28 @@ async function insertMessage(userId: string, kind: string, payload: Record<strin
 }
 
 // ---------------------------------------------------------------------------
-// Route
+// The turn
 // ---------------------------------------------------------------------------
 
-export const chatRoute = new Hono<AppEnv>().post('/', async c => {
-  const parsed = bodySchema.safeParse(await c.req.json().catch(() => null));
-  if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+/** Thrown by runCoachTurn on any model failure — never a Hono Response, since
+ * this is shared by two routes that word the same failure differently. */
+export class CoachTurnError extends Error {}
 
-  if (!env.llmApiKey) {
-    return c.json({ error: 'The coach is not configured on this server (LLM_API_KEY is unset).' }, 503);
-  }
-
-  const userId = c.get('userId');
-
-  // Read fresh each turn — the user can change it in Settings mid-conversation.
-  const currency = await getUserCurrency(userId);
-
-  await insertMessage(userId, 'user', { text: parsed.data.text });
-
+/**
+ * Runs one coach turn: replays history, loops on tool calls, persists whatever
+ * comes back. Callers are responsible for inserting the message that prompted
+ * this turn (a 'user' text row for /api/chat, a 'voice' row with its
+ * transcript for /api/voice) *before* calling this — history is read fresh
+ * from the table, not passed in, so the just-inserted row is included.
+ */
+export async function runCoachTurn(userId: string, currency: Currency): Promise<void> {
   const rows = await query<MessageRow>(
     `SELECT kind, payload FROM messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
     [userId, HISTORY_LIMIT]
   );
   const messages = buildHistory(rows.reverse(), currency);
 
-  const client = new Anthropic({ apiKey: env.llmApiKey, baseURL: env.llmBaseUrl });
+  const client = new Anthropic({ apiKey: env.llmApiKey!, baseURL: env.llmBaseUrl });
   const system = systemPrompt(currency);
   const tools = buildTools(currency);
   const proposals: Proposal[] = [];
@@ -797,9 +796,10 @@ export const chatRoute = new Hono<AppEnv>().post('/', async c => {
       .join('\n\n');
   } catch (error) {
     console.error('[chat]', error);
-    // The user's message stays — they did send it. The reply does not, so a
-    // transient failure doesn't leave an apology stuck in their history.
-    return c.json({ error: "The coach couldn't be reached. Try again in a moment." }, 502);
+    // The message that prompted this turn stays — it was really sent. Only the
+    // reply is missing, so a transient failure doesn't leave an apology stuck
+    // in the transcript.
+    throw new CoachTurnError("The coach couldn't be reached. Try again in a moment.");
   }
 
   // Cards first: they were proposed during the turn, and the closing text
@@ -813,6 +813,32 @@ export const chatRoute = new Hono<AppEnv>().post('/', async c => {
     await insertMessage(userId, 'ai', {
       text: "Sorry — I got a bit lost there. Could you put that another way?",
     });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Route
+// ---------------------------------------------------------------------------
+
+export const chatRoute = new Hono<AppEnv>().post('/', async c => {
+  const parsed = bodySchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+
+  if (!env.llmApiKey) {
+    return c.json({ error: 'The coach is not configured on this server (LLM_API_KEY is unset).' }, 503);
+  }
+
+  const userId = c.get('userId');
+
+  // Read fresh each turn — the user can change it in Settings mid-conversation.
+  const currency = await getUserCurrency(userId);
+
+  await insertMessage(userId, 'user', { text: parsed.data.text });
+
+  try {
+    await runCoachTurn(userId, currency);
+  } catch (error) {
+    return c.json({ error: error instanceof CoachTurnError ? error.message : 'Something went wrong.' }, 502);
   }
 
   return c.body(null, 204);

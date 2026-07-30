@@ -1,3 +1,10 @@
+import {
+  AudioModule,
+  RecordingPresets,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from 'expo-audio';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   useAddCreditCard,
@@ -17,6 +24,7 @@ import {
   useRefreshInsights,
   useRemoveCreditCard,
   useSendChat,
+  useSendVoice,
   useSubscriptions,
   useSummary,
   useTransactions,
@@ -70,7 +78,7 @@ interface SpendOwlStore {
   removeAttachment: () => void;
   recording: boolean;
   recSecs: number;
-  startRec: () => void;
+  startRec: () => Promise<void>;
   endRec: (commit: boolean) => void;
   send: () => void;
   touched: boolean;
@@ -164,8 +172,9 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const [input, setInput] = useState('');
   const [attachment, setAttachment] = useState(false);
   const [touched, setTouched] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [recSecs, setRecSecs] = useState(0);
+  // Surfaced as a transient error bubble, same treatment as a failed chat/voice
+  // turn — cleared the moment another recording attempt starts.
+  const [micError, setMicError] = useState<string | null>(null);
   const [cards, setCards] = useState<Record<string, CardState>>({});
   const [selCat, setSelCat] = useState<CatKey | null>(null);
   const [txOpen, setTxOpen] = useState(false);
@@ -204,8 +213,18 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const addMessage = useAddMessage();
   const deleteMessage = useDeleteMessage();
   const sendChat = useSendChat();
+  const sendVoice = useSendVoice();
   const updateSettings = useUpdateSettings();
   const refreshInsights = useRefreshInsights();
+
+  // The recorder instance lives for the lifetime of the provider — a fresh one
+  // per recording would mean re-requesting permission and re-preparing every
+  // time. `useAudioRecorderState` polls it (default interval) so `recording`
+  // and `recSecs` below are always the recorder's own account of itself,
+  // never a manually-ticked timer that can drift from what was actually
+  // captured.
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(audioRecorder);
 
   // insightsQuery is deliberately absent: insights are an enhancement, not a
   // prerequisite. Including it here would let a slow or failed generation put
@@ -221,16 +240,9 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transactionsQuery.refetch, summaryQuery.refetch, cardsQuery.refetch, subsQuery.refetch, receiptsQuery.refetch, messagesQuery.refetch, settingsQuery.refetch]);
 
-  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  useEffect(
-    () => () => {
-      timersRef.current.forEach(clearTimeout);
-      if (recTimerRef.current) clearInterval(recTimerRef.current);
-    },
-    []
-  );
+  useEffect(() => () => timersRef.current.forEach(clearTimeout), []);
 
   const after = useCallback((ms: number, fn: () => void) => {
     timersRef.current.push(setTimeout(fn, ms));
@@ -312,7 +324,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
           case 'user':
             return { id: m.id, type: 'user', text: m.payload.text ?? '' };
           case 'voice':
-            return { id: m.id, type: 'voice', dur: m.payload.dur ?? '0:04' };
+            return { id: m.id, type: 'voice', dur: m.payload.dur ?? '0:04', text: m.payload.text };
           case 'receipt':
             return { id: m.id, type: 'receipt' };
           case 'card': {
@@ -377,6 +389,16 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
       : 'Something went wrong.'
     : null;
 
+  // Same idea for a voice note: a bad upload, a 502 from the transcriber, or
+  // the 422 the server returns for a recording it couldn't make anything of
+  // (silence, static) all surface here rather than becoming a permanent,
+  // reply-less voice bubble.
+  const voiceError = sendVoice.isError
+    ? sendVoice.error instanceof Error
+      ? sendVoice.error.message
+      : 'Something went wrong.'
+    : micError;
+
   const messages = useMemo<Msg[]>(
     () => [
       ...serverMessages,
@@ -384,9 +406,13 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
       // isPending stays true through the messages refetch (see useSendChat), so
       // the indicator hands off directly to the rendered reply with no gap.
       ...(sendChat.isPending ? [{ id: 'thinking', type: 'thinking' } as Msg] : []),
+      // Covers transcription *and* the coach turn that follows it — both run
+      // server-side in one request, so there is only the one state to show.
+      ...(sendVoice.isPending ? [{ id: 'transcribing', type: 'transcribing' } as Msg] : []),
       ...(chatError ? [{ id: 'chat-error', type: 'error', text: chatError } as Msg] : []),
+      ...(voiceError ? [{ id: 'voice-error', type: 'error', text: voiceError } as Msg] : []),
     ],
-    [serverMessages, pendingScans, sendChat.isPending, chatError]
+    [serverMessages, pendingScans, sendChat.isPending, chatError, sendVoice.isPending, voiceError]
   );
 
   // ---- Actions ----
@@ -492,36 +518,49 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     sendChat.mutate(text);
   }, [attachment, input, addMessage, addReceipt, after, sendChat]);
 
-  const startRec = useCallback(() => {
-    setRecording(true);
-    setRecSecs(0);
-    recTimerRef.current = setInterval(() => setRecSecs(s => s + 1), 1000);
-  }, []);
+  /**
+   * Permission is requested here, at the moment recording is actually
+   * attempted — not on app launch — so the system prompt appears with the
+   * user's own action as its context rather than out of nowhere.
+   */
+  const startRec = useCallback(async () => {
+    setMicError(null);
+    const status = await AudioModule.requestRecordingPermissionsAsync();
+    if (!status.granted) {
+      setMicError('Microphone access is off. Enable it in your phone settings to record a voice note.');
+      return;
+    }
+    // Idempotent and cheap enough to set on every recording rather than track
+    // whether it already ran: allowsRecording lets iOS capture audio at all,
+    // playsInSilentMode keeps other app audio behaving normally afterwards.
+    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+    await audioRecorder.prepareToRecordAsync();
+    audioRecorder.record();
+  }, [audioRecorder]);
 
   const endRec = useCallback(
     (commit: boolean) => {
-      if (recTimerRef.current) clearInterval(recTimerRef.current);
-      setRecording(false);
-      setRecSecs(secsNow => {
-        const secs = Math.max(secsNow, 4);
-        if (commit) {
-          addMessage.mutate({ kind: 'voice', payload: { dur: `0:${String(secs).padStart(2, '0')}` } });
-          after(1400, () =>
-            addMessage.mutate({
-              kind: 'card',
-              payload: {
-                merchant: 'Blue Bottle Coffee',
-                cat: 'food',
-                amountMinor: -450,
-                note: 'Voice note · transcribed',
-              },
-            })
-          );
-        }
-        return 0;
-      });
+      // Captured before stop() — some platforms reset the recorder's own
+      // duration once it is no longer recording, and this is the only
+      // account of elapsed time the app has (nothing decodes the file to
+      // measure it, server included: the phone already knows).
+      const secs = Math.max(Math.round(recorderState.durationMillis / 1000), 1);
+      void (async () => {
+        await audioRecorder.stop();
+        if (!commit) return;
+        const uri = audioRecorder.uri;
+        if (!uri) return;
+
+        const form = new FormData();
+        // React Native's fetch accepts this { uri, name, type } shape as a
+        // file part; it is not a spec Blob, hence the cast — see postForm in
+        // src/api/client.ts.
+        form.append('audio', { uri, name: 'note.m4a', type: 'audio/m4a' } as unknown as Blob);
+        form.append('duration', String(secs));
+        sendVoice.mutate(form);
+      })();
     },
-    [addMessage, after]
+    [audioRecorder, recorderState.durationMillis, sendVoice]
   );
 
   const attach = useCallback(() => {
@@ -604,8 +643,8 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     attachment,
     attach,
     removeAttachment: () => setAttachment(false),
-    recording,
-    recSecs,
+    recording: recorderState.isRecording,
+    recSecs: Math.floor(recorderState.durationMillis / 1000),
     startRec,
     endRec,
     send,

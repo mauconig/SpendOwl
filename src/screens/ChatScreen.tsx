@@ -222,7 +222,7 @@ function MessageBubble({ m }: { m: Msg }) {
   }
   if (m.type === 'voice') {
     return (
-      <FadeIn style={{ alignItems: 'flex-end' }}>
+      <FadeIn style={{ alignItems: 'flex-end', gap: 4, maxWidth: '84%' }}>
         <View
           style={{
             flexDirection: 'row',
@@ -239,6 +239,11 @@ function MessageBubble({ m }: { m: Msg }) {
           <Wave animated={false} color={colors.bubbleUserText} n={18} />
           <Text style={{ fontFamily: fonts.mono, fontSize: 11.5, color: 'rgba(16,16,19,.6)' }}>{m.dur}</Text>
         </View>
+        {/* What was actually heard, so a wrong transcript is visible rather
+            than a silent explanation for a wrong card. */}
+        {m.text ? (
+          <Text style={{ fontSize: 12, color: colors.textDim45, textAlign: 'right' }}>{m.text}</Text>
+        ) : null}
       </FadeIn>
     );
   }
@@ -293,6 +298,31 @@ function MessageBubble({ m }: { m: Msg }) {
             borderTopLeftRadius: 6,
           }}
         >
+          <Dots />
+        </View>
+      </FadeIn>
+    );
+  }
+  if (m.type === 'transcribing') {
+    // Stands in for the voice bubble that has not been written yet — one
+    // request covers transcription and the coach's reply, so there is only
+    // this one state between tapping send and both appearing.
+    return (
+      <FadeIn style={{ alignItems: 'flex-end' }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            backgroundColor: colors.bubbleUser,
+            padding: 11,
+            paddingHorizontal: 15,
+            borderRadius: 20,
+            borderTopRightRadius: 6,
+          }}
+        >
+          <Icon name="mic" size={16} color={colors.bubbleUserText} />
+          <Wave animated color={colors.bubbleUserText} n={18} />
           <Dots />
         </View>
       </FadeIn>

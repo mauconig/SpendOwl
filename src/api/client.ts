@@ -50,7 +50,12 @@ export function createApi(getToken: GetToken) {
         ...init,
         headers: {
           Authorization: `Bearer ${token}`,
-          ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+          // Only a JSON body (always a string here, via JSON.stringify) gets
+          // this header. A FormData body — postForm's multipart upload — must
+          // NOT have Content-Type set by hand: fetch computes its own value
+          // with the multipart boundary baked in, and a hand-set one would be
+          // missing that boundary and break parsing on the server.
+          ...(typeof init.body === 'string' ? { 'Content-Type': 'application/json' } : {}),
           ...init.headers,
         },
       });
@@ -77,6 +82,12 @@ export function createApi(getToken: GetToken) {
     patch: <T>(path: string, body: unknown) =>
       request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
     del: (path: string) => request<void>(path, { method: 'DELETE' }),
+    // Multipart upload — voice notes, the one request this app sends that
+    // isn't JSON. `form` is typed loosely rather than as React Native's
+    // FormData because RN's `.append('audio', { uri, name, type })` file
+    // shape isn't a valid `Blob` per lib.dom.d.ts, even though it is exactly
+    // what RN's fetch implementation expects at runtime.
+    postForm: <T>(path: string, form: FormData) => request<T>(path, { method: 'POST', body: form as never }),
   };
 }
 

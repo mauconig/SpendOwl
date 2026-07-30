@@ -16,6 +16,7 @@ import { settingsRoute } from './routes/settings.ts';
 import { subscriptionsRoute } from './routes/subscriptions.ts';
 import { summaryRoute } from './routes/summary.ts';
 import { transactionsRoute } from './routes/transactions.ts';
+import { voiceRoute } from './routes/voice.ts';
 
 const app = new Hono<AppEnv>();
 
@@ -40,6 +41,7 @@ app.route('/api/receipts', receiptsRoute);
 app.route('/api/messages', messagesRoute);
 app.route('/api/chat', chatRoute);
 app.route('/api/insights', insightsRoute);
+app.route('/api/voice', voiceRoute);
 app.route('/api/settings', settingsRoute);
 
 app.onError((error, c) => {

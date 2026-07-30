@@ -347,6 +347,22 @@ export function useSendChat() {
   });
 }
 
+/**
+ * Uploads a recorded voice note and runs it through the exact same coach turn
+ * as useSendChat — the server transcribes it and then treats the transcript
+ * as the message. No optimistic bubble: unlike typed text there is no
+ * transcript to show until the server produces one, so the "sending" state is
+ * a transient bubble the caller drives off `isPending`, not a real message.
+ */
+export function useSendVoice() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (form: FormData) => api.postForm<void>('/api/voice', form),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.messages }),
+  });
+}
+
 export function useUpdateSettings() {
   const api = useApi();
   const client = useQueryClient();

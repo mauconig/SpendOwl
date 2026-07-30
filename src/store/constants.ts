@@ -4,15 +4,19 @@ import type { CatKey } from '../theme';
 // per-user seed (server/src/seed.ts); everything here is genuine client-side
 // constant or view-model type, not stand-in data.
 
-// 'scanning', 'thinking' and 'error' are client-only: transient states the UI
-// renders while something is in flight, never rows in the messages table.
+// 'scanning', 'thinking', 'transcribing' and 'error' are client-only: transient
+// states the UI renders while something is in flight, never rows in the
+// messages table.
 export type Msg =
   | { id: string; type: 'ai'; text: string }
   | { id: string; type: 'user'; text: string }
-  | { id: string; type: 'voice'; dur: string }
+  // `text` is the real transcript once the server has one — absent only for
+  // rows recorded before voice notes were real, which have nothing to show.
+  | { id: string; type: 'voice'; dur: string; text?: string }
   | { id: string; type: 'receipt' }
   | { id: string; type: 'scanning' }
   | { id: string; type: 'thinking' }
+  | { id: string; type: 'transcribing' }
   | { id: string; type: 'error'; text: string }
   // One card message per thing the coach can propose. All four are drafts —
   // nothing is written until "Approve" is tapped, so the shape carries whatever

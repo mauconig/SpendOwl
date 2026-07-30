@@ -29,4 +29,15 @@ export const env = {
   llmApiKey: process.env.LLM_API_KEY ?? null,
   llmBaseUrl: process.env.LLM_BASE_URL ?? 'https://api.deepseek.com/anthropic',
   llmModel: process.env.LLM_MODEL ?? 'deepseek-v4-flash',
+
+  // Voice notes: speech-to-text, same not-required() pattern as the LLM key —
+  // a missing key degrades /api/voice to a 503, nothing else. Groq's
+  // OpenAI-compatible endpoint, whisper-large-v3-turbo by default (the
+  // always-available "on demand" tier — Groq's other tiers, flex and batch,
+  // are opt-in trade-offs a voice note has no reason to make: flex trades
+  // away availability for throughput we don't need, batch trades away the
+  // immediacy a chat feature depends on).
+  sttApiKey: process.env.STT_API_KEY ?? null,
+  sttBaseUrl: process.env.STT_BASE_URL ?? 'https://api.groq.com/openai/v1',
+  sttModel: process.env.STT_MODEL ?? 'whisper-large-v3-turbo',
 } as const;
