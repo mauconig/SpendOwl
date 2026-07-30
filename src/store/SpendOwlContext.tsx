@@ -6,6 +6,7 @@ import {
   useAddTransaction,
   useApproveReceipt,
   useCreditCards,
+  useDeleteMessage,
   useMessages,
   useReceipts,
   useRemoveCreditCard,
@@ -69,6 +70,7 @@ interface SpendOwlStore {
   firstRun: boolean;
   cardFor: (id: string) => CardState;
   setCard: (id: string, patch: Partial<CardState>) => void;
+  rejectCard: (id: string) => void;
 
   // dashboard
   summary: ApiSummary | null;
@@ -164,6 +166,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const approveReceipt = useApproveReceipt();
   const addReceipt = useAddReceipt();
   const addMessage = useAddMessage();
+  const deleteMessage = useDeleteMessage();
   const sendChat = useSendChat();
   const updateSettings = useUpdateSettings();
 
@@ -309,6 +312,23 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [serverMessages, cards, addTransaction]
+  );
+
+  /**
+   * Rejecting a draft deletes the message outright. A rejected card left in the
+   * transcript is also left in the history replayed to the coach, which is
+   * exactly the context that used to convince it a purchase was already handled.
+   */
+  const rejectCard = useCallback(
+    (id: string) => {
+      deleteMessage.mutate(id);
+      setCards(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    },
+    [deleteMessage]
   );
 
   const send = useCallback(() => {
@@ -466,6 +486,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     firstRun: !loading && serverMessages.length === 0,
     cardFor,
     setCard,
+    rejectCard,
 
     summary,
     transactions: transactionsQuery.data ?? [],

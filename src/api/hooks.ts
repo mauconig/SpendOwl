@@ -202,6 +202,29 @@ export function useAddMessage() {
 }
 
 /**
+ * Rejecting a proposed expense card. Optimistic, because the card should
+ * disappear the moment it's tapped — waiting a round trip to remove something
+ * the user just dismissed feels broken.
+ */
+export function useDeleteMessage() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/api/messages/${id}`),
+    onMutate: async id => {
+      await client.cancelQueries({ queryKey: keys.messages });
+      const previous = client.getQueryData<ApiMessage[]>(keys.messages);
+      client.setQueryData<ApiMessage[]>(keys.messages, current => current?.filter(m => m.id !== id));
+      return { previous };
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previous) client.setQueryData(keys.messages, context.previous);
+    },
+    onSettled: () => void client.invalidateQueries({ queryKey: keys.messages }),
+  });
+}
+
+/**
  * One round trip runs the entire coach turn: the server persists the user's
  * message, calls the model with tools bound to their data, and persists the
  * reply. Nothing about the provider reaches the client.

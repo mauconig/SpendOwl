@@ -83,6 +83,13 @@ existing `card` message, and the user's "Approve & log" button performs the
 insert exactly as it did when the card was faked. No model mistake reaches the
 database unreviewed, and `CardMessage` in `ChatScreen.tsx` stays load-bearing.
 
+A draft can also be **rejected**, which `DELETE`s the message rather than
+flagging it. That matters beyond tidiness: a rejected card left in the
+transcript is also left in the history replayed to the coach, and a stale draft
+is precisely the context that convinces it a purchase has already been handled.
+Reject is offered only before approval — afterwards a real transaction exists,
+and removing just the card would misrepresent that.
+
 Three implementation notes that are easy to undo by accident:
 
 - The tool loop is **hand-written** against plain `client.messages.create`, not
@@ -157,8 +164,9 @@ Five destinations, all on one horizontal pager (see Root composition below):
   - Attaching a "photo" of a receipt (`factura`), which shows a scanning
     animation and then resolves to an expense card.
   - Recording a voice note, which produces a transcribed expense card.
-  - Expense cards can be marked tax-deductible and approved — "approve & log"
-    writes a real transaction via `POST /api/transactions`.
+  - Expense cards can be marked tax-deductible, approved, or rejected —
+    "approve & log" writes a real transaction via `POST /api/transactions`,
+    "reject" deletes the draft via `DELETE /api/messages/:id`.
 - **Factura Vault** (`src/screens/VaultScreen.tsx`) — a grid of scanned
   receipts with an ok/needs-review badge; tapping one opens the full invoice
   detail view.

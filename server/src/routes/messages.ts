@@ -32,4 +32,17 @@ export const messagesRoute = new Hono<AppEnv>()
       [c.get('userId'), body.kind, JSON.stringify(body.payload)]
     );
     return c.json(row, 201);
+  })
+
+  // Rejecting a proposed expense card deletes it outright rather than flagging
+  // it. That keeps it out of the transcript *and* out of the history replayed to
+  // the coach — a rejected draft is exactly the context that used to make it
+  // think a purchase had already been handled.
+  .delete('/:id', async c => {
+    const row = await queryOne('DELETE FROM messages WHERE id = $1 AND user_id = $2 RETURNING id', [
+      c.req.param('id'),
+      c.get('userId'),
+    ]);
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    return c.body(null, 204);
   });

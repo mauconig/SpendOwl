@@ -53,17 +53,38 @@ function CardMessage({ m }: { m: Extract<Msg, { type: 'card' }> }) {
         <Toggle on={card.tax} onToggle={() => store.setCard(m.id, { tax: !card.tax })} />
       </View>
       {!card.ok ? (
-        <Pressable onPress={() => store.setCard(m.id, { ok: true })}>
-          <LinearGradient
-            colors={GRAD}
-            locations={GRAD_LOCATIONS}
-            start={{ x: 0, y: 0.1 }}
-            end={{ x: 1, y: -0.1 }}
-            style={{ marginTop: 2, borderRadius: 999, paddingVertical: 11, alignItems: 'center' }}
+        // Reject deletes the draft outright — see rejectCard in SpendOwlContext.
+        // Only offered before approval: afterwards a real transaction exists and
+        // removing just the card would be a lie.
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>
+          <Pressable
+            onPress={() => store.rejectCard(m.id)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              paddingVertical: 11,
+              paddingHorizontal: 15,
+              borderRadius: 999,
+              backgroundColor: colors.iconBg,
+            }}
           >
-            <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 13.5 }}>Approve & log</Text>
-          </LinearGradient>
-        </Pressable>
+            <Icon name="close" size={13} color={colors.textDim60} />
+            <Text style={{ color: colors.textDim60, fontFamily: fonts.medium, fontSize: 13 }}>Reject</Text>
+          </Pressable>
+          <Pressable onPress={() => store.setCard(m.id, { ok: true })} style={{ flex: 1 }}>
+            <LinearGradient
+              colors={GRAD}
+              locations={GRAD_LOCATIONS}
+              start={{ x: 0, y: 0.1 }}
+              end={{ x: 1, y: -0.1 }}
+              style={{ borderRadius: 999, paddingVertical: 11, alignItems: 'center' }}
+            >
+              <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 13.5 }}>Approve & log</Text>
+            </LinearGradient>
+          </Pressable>
+        </View>
       ) : (
         <View
           style={{
