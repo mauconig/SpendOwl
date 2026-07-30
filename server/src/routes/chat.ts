@@ -40,7 +40,7 @@ const CURRENCY_NAMES: Record<Currency, string> = {
   PYG: 'Paraguayan guaraní (PYG, symbol ₲)',
 };
 
-function systemPrompt(currency: Currency): string {
+export function systemPrompt(currency: Currency): string {
   const whole =
     decimalsFor(currency) === 0
       ? `Guaraní has no decimal subunit: amounts are always whole numbers. Never write a decimal point in an amount. Guaraní figures are large — "5k" or "5 mil" means 5,000, and a coffee costing 25,000 is unremarkable.`
@@ -60,10 +60,38 @@ is the only one that exists.
 Facts about their finances come from your tools. Never guess or invent a number:
 if you need a figure, call a tool. If a tool has no answer, say so plainly.
 
-When they mention having spent something, call propose_expense. That shows them a
-card to review and approve; it does NOT record anything. Never tell them an
-expense is logged or saved — say you've drafted it for approval. If the amount,
-merchant, or category is genuinely unclear, ask before proposing.`;
+LOGGING SPENDING. Whenever they mention money they have spent, call
+propose_expense. That shows them a card to review and approve; it does NOT
+record anything, so never say an expense is logged or saved — it is drafted,
+awaiting their approval.
+
+Read three things out of what they wrote:
+  · amount   — the figure they gave, in ${currency}
+  · merchant — the shop or place they named, spelled the way they spelled it
+  · note     — what they actually bought, if they said
+
+**Every message that mentions spending is a new expense.** Never treat one as an
+edit of an earlier draft, never assume an earlier card already covers it, and
+never reply that you have already shown them something. They cannot edit a card
+— if one is wrong they simply describe the purchase again, and you propose again.
+
+This holds even when the new message looks a lot like a card you already
+proposed — same item, same amount, same shop. A resemblance is never a reason to
+skip the tool. If they describe a purchase, you call propose_expense, every
+single time, no matter what came before it in this conversation.
+
+The two mistakes that matter most:
+
+1. The card itself displays the merchant, amount, category and note. Do NOT
+   repeat any of them in your reply — not as a list, not in a sentence. Answer
+   with one short line such as "Listo, revisá la tarjeta." and nothing more.
+2. Describing a card in your reply does not create one. A card exists only if you
+   called propose_expense on this turn. If you catch yourself typing a merchant
+   and an amount, you should have called the tool instead.
+
+Use only the merchant they named. Never reuse one from their past transactions or
+from an earlier draft. If they did not name a shop at all, ask which one it was —
+do not guess and do not substitute a plausible-sounding name.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +125,7 @@ const toolArgs = {
 
 type ToolName = keyof typeof toolArgs;
 
-function buildTools(currency: Currency): Anthropic.Tool[] {
+export function buildTools(currency: Currency): Anthropic.Tool[] {
   return [
     {
       name: 'get_budget_summary',
@@ -280,52 +308,95 @@ async function runTool(
 type MessageRow = { kind: string; payload: Record<string, unknown> };
 
 /**
- * Rebuilds the conversation from the user-visible messages. Tool calls are
- * deliberately not persisted — a coach does not need that fidelity, and keeping
- * them out avoids a schema migration.
+ * Rebuilds the conversation from the user-visible messages.
  *
- * Consecutive same-role turns are merged and leading assistant turns dropped.
- * The Messages API tolerates both, but this endpoint is a compatibility layer,
- * so it is handed the strictest well-formed shape rather than the loosest.
+ * Past `card` rows are replayed as the **tool_use / tool_result pair they
+ * actually were**, with synthesised ids. This is not cosmetic. Rendering them as
+ * assistant prose ("[Proposed an expense card for ...]") described a tool call
+ * as something the assistant had *written*, and the model duly imitated it:
+ * once one card was in history it would answer later purchases with a prose
+ * description and never call the tool — measured at 1/8 turns working. Replaying
+ * them as real tool calls took the same case to 8/8, because every prior
+ * proposal in context is now an example of calling the tool rather than an
+ * example of describing one.
+ *
+ * The `ai` text that accompanies a card is a separate assistant turn, exactly as
+ * it was when the turn originally ran.
  */
-function buildHistory(rows: MessageRow[], currency: Currency): Anthropic.MessageParam[] {
-  const turns: { role: 'user' | 'assistant'; text: string }[] = [];
+export function buildHistory(rows: MessageRow[], currency: Currency): Anthropic.MessageParam[] {
+  const out: Anthropic.MessageParam[] = [];
+  let toolSeq = 0;
 
-  for (const row of rows) {
+  const pushText = (role: 'user' | 'assistant', text: string) => {
+    if (!text) return;
+    if (out.length === 0 && role === 'assistant') return; // must open on a user turn
+    const last = out[out.length - 1];
+    // Only merge into a plain-text turn; never into one holding tool blocks.
+    if (last && last.role === role && typeof last.content === 'string') {
+      last.content = `${last.content}\n\n${text}`;
+    } else {
+      out.push({ role, content: text });
+    }
+  };
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!;
+
+    if (row.kind === 'card') {
+      // Cards proposed in the same turn belong to one assistant message, so
+      // their results come back in one user message — the same shape the live
+      // loop produces.
+      const group: Record<string, unknown>[] = [];
+      while (i < rows.length && rows[i]!.kind === 'card') group.push(rows[i++]!.payload ?? {});
+      i--;
+
+      if (out.length === 0) continue; // nothing to attach to yet
+
+      const uses: Anthropic.ToolUseBlockParam[] = [];
+      const results: Anthropic.ToolResultBlockParam[] = [];
+      for (const card of group) {
+        const id = `toolu_hist${++toolSeq}`;
+        const amount = Math.abs(minorToDisplay(Number(card.amountMinor ?? 0), currency));
+        uses.push({
+          type: 'tool_use',
+          id,
+          name: 'propose_expense',
+          input: {
+            merchant: String(card.merchant ?? 'Unknown'),
+            category: String(card.cat ?? 'food'),
+            amount,
+            note: String(card.note ?? ''),
+          },
+        });
+        results.push({
+          type: 'tool_result',
+          tool_use_id: id,
+          content: `Expense card for ${amount} ${currency} shown to the user for approval.`,
+        });
+      }
+      out.push({ role: 'assistant', content: uses });
+      out.push({ role: 'user', content: results });
+      continue;
+    }
+
     const payload = row.payload ?? {};
     switch (row.kind) {
       case 'user':
-        turns.push({ role: 'user', text: String(payload.text ?? '').trim() });
+        pushText('user', String(payload.text ?? '').trim());
         break;
       case 'ai':
-        turns.push({ role: 'assistant', text: String(payload.text ?? '').trim() });
+        pushText('assistant', String(payload.text ?? '').trim());
         break;
-      case 'card': {
-        const amount = Math.abs(minorToDisplay(Number(payload.amountMinor ?? 0), currency));
-        turns.push({
-          role: 'assistant',
-          text: `[Proposed an expense card for approval: ${String(payload.merchant ?? 'Unknown')}, ${amount} ${currency}, category ${String(payload.cat ?? 'unknown')}]`,
-        });
-        break;
-      }
       case 'voice':
-        turns.push({ role: 'user', text: '[sent a voice note]' });
+        pushText('user', '[sent a voice note]');
         break;
       case 'receipt':
-        turns.push({ role: 'user', text: '[sent a photo of a receipt]' });
+        pushText('user', '[sent a photo of a receipt]');
         break;
     }
   }
 
-  const merged: Anthropic.MessageParam[] = [];
-  for (const turn of turns) {
-    if (!turn.text) continue;
-    if (merged.length === 0 && turn.role === 'assistant') continue; // must open on a user turn
-    const last = merged[merged.length - 1];
-    if (last && last.role === turn.role) last.content = `${last.content as string}\n\n${turn.text}`;
-    else merged.push({ role: turn.role, content: turn.text });
-  }
-  return merged;
+  return out;
 }
 
 async function insertMessage(userId: string, kind: string, payload: Record<string, unknown>) {

@@ -105,6 +105,16 @@ Right now there's exactly one implicit user ("Maya Fernández", hardcoded in
 > - **Tool arguments are zod-validated before execution**, with failures
 >   returned as `is_error` tool results so the model self-corrects. This matters
 >   more on a cheap model than it would on a frontier one.
+> - **Past `card` messages are replayed into history as real
+>   `tool_use`/`tool_result` pairs**, not as prose. This is load-bearing, not
+>   cosmetic. They were originally rendered as an assistant line reading
+>   `[Proposed an expense card for ...]`, which described a tool call as
+>   something the assistant had *written* — so after one card existed the model
+>   answered later purchases with a prose description and never called the tool.
+>   Measured at **1/8** turns working; replaying them as genuine tool calls took
+>   the same case to **8/8**. `server/repro-coach.ts` is the harness that
+>   measured it; re-run it before changing the prompt or the history shape,
+>   because these failures are stochastic and cannot be spotted by eye.
 >
 > Streaming was considered and rejected: React Native's `fetch` is XHR-backed
 > and does not expose `response.body`, so SSE would need a dependency Expo Go
