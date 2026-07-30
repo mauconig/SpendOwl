@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { FadeIn } from '../components/FadeIn';
 import { Laser } from '../components/Laser';
@@ -369,6 +369,19 @@ export function ChatScreen() {
   // than BottomNav actually needs compensating here. A little extra breathing
   // room keeps the input from sitting flush against the keyboard's top edge.
   const bottomPadding = keyboardHeight > 0 ? Math.max(keyboardHeight - store.bottomNavHeight, 0) + 12 : 0;
+
+  // The keyboard opening shrinks the ScrollView's own visible height (the
+  // padding above absorbs that space) without touching content size, so the
+  // `onContentSizeChange` scroll below never fires for it — the last few
+  // messages end up sitting behind the keyboard with no signal telling the
+  // list to catch up. This is the one that does: re-scroll to the end
+  // whenever the keyboard's height changes, the same way opening the
+  // keyboard on a message you sent a moment ago should bring you back to it.
+  useEffect(() => {
+    if (keyboardHeight === 0) return;
+    const id = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    return () => clearTimeout(id);
+  }, [keyboardHeight]);
 
   const hasContent = store.input.trim().length > 0 || store.attachment;
 

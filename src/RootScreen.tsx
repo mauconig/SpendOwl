@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Dimensions, NativeScrollEvent, NativeSyntheticEvent, ScrollView, View } from 'react-native';
 import { BottomNav } from './components/BottomNav';
-import { Header } from './components/Header';
 import { AddCardSheet } from './modals/AddCardSheet';
 import { AffordModal } from './modals/AffordModal';
 import { CardPayoffModal } from './modals/CardPayoffModal';
@@ -54,7 +53,6 @@ export function RootScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.screenBg }}>
-      <Header />
       <View style={{ flex: 1 }}>
         <ScrollView
           ref={scrollRef}
