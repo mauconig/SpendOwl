@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -9,7 +8,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { SlideUp } from '../components/FadeIn';
+import { ModalShell } from '../components/ModalShell';
 import { minorToEur, type ApiTransaction } from '../api/types';
 import { CATS, colors, fonts, formatMoney, moneyFont, type Currency } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
@@ -87,126 +86,120 @@ export function TransactionsSheet() {
   const active = sections[activeIx];
 
   return (
-    <Modal visible={txOpen} transparent animationType="fade" onRequestClose={store.closeTx}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(4,5,8,.6)', justifyContent: 'flex-end' }}>
-        {/* Dismiss area. A sibling rather than a wrapper, so no press handler
-            sits between the touch and the sheet's two scroll axes. */}
-        <Pressable style={{ flex: 1 }} onPress={store.closeTx} />
+    <ModalShell
+      visible={txOpen}
+      onClose={store.closeTx}
+      contentStyle={{
+        height: sheetHeight,
+        backgroundColor: colors.bottomSheet,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,.1)',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingTop: 10,
+        paddingBottom: 18,
+      }}
+    >
+      <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,.2)', alignSelf: 'center', marginBottom: 14 }} />
 
-        <SlideUp
-          style={{
-            height: sheetHeight,
-            backgroundColor: colors.bottomSheet,
-            borderTopWidth: 1,
-            borderTopColor: 'rgba(255,255,255,.1)',
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-            paddingTop: 10,
-            paddingBottom: 18,
-          }}
-        >
-          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,.2)', alignSelf: 'center', marginBottom: 14 }} />
+      <View style={{ paddingHorizontal: PAD, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>All transactions</Text>
+        {selCat && (
+          <Pressable
+            onPress={() => store.setSelCat(null)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#F2F2F4', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 11 }}
+          >
+            <Text style={{ fontSize: 11.5, fontFamily: fonts.medium, color: '#0A0A0B' }}>{CATS[selCat].name} ✕</Text>
+          </Pressable>
+        )}
+      </View>
 
-          <View style={{ paddingHorizontal: PAD, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>All transactions</Text>
-            {selCat && (
-              <Pressable
-                onPress={() => store.setSelCat(null)}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#F2F2F4', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 11 }}
-              >
-                <Text style={{ fontSize: 11.5, fontFamily: fonts.medium, color: '#0A0A0B' }}>{CATS[selCat].name} ✕</Text>
-              </Pressable>
-            )}
-          </View>
+      {sections.length === 0 ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 13, color: colors.textDim45 }}>
+            {selCat ? `Nothing in ${CATS[selCat].name} yet.` : 'No transactions yet.'}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <ScrollView
+            ref={stripRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ flexGrow: 0, marginTop: 12 }}
+            contentContainerStyle={{ paddingHorizontal: PAD, gap: 7 }}
+          >
+            {sections.map((section, i) => {
+              const isActive = i === activeIx;
+              return (
+                <Pressable
+                  key={section.monthKey}
+                  onLayout={e => {
+                    chipX.current[i] = e.nativeEvent.layout.x;
+                  }}
+                  onPress={() => goToMonth(i)}
+                  style={{
+                    borderRadius: 999,
+                    paddingVertical: 6,
+                    paddingHorizontal: 13,
+                    backgroundColor: isActive ? '#F2F2F4' : colors.cardAlt,
+                    borderWidth: 1,
+                    borderColor: isActive ? '#F2F2F4' : colors.cardBorder,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      fontFamily: isActive ? fonts.bold : fonts.medium,
+                      color: isActive ? '#0A0A0B' : colors.textDim60,
+                    }}
+                  >
+                    {section.title}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
-          {sections.length === 0 ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontSize: 13, color: colors.textDim45 }}>
-                {selCat ? `Nothing in ${CATS[selCat].name} yet.` : 'No transactions yet.'}
+          {active && (
+            <View style={{ paddingHorizontal: PAD, marginTop: 11, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1.5, color: colors.textDim50 }}>
+                {active.data.length} TRANSACTION{active.data.length === 1 ? '' : 'S'}
+              </Text>
+              <Text style={{ fontSize: 11.5, fontFamily: moneyFont(baseCur, 'medium'), color: colors.textDim60 }}>
+                {formatMoney(minorToEur(active.spentMinor), baseCur, 2)} spent
               </Text>
             </View>
-          ) : (
-            <>
-              <ScrollView
-                ref={stripRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={{ flexGrow: 0, marginTop: 12 }}
-                contentContainerStyle={{ paddingHorizontal: PAD, gap: 7 }}
-              >
-                {sections.map((section, i) => {
-                  const isActive = i === activeIx;
-                  return (
-                    <Pressable
-                      key={section.monthKey}
-                      onLayout={e => {
-                        chipX.current[i] = e.nativeEvent.layout.x;
-                      }}
-                      onPress={() => goToMonth(i)}
-                      style={{
-                        borderRadius: 999,
-                        paddingVertical: 6,
-                        paddingHorizontal: 13,
-                        backgroundColor: isActive ? '#F2F2F4' : colors.cardAlt,
-                        borderWidth: 1,
-                        borderColor: isActive ? '#F2F2F4' : colors.cardBorder,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 11.5,
-                          fontFamily: isActive ? fonts.bold : fonts.medium,
-                          color: isActive ? '#0A0A0B' : colors.textDim60,
-                        }}
-                      >
-                        {section.title}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-
-              {active && (
-                <View style={{ paddingHorizontal: PAD, marginTop: 11, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                  <Text style={{ fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1.5, color: colors.textDim50 }}>
-                    {active.data.length} TRANSACTION{active.data.length === 1 ? '' : 'S'}
-                  </Text>
-                  <Text style={{ fontSize: 11.5, fontFamily: moneyFont(baseCur, 'medium'), color: colors.textDim60 }}>
-                    {formatMoney(minorToEur(active.spentMinor), baseCur, 2)} spent
-                  </Text>
-                </View>
-              )}
-
-              <ScrollView
-                ref={pagerRef}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                onMomentumScrollEnd={onPagerEnd}
-                style={{ flex: 1, marginTop: 4 }}
-              >
-                {sections.map(section => (
-                  <View key={section.monthKey} style={{ width }}>
-                    <ScrollView
-                      style={{ flex: 1 }}
-                      contentContainerStyle={{ paddingHorizontal: PAD, paddingTop: 6, paddingBottom: 24 }}
-                      showsVerticalScrollIndicator={false}
-                    >
-                      {section.data.map((tx, i) => (
-                        <View key={tx.id}>
-                          {i > 0 && <View style={{ height: 1, backgroundColor: colors.hairline, marginLeft: 46 }} />}
-                          <TxRow tx={tx} baseCur={baseCur} />
-                        </View>
-                      ))}
-                    </ScrollView>
-                  </View>
-                ))}
-              </ScrollView>
-            </>
           )}
-        </SlideUp>
-      </View>
-    </Modal>
+
+          <ScrollView
+            ref={pagerRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={onPagerEnd}
+            style={{ flex: 1, marginTop: 4 }}
+          >
+            {sections.map(section => (
+              <View key={section.monthKey} style={{ width }}>
+                <ScrollView
+                  style={{ flex: 1 }}
+                  contentContainerStyle={{ paddingHorizontal: PAD, paddingTop: 6, paddingBottom: 24 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {section.data.map((tx, i) => (
+                    <View key={tx.id}>
+                      {i > 0 && <View style={{ height: 1, backgroundColor: colors.hairline, marginLeft: 46 }} />}
+                      <TxRow tx={tx} baseCur={baseCur} />
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            ))}
+          </ScrollView>
+        </>
+      )}
+    </ModalShell>
   );
 }
 

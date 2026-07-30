@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { Paper } from '../components/Paper';
 import { Toggle } from '../components/Toggle';
@@ -20,11 +20,21 @@ function Field({ label, value, valueColor }: { label: string; value: string; val
 export function InvoiceDetail() {
   const store = useSpendOwl();
   const inv = store.invOpen ? store.vaultItems.find(v => v.id === store.invOpen) : null;
-  if (!inv) return null;
 
-  const status = inv.status;
+  // Retained through the closing animation. This is full-screen rather than a
+  // sheet, so it keeps RN's own `slide` — which already travels bottom-to-top
+  // and back down — but returning null the moment `inv` cleared unmounted the
+  // Modal before the slide out could play, and it just blinked away.
+  const [shown, setShown] = useState(inv);
+  useEffect(() => {
+    if (inv) setShown(inv);
+  }, [inv]);
+
+  if (!shown) return null;
+
+  const status = shown.status;
   const isWarn = status === 'warn';
-  const card = store.cardFor('inv-' + inv.id);
+  const card = store.cardFor('inv-' + shown.id);
 
   return (
     <Modal visible={!!inv} transparent animationType="slide" onRequestClose={store.closeInvoice}>
@@ -37,7 +47,7 @@ export function InvoiceDetail() {
         </View>
         <ScrollView contentContainerStyle={{ padding: 18, paddingTop: 4, paddingBottom: 24, gap: 14 }}>
           <View style={{ alignSelf: 'center', width: 150, height: 190, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,.1)' }}>
-            <Paper seed={inv.seed} />
+            <Paper seed={shown.seed} />
           </View>
 
           {isWarn ? (
@@ -58,18 +68,18 @@ export function InvoiceDetail() {
           )}
 
           <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 18, paddingHorizontal: 16 }}>
-            <Field label="MERCHANT" value={inv.merchant} />
+            <Field label="MERCHANT" value={shown.merchant} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
-            <Field label="DATE" value={longDate(inv.occurredAt)} />
+            <Field label="DATE" value={longDate(shown.occurredAt)} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
-            <Field label="CATEGORY" value={inv.cat} />
+            <Field label="CATEGORY" value={shown.cat} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
             <Field label="VAT ID" value={isWarn ? 'Missing — tap to add' : 'ESB-84920115'} valueColor={isWarn ? colors.amber : colors.text} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }}>
               <Text style={{ fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 1, color: colors.textDim45 }}>TOTAL</Text>
               <Text style={{ fontSize: 24, fontFamily: moneyFont(store.baseCur, 'bold'), color: '#FFFFFF' }}>
-                {formatMoney(inv.amountEur, store.baseCur, 2)}
+                {formatMoney(shown.amountEur, store.baseCur, 2)}
               </Text>
             </View>
           </View>
@@ -79,7 +89,7 @@ export function InvoiceDetail() {
               <Text style={{ fontSize: 14, fontFamily: fonts.medium, color: colors.text }}>Tax deductible</Text>
               <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 2 }}>Flag as business expense for your Q3 return</Text>
             </View>
-            <Toggle on={card.tax} onToggle={() => store.setCard('inv-' + inv.id, { tax: !card.tax })} />
+            <Toggle on={card.tax} onToggle={() => store.setCard('inv-' + shown.id, { tax: !card.tax })} />
           </View>
 
           {isWarn && (

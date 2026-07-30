@@ -1,7 +1,6 @@
-import { BlurView } from 'expo-blur';
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
-import { SlideUp } from '../components/FadeIn';
+import { Pressable, Text, TextInput, View } from 'react-native';
+import { ModalShell } from '../components/ModalShell';
 import { colors, fonts, formatMoney, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { monthsForPayment, paymentForMonths, totalInterestPaid } from '../utils/payoff';
@@ -35,7 +34,15 @@ export function CardPayoffModal() {
     setPaymentInput(String(Math.max(Math.round(card.balance * 0.03), 25)));
   }, [store.payoffCardId]);
 
-  if (!card) return null;
+  // `card` goes null the instant the modal is dismissed, and returning null on
+  // that would unmount the shell before it could animate out. Holding on to the
+  // last one keeps the content on screen for the length of the slide down.
+  const [shown, setShown] = useState(card);
+  useEffect(() => {
+    if (card) setShown(card);
+  }, [card]);
+
+  if (!shown) return null;
 
   const months = Number(monthsInput);
   const payment = Number(paymentInput);
@@ -45,15 +52,15 @@ export function CardPayoffModal() {
   let interest = 0;
 
   if (mode === 'months' && months > 0) {
-    resultPayment = paymentForMonths(card.balance, card.apr, months);
-    interest = totalInterestPaid(card.balance, resultPayment, months);
+    resultPayment = paymentForMonths(shown.balance, shown.apr, months);
+    interest = totalInterestPaid(shown.balance, resultPayment, months);
   } else if (mode === 'payment' && payment > 0) {
-    resultMonths = monthsForPayment(card.balance, card.apr, payment);
-    if (resultMonths !== null) interest = totalInterestPaid(card.balance, payment, resultMonths);
+    resultMonths = monthsForPayment(shown.balance, shown.apr, payment);
+    if (resultMonths !== null) interest = totalInterestPaid(shown.balance, payment, resultMonths);
   }
 
   const neverPaysOff = mode === 'payment' && payment > 0 && resultMonths === null;
-  const interestRatio = card.balance > 0 ? interest / card.balance : 0;
+  const interestRatio = shown.balance > 0 ? interest / shown.balance : 0;
   const verdict = neverPaysOff
     ? { t: `This payment won't cover the interest — you'd never pay it off. Try a higher amount.`, c: colors.rose, bd: 'rgba(248,113,113,.35)' }
     : interestRatio < 0.2
@@ -63,76 +70,74 @@ export function CardPayoffModal() {
         : { t: `≈ ${formatMoney(interest, baseCur, 2)} in interest — this will cost you a lot over time.`, c: colors.rose, bd: 'rgba(248,113,113,.35)' };
 
   return (
-    <Modal visible={!!card} transparent animationType="fade" onRequestClose={store.closePayoff}>
-      <Pressable onPress={store.closePayoff} style={{ flex: 1 }}>
-        <BlurView intensity={30} tint="dark" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20, backgroundColor: 'rgba(4,5,8,.5)' }}>
-          <Pressable onPress={e => e.stopPropagation()} style={{ width: '100%' }}>
-            <SlideUp style={{ width: '100%', backgroundColor: colors.sheet, borderWidth: 1, borderColor: colors.sheetBorder, borderRadius: 24, padding: 20, gap: 16 }}>
-              <View>
-                <Text style={{ fontSize: 18, fontFamily: fonts.bold, color: colors.text }}>{card.name}</Text>
-                <Text style={{ fontSize: 12.5, color: colors.textDim55, marginTop: 3 }}>
-                  •••• {card.last4} · {formatMoney(card.balance, baseCur, 2)} at {card.apr}% APR
-                </Text>
-              </View>
+    <ModalShell
+      visible={!!card}
+      onClose={store.closePayoff}
+      variant="center"
+      blur
+      contentStyle={{ backgroundColor: colors.sheet, borderWidth: 1, borderColor: colors.sheetBorder, borderRadius: 24, padding: 20, gap: 16 }}
+    >
+      <View>
+        <Text style={{ fontSize: 18, fontFamily: fonts.bold, color: colors.text }}>{shown.name}</Text>
+        <Text style={{ fontSize: 12.5, color: colors.textDim55, marginTop: 3 }}>
+          •••• {shown.last4} · {formatMoney(shown.balance, baseCur, 2)} at {shown.apr}% APR
+        </Text>
+      </View>
 
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <Chip label="Target a date" active={mode === 'months'} onPress={() => setMode('months')} />
-                <Chip label="Set a payment" active={mode === 'payment'} onPress={() => setMode('payment')} />
-              </View>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Chip label="Target a date" active={mode === 'months'} onPress={() => setMode('months')} />
+        <Chip label="Set a payment" active={mode === 'payment'} onPress={() => setMode('payment')} />
+      </View>
 
-              {mode === 'months' ? (
-                <View style={{ gap: 6 }}>
-                  <Text style={{ fontSize: 12, color: colors.textDim50 }}>Months to pay off</Text>
-                  <TextInput
-                    value={monthsInput}
-                    onChangeText={setMonthsInput}
-                    keyboardType="number-pad"
-                    placeholder="12"
-                    placeholderTextColor="rgba(245,245,247,.3)"
-                    style={{ backgroundColor: colors.input, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, color: colors.text, fontSize: 14.5 }}
-                  />
-                </View>
-              ) : (
-                <View style={{ gap: 6 }}>
-                  <Text style={{ fontSize: 12, color: colors.textDim50 }}>Monthly payment</Text>
-                  <TextInput
-                    value={paymentInput}
-                    onChangeText={setPaymentInput}
-                    keyboardType="decimal-pad"
-                    placeholder="0.00"
-                    placeholderTextColor="rgba(245,245,247,.3)"
-                    style={{ backgroundColor: colors.input, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, color: colors.text, fontSize: 14.5 }}
-                  />
-                </View>
-              )}
+      {mode === 'months' ? (
+        <View style={{ gap: 6 }}>
+          <Text style={{ fontSize: 12, color: colors.textDim50 }}>Months to pay off</Text>
+          <TextInput
+            value={monthsInput}
+            onChangeText={setMonthsInput}
+            keyboardType="number-pad"
+            placeholder="12"
+            placeholderTextColor="rgba(245,245,247,.3)"
+            style={{ backgroundColor: colors.input, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, color: colors.text, fontSize: 14.5 }}
+          />
+        </View>
+      ) : (
+        <View style={{ gap: 6 }}>
+          <Text style={{ fontSize: 12, color: colors.textDim50 }}>Monthly payment</Text>
+          <TextInput
+            value={paymentInput}
+            onChangeText={setPaymentInput}
+            keyboardType="decimal-pad"
+            placeholder="0.00"
+            placeholderTextColor="rgba(245,245,247,.3)"
+            style={{ backgroundColor: colors.input, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, color: colors.text, fontSize: 14.5 }}
+          />
+        </View>
+      )}
 
-              <View style={{ alignItems: 'center', gap: 4 }}>
-                {mode === 'months' && resultPayment !== null && (
-                  <Text style={{ fontSize: 22, fontFamily: moneyFont(baseCur, 'bold'), color: colors.text }}>
-                    {formatMoney(resultPayment, baseCur, 2)}
-                    <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: colors.textDim50 }}> / month</Text>
-                  </Text>
-                )}
-                {mode === 'payment' && resultMonths !== null && (
-                  <Text style={{ fontSize: 22, fontFamily: fonts.bold, color: colors.text }}>
-                    {resultMonths} <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: colors.textDim50 }}>months to debt-free</Text>
-                  </Text>
-                )}
-              </View>
+      <View style={{ alignItems: 'center', gap: 4 }}>
+        {mode === 'months' && resultPayment !== null && (
+          <Text style={{ fontSize: 22, fontFamily: moneyFont(baseCur, 'bold'), color: colors.text }}>
+            {formatMoney(resultPayment, baseCur, 2)}
+            <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: colors.textDim50 }}> / month</Text>
+          </Text>
+        )}
+        {mode === 'payment' && resultMonths !== null && (
+          <Text style={{ fontSize: 22, fontFamily: fonts.bold, color: colors.text }}>
+            {resultMonths} <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: colors.textDim50 }}>months to debt-free</Text>
+          </Text>
+        )}
+      </View>
 
-              {((mode === 'months' && months > 0) || (mode === 'payment' && payment > 0)) && (
-                <View style={{ alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: verdict.bd, borderRadius: 12, padding: 10, paddingHorizontal: 12 }}>
-                  <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: verdict.c, textAlign: 'center' }}>{verdict.t}</Text>
-                </View>
-              )}
+      {((mode === 'months' && months > 0) || (mode === 'payment' && payment > 0)) && (
+        <View style={{ alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: verdict.bd, borderRadius: 12, padding: 10, paddingHorizontal: 12 }}>
+          <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: verdict.c, textAlign: 'center' }}>{verdict.t}</Text>
+        </View>
+      )}
 
-              <Pressable onPress={store.closePayoff} style={{ alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: '#F2F2F4' }}>
-                <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: '#0A0A0B' }}>Done</Text>
-              </Pressable>
-            </SlideUp>
-          </Pressable>
-        </BlurView>
+      <Pressable onPress={store.closePayoff} style={{ alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: '#F2F2F4' }}>
+        <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: '#0A0A0B' }}>Done</Text>
       </Pressable>
-    </Modal>
+    </ModalShell>
   );
 }
