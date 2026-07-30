@@ -148,6 +148,42 @@ const migrations: Migration[] = [
         CHECK (last4 IS NULL OR char_length(last4) = 4);
     `,
   },
+  {
+    version: 4,
+    name: 'bank_discounts',
+    sql: /* sql */ `
+      -- Card discounts/"reintegros" scraped from banks' own public promo pages
+      -- (server/src/scraper/). Global, not user-scoped: every user sees the
+      -- same bank offers, so there is no user_id here. A scraper run upserts on
+      -- (bank, external_id) and deletes rows for promos no longer listed, so
+      -- this table always mirrors the bank's current page rather than
+      -- accumulating stale offers.
+      --
+      -- 'percent' is always the LOWER of a bank's tiered rates (e.g. GNB's
+      -- Bases y Condiciones PDFs list a higher rate for Black/Premier cards
+      -- and a lower one for Clasica/Oro) — the extraction step in
+      -- scraper/extract.ts enforces that, never this table.
+      CREATE TABLE bank_discounts (
+        id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        bank                 TEXT NOT NULL,
+        external_id          TEXT NOT NULL,
+        merchant             TEXT NOT NULL,
+        category             TEXT,
+        percent              NUMERIC,
+        installments         SMALLINT,
+        eligible_days        TEXT,
+        monthly_cap_minor    INTEGER,
+        monthly_cap_currency TEXT CHECK (monthly_cap_currency IS NULL OR monthly_cap_currency IN ('EUR', 'USD', 'PYG')),
+        valid_from           DATE,
+        valid_until          DATE,
+        description          TEXT NOT NULL,
+        source_url           TEXT NOT NULL,
+        bases_url            TEXT,
+        scraped_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX bank_discounts_bank_external_idx ON bank_discounts (bank, external_id);
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {

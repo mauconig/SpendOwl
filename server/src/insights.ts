@@ -179,6 +179,15 @@ icon — pick the one that fits: trendUp good/improving, trendDown worsening, wa
 attention, pie category mix, bars subscriptions or comparisons, card credit cards,
 spark anything else.
 
+DISCOUNTS. discountsForYourMerchants lists Banco GNB reintegro/discount offers currently
+active at places this person actually shops (already matched against their own merchant
+history — never invent one not in this list). Mention one only when it is genuinely
+notable: a place they visit often, a meaningful percent, or a deadline worth acting on.
+State the percent plainly and mention eligibleDays or monthlyCapGuaranies only if present.
+monthlyCapGuaranies, when present, is ALWAYS in Paraguayan guaranies regardless of this
+person's account currency (${currency}) — write it as "₲" with dots for thousands (e.g.
+₲1.000.000), never convert it and never imply it is in ${currency}.
+
 action — where tapping the card should take them, and it must match what your cta
 promises: dashboard for spending, budget, categories and credit cards;
 subscriptions for renewals; chat only when the cta actually invites them to talk to
@@ -234,7 +243,7 @@ const emitTool: Anthropic.Tool = {
 async function buildSnapshot(userId: string, currency: Currency) {
   const money = (minor: number) => minorToDisplay(minor, currency);
 
-  const [summary, transactions, merchants, subscriptions, cards, facturas] = await Promise.all([
+  const [summary, transactions, merchants, subscriptions, cards, facturas, discounts] = await Promise.all([
     getSummary(userId),
     query<{ merchant: string; category: string; amountMinor: number; occurredAt: string; note: string | null }>(
       `SELECT merchant, category, amount_minor AS "amountMinor", occurred_at AS "occurredAt", note
@@ -275,6 +284,23 @@ async function buildSnapshot(userId: string, currency: Currency) {
           [userId]
         )
       : Promise.resolve([]),
+    // Global, not user-scoped — every user reads the same currently-valid
+    // rows scraped by server/src/scraper/. Filtered down to the user's own
+    // merchants in JS below, not here, since that's a fuzzy match rather
+    // than something SQL can express cleanly.
+    query<{
+      merchant: string;
+      category: string | null;
+      percent: number | null;
+      installments: number | null;
+      eligibleDays: string | null;
+      monthlyCapMinor: number | null;
+    }>(
+      `SELECT merchant, category, percent, installments, eligible_days AS "eligibleDays",
+              monthly_cap_minor AS "monthlyCapMinor"
+         FROM bank_discounts
+        WHERE valid_until IS NULL OR valid_until >= CURRENT_DATE`
+    ),
   ]);
 
   if (!summary) return null;
@@ -287,6 +313,20 @@ async function buildSnapshot(userId: string, currency: Currency) {
 
   const active = subscriptions.filter(s => !s.off);
   const daysLeft = Math.max(summary.daysLeft, 1);
+
+  // Fuzzy, case-insensitive substring match against merchants the user has
+  // actually transacted with — a scraped GNB discount is only worth a card
+  // when it applies somewhere they actually shop, not just because it exists.
+  const userMerchants = new Set(
+    [...transactions, ...merchants].map(t => t.merchant.toLowerCase().trim())
+  );
+  const matchesUser = (discountMerchant: string): boolean => {
+    const lower = discountMerchant.toLowerCase().trim();
+    for (const u of userMerchants) {
+      if (u.includes(lower) || lower.includes(u)) return true;
+    }
+    return false;
+  };
 
   return {
     // `trend` is omitted for the same reason the coach omits it: 30 rows of
@@ -341,6 +381,20 @@ async function buildSnapshot(userId: string, currency: Currency) {
         apr: c.apr,
         monthlyInterest: money(Math.round((c.balanceMinor * c.apr) / 100 / 12)),
       })),
+      // Always in guaranies regardless of the user's account currency — these
+      // are Paraguayan bank promos, not a figure from this user's own data, so
+      // running them through money() (which assumes the account currency)
+      // would silently mislabel a PYG amount as EUR or USD.
+      discountsForYourMerchants: discounts
+        .filter(d => matchesUser(d.merchant))
+        .map(d => ({
+          merchant: d.merchant,
+          category: d.category,
+          percent: d.percent,
+          installments: d.installments,
+          eligibleDays: d.eligibleDays,
+          monthlyCapGuaranies: d.monthlyCapMinor != null ? minorToDisplay(d.monthlyCapMinor, 'PYG') : null,
+        })),
       ...(FACTURAS_ENABLED
         ? {
             facturasNeedingReview: facturas.map(f => ({
