@@ -7,8 +7,10 @@ import {
   useApproveReceipt,
   useCreditCards,
   useDeleteMessage,
+  useInsights,
   useMessages,
   useReceipts,
+  useRefreshInsights,
   useRemoveCreditCard,
   useSendChat,
   useSubscriptions,
@@ -18,7 +20,7 @@ import {
   useUpdateSubscription,
   useSettings,
 } from '../api/hooks';
-import { eurToMinor, minorToEur, type ApiSummary, type ApiTransaction } from '../api/types';
+import { eurToMinor, minorToEur, type ApiInsight, type ApiSummary, type ApiTransaction } from '../api/types';
 import { CatKey, Currency } from '../theme';
 import { ordinalDay, shortDate } from '../utils/date';
 import {
@@ -71,6 +73,10 @@ interface SpendOwlStore {
   cardFor: (id: string) => CardState;
   setCard: (id: string, patch: Partial<CardState>) => void;
   rejectCard: (id: string) => void;
+
+  // home — the model-written "For you today" cards. Empty is normal and safe:
+  // HomeScreen falls back to its rule-based cards whenever it is.
+  insights: ApiInsight[];
 
   // dashboard
   summary: ApiSummary | null;
@@ -158,6 +164,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const receiptsQuery = useReceipts();
   const messagesQuery = useMessages();
   const settingsQuery = useSettings();
+  const insightsQuery = useInsights();
 
   const addTransaction = useAddTransaction();
   const addCard = useAddCreditCard();
@@ -169,7 +176,12 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const deleteMessage = useDeleteMessage();
   const sendChat = useSendChat();
   const updateSettings = useUpdateSettings();
+  const refreshInsights = useRefreshInsights();
 
+  // insightsQuery is deliberately absent: insights are an enhancement, not a
+  // prerequisite. Including it here would let a slow or failed generation put
+  // the whole app behind a spinner or an error screen, when the correct
+  // behaviour is for Home to quietly show its rule-based cards instead.
   const queries = [transactionsQuery, summaryQuery, cardsQuery, subsQuery, receiptsQuery, messagesQuery, settingsQuery];
   const loading = queries.some(q => q.isLoading);
   const firstError = queries.find(q => q.error)?.error;
@@ -198,6 +210,27 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   // ---- API -> view models ----
   const settings = settingsQuery.data;
   const baseCur: Currency = settings?.baseCurrency ?? 'EUR';
+
+  /**
+   * Today's insight cards are generated on the first Home load of the day. The
+   * server owns the staleness rule — it covers both the date and the currency,
+   * since the amounts are baked into the card text — so the client only reacts
+   * to the flag.
+   *
+   * The ref records *what* was asked for rather than merely that something was,
+   * which is what makes the two cases behave differently: a failed generation
+   * is not retried on every render, but switching currency in Settings produces
+   * a new key and does regenerate. This lives in the provider rather than in
+   * HomeScreen so that navigating back to Home cannot re-trigger it.
+   */
+  const insightRequestRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!insightsQuery.data?.stale) return;
+    const key = `${baseCur}:${new Date().toDateString()}`;
+    if (insightRequestRef.current === key) return;
+    insightRequestRef.current = key;
+    refreshInsights.mutate();
+  }, [insightsQuery.data?.stale, baseCur, refreshInsights.mutate]);
 
   const creditCards = useMemo<CreditCard[]>(
     () =>
@@ -487,6 +520,8 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     cardFor,
     setCard,
     rejectCard,
+
+    insights: insightsQuery.data?.insights ?? [],
 
     summary,
     transactions: transactionsQuery.data ?? [],

@@ -1,0 +1,359 @@
+import Anthropic from '@anthropic-ai/sdk';
+import { z } from 'zod';
+import { type Currency, decimalsFor, minorToDisplay } from './currency.ts';
+import { query, transaction } from './db.ts';
+import { env } from './env.ts';
+import { getSummary } from './summary.ts';
+
+/**
+ * The Home screen's "For you today" cards.
+ *
+ * HomeScreen used to build these from four hardcoded rules — pace, top
+ * category, upcoming renewals, facturas needing review. Every figure was real,
+ * but the app could only ever notice the four things someone thought to write
+ * an `if` for. This lets it notice the rest: a merchant that has quietly become
+ * the second-biggest line item, three renewals landing on the same day, a week
+ * that looks nothing like the last three.
+ *
+ * Two things separate this from the chat coach in routes/chat.ts:
+ *
+ * 1. **No tool loop.** We already know exactly which data is relevant, so we
+ *    gather it and hand it over in one call. The model's only job is to notice
+ *    and phrase — it never decides what to fetch. One request, bounded latency.
+ * 2. **The tool is the output schema, not an action.** `emit_insights` is
+ *    forced with tool_choice, so a card is a validated object rather than prose
+ *    to be parsed. Free-text JSON was the alternative and is markedly less
+ *    reliable through the compatibility shim.
+ *
+ * Those four rules still exist in the client and render whenever this produces
+ * nothing — no API key, failed call, generation not yet run. Home is never
+ * blank and never wrong; the AI is an upgrade over the floor, not a dependency.
+ */
+
+const MAX_TOKENS = 2048;
+const MAX_CARDS = 4;
+const TX_SAMPLE = 25;
+
+// Names that already exist in src/icons.tsx. The client maps each to a palette
+// colour — deliberately not a model choice, since a model picking hex values
+// only ever drifts off-palette.
+const ICONS = ['trendUp', 'trendDown', 'pie', 'bars', 'warn', 'spark', 'card'] as const;
+
+// A card cannot carry a closure, so it names a destination and the client
+// resolves it to the same navigation the rule cards already used.
+const ACTIONS = ['chat', 'dashboard', 'subscriptions', 'vault'] as const;
+
+export type Insight = {
+  title: string;
+  body: string;
+  cta: string;
+  icon: (typeof ICONS)[number];
+  action: (typeof ACTIONS)[number];
+  targetId: string | null;
+};
+
+const cardSchema = z.object({
+  title: z.string().trim().min(1).max(60),
+  body: z.string().trim().min(1).max(240),
+  cta: z.string().trim().min(1).max(40),
+  icon: z.enum(ICONS),
+  action: z.enum(ACTIONS),
+  targetId: z.string().trim().optional(),
+});
+
+const argsSchema = z.object({ insights: z.array(cardSchema).min(1).max(MAX_CARDS) });
+
+// ---------------------------------------------------------------------------
+// Reading the cache
+// ---------------------------------------------------------------------------
+
+export type InsightSet = {
+  generatedOn: string | null;
+  currency: Currency | null;
+  /** True when Home should ask for a regeneration. */
+  stale: boolean;
+  insights: Insight[];
+};
+
+type InsightRow = Insight & { generatedOn: string; currency: Currency };
+
+const SELECT_FRESH = /* sql */ `
+  SELECT generated_on AS "generatedOn", currency, title, body, cta, icon, action,
+         target_id AS "targetId"
+    FROM insights
+   WHERE user_id = $1 AND generated_on = CURRENT_DATE AND currency = $2
+   ORDER BY rank`;
+
+/** Cache only — never calls the model, so Home always renders immediately. */
+export async function readInsights(userId: string, currency: Currency): Promise<InsightSet> {
+  const rows = await query<InsightRow>(SELECT_FRESH, [userId, currency]);
+  const first = rows[0];
+  return {
+    generatedOn: first?.generatedOn ?? null,
+    currency: first?.currency ?? null,
+    stale: rows.length === 0,
+    insights: rows.map(({ title, body, cta, icon, action, targetId }) => ({
+      title,
+      body,
+      cta,
+      icon,
+      action,
+      targetId,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Generating
+// ---------------------------------------------------------------------------
+
+const CURRENCY_NAMES: Record<Currency, string> = {
+  EUR: 'euros (EUR, symbol €)',
+  USD: 'US dollars (USD, symbol $)',
+  PYG: 'Paraguayan guaraní (PYG, symbol ₲)',
+};
+
+function systemPrompt(currency: Currency): string {
+  const format =
+    decimalsFor(currency) === 0
+      ? 'Guaraní has no decimal subunit. Write whole numbers with dots for thousands — ₲1.850.000, never ₲1,850,000 and never ₲1.85M.'
+      : 'Write amounts with two decimals and a comma for thousands — €1,850.00.';
+
+  return `You write the "For you today" cards on the home screen of SpendOwl, a personal
+finance app. You are given a snapshot of one person's money and you return two to
+${MAX_CARDS} short cards about it.
+
+CURRENCY. Their currency is ${CURRENCY_NAMES[currency]}. Every figure you are given is
+already in ${currency} and every figure you write must be too. ${format} Never convert
+and never mention another currency.
+
+WHAT MAKES A GOOD CARD. The app can already state the obvious by itself: how much is
+left, which category is biggest, which subscriptions renew. Those are worth a card only
+when something about them is genuinely notable right now. Prefer what a rule cannot
+see — a merchant that has quietly become a large share of the month, several renewals
+landing on the same few days, a category that has stopped or started, spending that
+does not look like the rest of the month, a card balance that costs real interest.
+
+Ground every claim in the numbers you were given. Never estimate, extrapolate a trend
+you cannot see, or invent a merchant, amount or date. If the data is thin — a nearly
+empty month — say less rather than padding: two honest cards beat four hollow ones.
+
+VOICE. Second person, warm, specific, no scolding. Title at most six words. Body one or
+two sentences, always containing the actual figure. cta is a short action label like
+"Review subscriptions" — a label on a button, not a sentence.
+
+PLAIN TEXT ONLY. No markdown whatsoever: no **bold**, no *italics*, no backticks, no
+bullet points, no headings. The card is rendered as raw text and every asterisk you
+write is shown to the user as an asterisk.
+
+icon — pick the one that fits: trendUp good/improving, trendDown worsening, warn needs
+attention, pie category mix, bars subscriptions or comparisons, card credit cards,
+spark anything else.
+
+action — where tapping the card should take them: dashboard for spending, budget and
+categories; subscriptions for renewals; vault for facturas and receipts; chat to ask
+you a follow-up. Set targetId only on a vault card, only to the exact id of a factura
+you were given.
+
+Answer only by calling emit_insights.`;
+}
+
+const emitTool: Anthropic.Tool = {
+  name: 'emit_insights',
+  description: 'Return the insight cards for the home screen. This is the only way to answer.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      insights: {
+        type: 'array',
+        description: `Two to ${MAX_CARDS} cards, most important first.`,
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'At most six words.' },
+            body: { type: 'string', description: 'One or two sentences containing the real figure. Plain text.' },
+            cta: { type: 'string', description: 'Short button label, e.g. "Review subscriptions".' },
+            icon: { type: 'string', enum: [...ICONS] },
+            action: { type: 'string', enum: [...ACTIONS] },
+            targetId: {
+              type: 'string',
+              description: 'Only on a vault card: the id of a factura listed in facturasNeedingReview.',
+            },
+          },
+          required: ['title', 'body', 'cta', 'icon', 'action'],
+        },
+      },
+    },
+    required: ['insights'],
+  },
+};
+
+/**
+ * Everything the model gets to see, already in display currency. This is the
+ * same boundary runTool() enforces in routes/chat.ts: storage is minor units,
+ * but a model reasoning in euro cents about a guaraní account gets every
+ * amount wrong by two orders of magnitude.
+ */
+async function buildSnapshot(userId: string, currency: Currency) {
+  const money = (minor: number) => minorToDisplay(minor, currency);
+
+  const [summary, transactions, subscriptions, cards, facturas] = await Promise.all([
+    getSummary(userId),
+    query<{ merchant: string; category: string; amountMinor: number; occurredAt: string; note: string | null }>(
+      `SELECT merchant, category, amount_minor AS "amountMinor", occurred_at AS "occurredAt", note
+         FROM transactions WHERE user_id = $1
+        ORDER BY occurred_at DESC, created_at DESC LIMIT $2`,
+      [userId, TX_SAMPLE]
+    ),
+    query<{ name: string; priceMinor: number; dayOfMonth: number; off: boolean }>(
+      `SELECT name, price_minor AS "priceMinor", day_of_month AS "dayOfMonth", cancelled AS "off"
+         FROM subscriptions WHERE user_id = $1 ORDER BY price_minor DESC`,
+      [userId]
+    ),
+    query<{ name: string; balanceMinor: number; limitMinor: number; apr: number }>(
+      `SELECT name, balance_minor AS "balanceMinor", credit_limit_minor AS "limitMinor", apr
+         FROM credit_cards WHERE user_id = $1 ORDER BY balance_minor DESC`,
+      [userId]
+    ),
+    query<{ id: string; merchant: string; amountMinor: number }>(
+      `SELECT id, merchant, amount_minor AS "amountMinor"
+         FROM receipts WHERE user_id = $1 AND status = 'warn'
+        ORDER BY occurred_at DESC LIMIT 5`,
+      [userId]
+    ),
+  ]);
+
+  if (!summary) return null;
+
+  return {
+    // `trend` is omitted for the same reason the coach omits it: 30 rows of
+    // cumulative chart series answer no question and crowd out the rest.
+    snapshot: {
+      currency,
+      today: new Date().toISOString().slice(0, 10),
+      month: summary.month,
+      daysLeft: summary.daysLeft,
+      budget: money(summary.budgetMinor),
+      spent: money(summary.spentMinor),
+      income: money(summary.incomeMinor),
+      safeToSpend: money(summary.safeToSpendMinor),
+      overBudget: summary.overBudget,
+      percentOfBudget: Math.round(summary.percentOfBudget),
+      aheadOfPaceBy: money(summary.paceDeltaMinor),
+      categories: summary.categories.map(c => ({ category: c.key, spent: money(c.spentMinor) })),
+      recentTransactions: transactions.map(t => ({
+        merchant: t.merchant,
+        category: t.category,
+        amount: money(t.amountMinor),
+        date: t.occurredAt,
+        note: t.note,
+      })),
+      subscriptions: subscriptions.map(s => ({
+        name: s.name,
+        monthlyPrice: money(s.priceMinor),
+        renewsOnDay: s.dayOfMonth,
+        cancelled: s.off,
+      })),
+      creditCards: cards.map(c => ({
+        name: c.name,
+        balance: money(c.balanceMinor),
+        limit: money(c.limitMinor),
+        apr: c.apr,
+      })),
+      facturasNeedingReview: facturas.map(f => ({
+        id: f.id,
+        merchant: f.merchant,
+        amount: Math.abs(money(f.amountMinor)),
+      })),
+    },
+    // The only ids the model is permitted to reference back at us.
+    receiptIds: new Set(facturas.map(f => f.id)),
+  };
+}
+
+/**
+ * A stable 32-bit key for pg_advisory_xact_lock. Two Home mounts racing on app
+ * open is the expected case, not an edge one — without the lock both pay for a
+ * model call and one set of cards is written twice.
+ */
+function lockKey(userId: string): number {
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) hash = (Math.imul(hash, 31) + userId.charCodeAt(i)) | 0;
+  return hash;
+}
+
+/**
+ * Generates today's cards and stores them, unless another request beat us to
+ * it. Returns the set that ended up in the database either way.
+ *
+ * Throws only on a model or database failure; the caller decides whether that
+ * is worth surfacing (it generally is not — Home falls back to the rule cards).
+ */
+export async function generateInsights(userId: string, currency: Currency): Promise<InsightSet> {
+  if (!env.llmApiKey) return readInsights(userId, currency);
+
+  const built = await buildSnapshot(userId, currency);
+  if (!built) return readInsights(userId, currency);
+
+  const client = new Anthropic({ apiKey: env.llmApiKey, baseURL: env.llmBaseUrl });
+  const response = await client.messages.create({
+    model: env.llmModel,
+    max_tokens: MAX_TOKENS,
+    system: systemPrompt(currency),
+    tools: [emitTool],
+    // Forcing the tool is what makes the output a schema rather than prose.
+    // It is rejected outright while thinking is on, so thinking is off — which
+    // also happens to halve the output tokens for a task that is noticing and
+    // phrasing rather than reasoning.
+    tool_choice: { type: 'tool', name: 'emit_insights' },
+    thinking: { type: 'disabled' },
+    messages: [
+      {
+        role: 'user',
+        content: `Here is their money right now. Write the cards.\n\n${JSON.stringify(built.snapshot)}`,
+      },
+    ],
+  });
+
+  const call = response.content.find(block => block.type === 'tool_use' && block.name === 'emit_insights');
+  if (!call || call.type !== 'tool_use') {
+    throw new Error(`Model returned no emit_insights call (stop_reason: ${response.stop_reason})`);
+  }
+
+  const parsed = argsSchema.safeParse(call.input);
+  if (!parsed.success) {
+    throw new Error(`Malformed insights: ${parsed.error.issues.map(i => `${i.path.join('.')} ${i.message}`).join('; ')}`);
+  }
+
+  const insights: Insight[] = parsed.data.insights.map(card => ({
+    title: card.title,
+    body: card.body,
+    cta: card.cta,
+    icon: card.icon,
+    action: card.action,
+    // A targetId is only ever an id we handed over. Anything else — a
+    // hallucinated uuid, an id from another account — degrades the card to
+    // "open the vault" rather than deep-linking somewhere wrong.
+    targetId: card.action === 'vault' && card.targetId && built.receiptIds.has(card.targetId) ? card.targetId : null,
+  }));
+
+  await transaction(async client => {
+    await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey(userId)]);
+
+    // Re-check under the lock: whoever we were queued behind may have just
+    // written today's cards, in which case theirs stand and ours are dropped.
+    const { rows } = await client.query(SELECT_FRESH, [userId, currency]);
+    if (rows.length > 0) return;
+
+    await client.query(`DELETE FROM insights WHERE user_id = $1 AND generated_on = CURRENT_DATE`, [userId]);
+    for (const [rank, card] of insights.entries()) {
+      await client.query(
+        `INSERT INTO insights (user_id, generated_on, currency, rank, title, body, cta, icon, action, target_id)
+         VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [userId, currency, rank, card.title, card.body, card.cta, card.icon, card.action, card.targetId]
+      );
+    }
+  });
+
+  return readInsights(userId, currency);
+}

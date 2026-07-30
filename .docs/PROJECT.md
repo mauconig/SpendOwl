@@ -98,7 +98,8 @@ Three implementation notes that are easy to undo by accident:
   iterations so a model that ping-pongs between tools can't run away.
 - **No Anthropic-specific parameters are sent** — no `thinking`, no
   `output_config.effort`, no `betas`. Only the lowest-common-denominator
-  Messages API that a shim is most likely to get right.
+  Messages API that a shim is most likely to get right. (Insights, below,
+  deliberately breaks this rule after measuring that it holds.)
 - Tool arguments are **zod-validated before execution**, with failures returned
   as `is_error` tool results so the model corrects itself rather than the turn
   throwing. A cheaper model emits malformed arguments more often than a
@@ -109,6 +110,52 @@ does not expose `response.body`, so token streaming would need a dependency
 Expo Go cannot load. The client shows a typing indicator for the duration
 instead — `useSendChat` keeps its mutation pending through the messages refetch
 so the indicator hands off to the rendered reply with no gap.
+
+## Insights
+
+The Home screen's "For you today" cards (`server/src/insights.ts`). Same model
+and same env vars as the coach, but a different shape in three ways worth
+knowing before changing any of them.
+
+**No tool loop.** We already know which data is relevant, so `buildSnapshot()`
+gathers it — `getSummary()`, the last 25 transactions, subscriptions, cards,
+facturas needing review — and hands it over in a single `messages.create()`. The
+model never decides what to fetch; it only notices and phrases. One request,
+bounded latency. `trend` is dropped from the summary for the same reason the
+coach drops it.
+
+**The tool is the output schema.** `emit_insights` is forced with `tool_choice`,
+so a card arrives as a zod-validated object rather than prose to be parsed. This
+is where the "no Anthropic-specific parameters" rule is broken on purpose:
+forcing a tool is rejected outright by DeepSeek while thinking mode is on, so
+the request also sends `thinking: { type: 'disabled' }`. Both were measured
+against the live endpoint before being written in — disabling thinking also
+roughly halves output tokens for a task that is noticing, not reasoning.
+
+**Cached for a day, in Postgres.** The `insights` table stores *rendered prose*,
+not figures — the amounts are already formatted into `title`/`body`. That is why
+`currency` is a column: freshness is `generated_on = CURRENT_DATE AND currency =
+<the user's current one>`, so switching currency in Settings invalidates the day
+for free. `GET /api/insights` is a pure cache read and never blocks on a model;
+`POST /api/insights/refresh` is the only thing that can spend money, and it
+regenerates only when the day's set is missing — that, rather than a rate
+limiter, is what caps it at one call per user per day. Generation takes
+`pg_advisory_xact_lock` and re-checks freshness under it, because two Home
+mounts racing on app open is the expected case, not an edge one.
+
+A card names an `action` (`chat` / `dashboard` / `subscriptions` / `vault`)
+rather than carrying a closure, and `HomeScreen` resolves it. A `vault` card may
+carry a `targetId` to deep-link to one factura — the server drops any id it did
+not itself hand to the model, so a hallucinated uuid degrades the card to "open
+the vault" instead of navigating somewhere wrong. The icon is chosen from a
+fixed set; **the colour is not**, and is derived client-side, because a model
+picking hex values only ever drifts off-palette.
+
+The whole feature is optional at runtime. Every failure path — no `LLM_API_KEY`,
+a 502, a malformed tool call, generation still in flight — leaves `insights`
+empty, and Home renders `buildFallbackInsights()` instead. `insightsQuery` is
+deliberately kept out of the array that drives global `loading`/`error` in
+`SpendOwlContext` so a slow generation can never put the app behind a spinner.
 
 ## Authentication
 
@@ -150,10 +197,13 @@ key. See `.docs/BACKEND.md` before shipping.
 Five destinations, all on one horizontal pager (see Root composition below):
 
 - **Home** (`src/screens/HomeScreen.tsx`) — spent/income tiles for the current
-  month and a list of "for you today" insight cards. Every card is derived from
-  live data: budget pace, the top spending category and its share, upcoming
-  subscription renewals, and facturas needing review (which deep-links to a
-  real receipt id).
+  month and a list of "for you today" insight cards. The cards are written by
+  the model once a day from a snapshot of the account (see Insights below), and
+  each carries an `action` the screen resolves to a destination. When there are
+  none — no API key, a failed call, or the day's first generation still in
+  flight — it falls back to `buildFallbackInsights()`, the four original rules:
+  budget pace, the top spending category and its share, upcoming subscription
+  renewals, and facturas needing review (which deep-links to a real receipt id).
 - **Dashboard** (`src/screens/DashboardScreen.tsx`) — safe-to-spend hero number
   and budget progress bar, a tappable category donut, a filterable transaction
   list, a spending-trajectory chart with a budget-pace reference line, the

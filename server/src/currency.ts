@@ -17,12 +17,27 @@
  * quote one number while the Dashboard draws another.
  */
 
+import { queryOne } from './db.ts';
+
 export type Currency = 'EUR' | 'USD' | 'PYG';
 
 export const CURRENCIES: readonly Currency[] = ['EUR', 'USD', 'PYG'];
 
 export function isCurrency(value: unknown): value is Currency {
   return typeof value === 'string' && (CURRENCIES as readonly string[]).includes(value);
+}
+
+/**
+ * Read fresh per request rather than cached: the user can change it in Settings
+ * at any moment, and both the coach and the daily insights bake the currency
+ * into text they generate. The EUR fallback matches the column default.
+ */
+export async function getUserCurrency(userId: string): Promise<Currency> {
+  const row = await queryOne<{ baseCurrency: string }>(
+    `SELECT base_currency AS "baseCurrency" FROM users WHERE id = $1`,
+    [userId]
+  );
+  return isCurrency(row?.baseCurrency) ? row.baseCurrency : 'EUR';
 }
 
 /** Guaraní amounts are whole numbers; euros and dollars get two places. */

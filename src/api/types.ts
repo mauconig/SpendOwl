@@ -79,6 +79,35 @@ export type ApiMessage = {
   createdAt: string;
 };
 
+/**
+ * A "For you today" card, written by the model once a day (see
+ * server/src/insights.ts). Unlike every other shape here it carries *rendered
+ * prose* — the amounts are already formatted into `title` and `body`, in the
+ * currency the card was generated for — so nothing on this type goes through
+ * minorToEur() or formatMoney().
+ */
+export type ApiInsightIcon = 'trendUp' | 'trendDown' | 'pie' | 'bars' | 'warn' | 'spark' | 'card';
+export type ApiInsightAction = 'chat' | 'dashboard' | 'subscriptions' | 'vault';
+
+export type ApiInsight = {
+  title: string;
+  body: string;
+  cta: string;
+  icon: ApiInsightIcon;
+  /** Where tapping the card goes. A card cannot carry a closure. */
+  action: ApiInsightAction;
+  /** Receipt id for a `vault` card to deep-link to. Server-validated. */
+  targetId: string | null;
+};
+
+export type ApiInsights = {
+  generatedOn: string | null;
+  currency: Currency | null;
+  /** True when the client should ask for a regeneration. */
+  stale: boolean;
+  insights: ApiInsight[];
+};
+
 export type ApiSettings = {
   baseCurrency: Currency;
   monthlyBudgetMinor: number;

@@ -97,6 +97,42 @@ const migrations: Migration[] = [
       CREATE INDEX messages_user_created_idx ON messages (user_id, created_at);
     `,
   },
+  {
+    version: 2,
+    name: 'insights',
+    sql: /* sql */ `
+      -- The "For you today" cards, written by the model once a day and cached
+      -- here. Unlike every other table this holds *rendered prose*, not figures:
+      -- the amounts are already formatted into title/body.
+      --
+      -- That is why 'currency' is a column. A card reading "₲1.850.000 left"
+      -- becomes a lie the moment someone switches to EUR in Settings, so
+      -- freshness is (generated_on = today AND currency = the user's current
+      -- one) — a currency change invalidates the day for free, with no
+      -- invalidation machinery anywhere else in the stack.
+      CREATE TABLE insights (
+        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        generated_on DATE NOT NULL,
+        currency     TEXT NOT NULL CHECK (currency IN ('EUR', 'USD', 'PYG')),
+        rank         SMALLINT NOT NULL,
+        title        TEXT NOT NULL,
+        body         TEXT NOT NULL,
+        cta          TEXT NOT NULL,
+        icon         TEXT NOT NULL,
+        action       TEXT NOT NULL CHECK (action IN ('chat', 'dashboard', 'subscriptions', 'vault')),
+        -- Optional deep-link target, currently only a receipt id for the vault
+        -- action. ON DELETE CASCADE would take the whole card with the receipt;
+        -- SET NULL correctly degrades it to "open the vault".
+        target_id    UUID REFERENCES receipts(id) ON DELETE SET NULL,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
+      -- Makes regeneration idempotent: two Home mounts racing on app open
+      -- cannot leave a day with eight cards instead of four.
+      CREATE UNIQUE INDEX insights_user_day_rank_idx ON insights (user_id, generated_on, rank);
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {

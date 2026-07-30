@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '../auth.ts';
 import { query, queryOne } from '../db.ts';
-import { type Currency, decimalsFor, displayToMinor, isCurrency, minorToDisplay } from '../currency.ts';
+import { type Currency, decimalsFor, displayToMinor, getUserCurrency, minorToDisplay } from '../currency.ts';
 import { env } from '../env.ts';
 import { getSummary } from '../summary.ts';
 import { CATEGORIES } from './transactions.ts';
@@ -422,11 +422,7 @@ export const chatRoute = new Hono<AppEnv>().post('/', async c => {
   const userId = c.get('userId');
 
   // Read fresh each turn — the user can change it in Settings mid-conversation.
-  const settings = await queryOne<{ baseCurrency: string }>(
-    `SELECT base_currency AS "baseCurrency" FROM users WHERE id = $1`,
-    [userId]
-  );
-  const currency: Currency = isCurrency(settings?.baseCurrency) ? settings.baseCurrency : 'EUR';
+  const currency = await getUserCurrency(userId);
 
   await insertMessage(userId, 'user', { text: parsed.data.text });
 

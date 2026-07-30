@@ -9,6 +9,7 @@ import { env } from './env.ts';
 import { runMigrations } from './migrations.ts';
 import { cardsRoute } from './routes/cards.ts';
 import { chatRoute } from './routes/chat.ts';
+import { insightsRoute } from './routes/insights.ts';
 import { messagesRoute } from './routes/messages.ts';
 import { receiptsRoute } from './routes/receipts.ts';
 import { settingsRoute } from './routes/settings.ts';
@@ -38,6 +39,7 @@ app.route('/api/subscriptions', subscriptionsRoute);
 app.route('/api/receipts', receiptsRoute);
 app.route('/api/messages', messagesRoute);
 app.route('/api/chat', chatRoute);
+app.route('/api/insights', insightsRoute);
 app.route('/api/settings', settingsRoute);
 
 app.onError((error, c) => {

@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { createApi } from './client';
 import type {
   ApiCreditCard,
+  ApiInsights,
   ApiMessage,
   ApiMessageKind,
   ApiReceipt,
@@ -21,6 +22,7 @@ export const keys = {
   receipts: ['receipts'] as const,
   messages: ['messages'] as const,
   settings: ['settings'] as const,
+  insights: ['insights'] as const,
 };
 
 function useApi() {
@@ -62,6 +64,32 @@ export function useReceipts() {
 export function useMessages() {
   const api = useApi();
   return useQuery({ queryKey: keys.messages, queryFn: () => api.get<ApiMessage[]>('/api/messages') });
+}
+
+/**
+ * The Home screen's daily cards. A pure cache read on the server, so this is
+ * fast and never blocks on a model — if the set is stale, `stale: true` comes
+ * back and the provider fires useRefreshInsights() behind the already-rendered
+ * fallback cards.
+ */
+export function useInsights() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.insights, queryFn: () => api.get<ApiInsights>('/api/insights') });
+}
+
+/**
+ * The one call that can spend money. It is a no-op server-side when today's
+ * cards already exist, which is what caps it at one model call per user per day.
+ * Failures are deliberately unhandled here: the Home screen falls back to its
+ * rule-based cards, so there is nothing to tell the user about.
+ */
+export function useRefreshInsights() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<ApiInsights>('/api/insights/refresh'),
+    onSuccess: data => client.setQueryData(keys.insights, data),
+  });
 }
 
 export function useSettings() {
@@ -280,6 +308,10 @@ export function useUpdateSettings() {
     onSettled: () => {
       void client.invalidateQueries({ queryKey: keys.settings });
       invalidateMoney(client);
+      // Insight cards have their amounts baked into the text, so a currency
+      // change makes today's set stale. Refetching is what surfaces that —
+      // the server flips `stale` and the provider regenerates.
+      void client.invalidateQueries({ queryKey: keys.insights });
     },
   });
 }
