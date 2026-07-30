@@ -98,12 +98,23 @@ export function ModalShell({ visible, onClose, children, variant = 'sheet', blur
           )}
         </Animated.View>
 
-        {/* Dismiss area. A sibling of the content rather than a wrapper around
-            it, so no press handler sits between a touch and the scroll axes
-            inside — the bug that made TransactionsSheet unscrollable. */}
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        {/* Dismiss area, and the two variants genuinely need different ones.
+            A sheet gets a flex sibling filling only the gap above it: nothing
+            then sits over the sheet's scroll axes, which is what made
+            TransactionsSheet scrollable in the first place. A centred dialog
+            has no such gap, so its backdrop covers the screen and the content
+            claims its own touches below — an inert View would let a tap on the
+            card's padding fall through and dismiss it. */}
+        {variant === 'sheet' ? (
+          <Pressable style={{ flex: 1 }} onPress={onClose} />
+        ) : (
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        )}
 
         <Animated.View
+          // Children are offered the touch first, so buttons and inputs inside
+          // still work; this only catches what they don't.
+          onStartShouldSetResponder={variant === 'center' ? () => true : undefined}
           onLayout={e => {
             const measured = e.nativeEvent.layout.height;
             setContentHeight(prev => (Math.abs(prev - measured) > 0.5 ? measured : prev));
