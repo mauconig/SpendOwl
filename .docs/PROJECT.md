@@ -217,9 +217,17 @@ Five destinations, all on one horizontal pager (see Root composition below):
   - Expense cards can be marked tax-deductible, approved, or rejected —
     "approve & log" writes a real transaction via `POST /api/transactions`,
     "reject" deletes the draft via `DELETE /api/messages/:id`.
-- **Factura Vault** (`src/screens/VaultScreen.tsx`) — a grid of scanned
-  receipts with an ok/needs-review badge; tapping one opens the full invoice
-  detail view.
+- **Factura Vault** (`src/screens/VaultScreen.tsx`) — **currently parked.** It
+  renders a "coming soon" panel; the grid of scanned receipts, the ok/needs-review
+  badges and the invoice detail view are all still in the code behind
+  `FACTURAS_ENABLED` in `src/store/constants.ts`. That flag also hides the camera
+  button in chat (the only way a factura gets filed) and drops the
+  "facturas need review" card from Home. A matching `FACTURAS_ENABLED` in
+  `server/src/insights.ts` stops the model being shown facturas at all — without
+  it, it writes cards urging you to review them regardless of which actions it is
+  allowed to attach. The nav tab stays on purpose, so the screen still says
+  what's coming. Turning the feature back on means flipping both flags: client
+  and server share no module.
 - **Settings** (`src/screens/SettingsScreen.tsx`) — profile (the real signed-in
   Clerk user's name and email), base currency, budget alerts, biometric lock
   toggle, static preference rows, and sign-out.

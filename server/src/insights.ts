@@ -43,6 +43,20 @@ const ICONS = ['trendUp', 'trendDown', 'pie', 'bars', 'warn', 'spark', 'card'] a
 // resolves it to the same navigation the rule cards already used.
 const ACTIONS = ['chat', 'dashboard', 'subscriptions', 'vault'] as const;
 
+/**
+ * Facturas are parked — mirrors FACTURAS_ENABLED in src/store/constants.ts,
+ * which explains the whole switch-off. Client and server share no module, so
+ * turning facturas back on means turning both back on.
+ *
+ * Here it does two things: the `vault` action is not offered, and facturas are
+ * left out of the snapshot entirely. The second matters more than the first —
+ * a model that can see unreviewed facturas will write a card urging you to
+ * review them no matter which action it is allowed to attach.
+ */
+const FACTURAS_ENABLED: boolean = false;
+
+const OFFERED_ACTIONS = ACTIONS.filter(a => a !== 'vault' || FACTURAS_ENABLED);
+
 export type Insight = {
   title: string;
   body: string;
@@ -166,9 +180,11 @@ attention, pie category mix, bars subscriptions or comparisons, card credit card
 spark anything else.
 
 action — where tapping the card should take them: dashboard for spending, budget and
-categories; subscriptions for renewals; vault for facturas and receipts; chat to ask
-you a follow-up. Set targetId only on a vault card, only to the exact id of a factura
-you were given.
+categories; subscriptions for renewals; chat to ask you a follow-up.${
+    FACTURAS_ENABLED
+      ? ' Use vault for facturas and receipts, and set targetId only on a vault card, only to the exact id of a factura you were given.'
+      : ' Facturas and receipt scanning are not available yet, so never mention them.'
+  }
 
 Answer only by calling emit_insights.`;
 }
@@ -189,11 +205,15 @@ const emitTool: Anthropic.Tool = {
             body: { type: 'string', description: 'One or two sentences containing the real figure. Plain text.' },
             cta: { type: 'string', description: 'Short button label, e.g. "Review subscriptions".' },
             icon: { type: 'string', enum: [...ICONS] },
-            action: { type: 'string', enum: [...ACTIONS] },
-            targetId: {
-              type: 'string',
-              description: 'Only on a vault card: the id of a factura listed in facturasNeedingReview.',
-            },
+            action: { type: 'string', enum: [...OFFERED_ACTIONS] },
+            ...(FACTURAS_ENABLED
+              ? {
+                  targetId: {
+                    type: 'string',
+                    description: 'Only on a vault card: the id of a factura listed in facturasNeedingReview.',
+                  },
+                }
+              : {}),
           },
           required: ['title', 'body', 'cta', 'icon', 'action'],
         },
@@ -245,12 +265,14 @@ async function buildSnapshot(userId: string, currency: Currency) {
          FROM credit_cards WHERE user_id = $1 ORDER BY balance_minor DESC`,
       [userId]
     ),
-    query<{ id: string; merchant: string; amountMinor: number }>(
-      `SELECT id, merchant, amount_minor AS "amountMinor"
-         FROM receipts WHERE user_id = $1 AND status = 'warn'
-        ORDER BY occurred_at DESC LIMIT 5`,
-      [userId]
-    ),
+    FACTURAS_ENABLED
+      ? query<{ id: string; merchant: string; amountMinor: number }>(
+          `SELECT id, merchant, amount_minor AS "amountMinor"
+             FROM receipts WHERE user_id = $1 AND status = 'warn'
+            ORDER BY occurred_at DESC LIMIT 5`,
+          [userId]
+        )
+      : Promise.resolve([]),
   ]);
 
   if (!summary) return null;
@@ -317,11 +339,15 @@ async function buildSnapshot(userId: string, currency: Currency) {
         apr: c.apr,
         monthlyInterest: money(Math.round((c.balanceMinor * c.apr) / 100 / 12)),
       })),
-      facturasNeedingReview: facturas.map(f => ({
-        id: f.id,
-        merchant: f.merchant,
-        amount: Math.abs(money(f.amountMinor)),
-      })),
+      ...(FACTURAS_ENABLED
+        ? {
+            facturasNeedingReview: facturas.map(f => ({
+              id: f.id,
+              merchant: f.merchant,
+              amount: Math.abs(money(f.amountMinor)),
+            })),
+          }
+        : {}),
     },
     // The only ids the model is permitted to reference back at us.
     receiptIds: new Set(facturas.map(f => f.id)),

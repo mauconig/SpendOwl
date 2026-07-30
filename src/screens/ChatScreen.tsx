@@ -11,7 +11,7 @@ import { Wave } from '../components/Wave';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { Icon } from '../icons';
 import { CATS, CatKey, GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
-import { Msg } from '../store/constants';
+import { FACTURAS_ENABLED, Msg } from '../store/constants';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
 function CardMessage({ m }: { m: Extract<Msg, { type: 'card' }> }) {
@@ -297,9 +297,14 @@ export function ChatScreen() {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 6, paddingBottom: 10 }}>
         {!store.recording ? (
           <>
-            <Pressable onPress={store.attach} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.bubbleAi, alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="cam" size={20} color="rgba(245,245,247,.75)" />
-            </Pressable>
+            {/* Attaching a factura is the only way one gets filed, so it goes
+                with the vault while facturas are parked. See FACTURAS_ENABLED
+                in src/store/constants.ts. */}
+            {FACTURAS_ENABLED && (
+              <Pressable onPress={store.attach} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.bubbleAi, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="cam" size={20} color="rgba(245,245,247,.75)" />
+              </Pressable>
+            )}
             <View
               style={{
                 flex: 1,

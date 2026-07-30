@@ -5,6 +5,7 @@ import { Icon } from '../icons';
 import { CATS, GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
 import { minorToEur, type ApiInsightIcon } from '../api/types';
 import { useSpendOwl } from '../store/SpendOwlContext';
+import { FACTURAS_ENABLED } from '../store/constants';
 import { monthLong } from '../utils/date';
 
 type Insight = {
@@ -60,6 +61,10 @@ export function HomeScreen() {
           store.goDash();
           return store.openSubs();
         case 'vault':
+          // The server stops offering this action while facturas are parked,
+          // but a card generated before that still lives in today's cache — so
+          // route it somewhere useful rather than into a "coming soon" panel.
+          if (!FACTURAS_ENABLED) return store.goDash();
           store.setNav('vault');
           // targetId is server-validated against the facturas actually handed
           // to the model, so it either deep-links correctly or is null.
@@ -193,7 +198,7 @@ function buildFallbackInsights(store: ReturnType<typeof useSpendOwl>): Insight[]
     });
   }
 
-  const needsReview = store.vaultItems.filter(v => v.status === 'warn');
+  const needsReview = FACTURAS_ENABLED ? store.vaultItems.filter(v => v.status === 'warn') : [];
   const firstReview = needsReview[0];
   if (firstReview) {
     insights.push({
