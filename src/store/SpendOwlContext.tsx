@@ -93,7 +93,7 @@ interface SpendOwlStore {
   addCardOpen: boolean;
   openAddCard: () => void;
   closeAddCard: () => void;
-  addCreditCard: (input: { name: string; last4: string; balance: number; limit: number; apr: number }) => void;
+  addCreditCard: (input: { name: string; balance: number; limit: number; apr: number }) => void;
   removeCreditCard: (id: string) => void;
   payoffCardId: string | null;
   openPayoff: (id: string) => void;
@@ -475,10 +475,9 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addCreditCard = useCallback(
-    (input: { name: string; last4: string; balance: number; limit: number; apr: number }) => {
+    (input: { name: string; balance: number; limit: number; apr: number }) => {
       addCard.mutate({
         name: input.name,
-        last4: input.last4,
         balanceMinor: eurToMinor(input.balance),
         limitMinor: eurToMinor(input.limit),
         apr: input.apr,

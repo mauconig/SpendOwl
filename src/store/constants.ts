@@ -56,7 +56,7 @@ export const CARD_COLORS = ['#F0A878', '#78ADEE', '#C9B8F5', '#4ADE80'];
 export type CreditCard = {
   id: string;
   name: string;
-  last4: string;
+  last4: string | null;
   balance: number;
   limit: number;
   apr: number;

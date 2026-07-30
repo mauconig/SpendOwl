@@ -37,7 +37,8 @@ export type ApiSummary = {
 export type ApiCreditCard = {
   id: string;
   name: string;
-  last4: string;
+  /** Null for cards added in-app — the field is no longer asked for. */
+  last4: string | null;
   balanceMinor: number;
   limitMinor: number;
   apr: number;

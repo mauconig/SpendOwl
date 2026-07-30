@@ -134,7 +134,6 @@ export function useAddCreditCard() {
   return useMutation({
     mutationFn: (input: {
       name: string;
-      last4: string;
       balanceMinor: number;
       limitMinor: number;
       apr: number;

@@ -133,6 +133,21 @@ const migrations: Migration[] = [
       CREATE UNIQUE INDEX insights_user_day_rank_idx ON insights (user_id, generated_on, rank);
     `,
   },
+  {
+    version: 3,
+    name: 'optional_card_last4',
+    sql: /* sql */ `
+      -- The last four digits are no longer asked for when adding a card: they
+      -- identify nothing the app needs and are a chore to type off a physical
+      -- card. The column stays because seeded and previously-entered cards do
+      -- have them and still render "•••• 4471", so this only stops requiring it.
+      ALTER TABLE credit_cards ALTER COLUMN last4 DROP NOT NULL;
+      ALTER TABLE credit_cards DROP CONSTRAINT IF EXISTS credit_cards_last4_check;
+      ALTER TABLE credit_cards
+        ADD CONSTRAINT credit_cards_last4_check
+        CHECK (last4 IS NULL OR char_length(last4) = 4);
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {

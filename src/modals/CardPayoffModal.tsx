@@ -80,7 +80,8 @@ export function CardPayoffModal() {
       <View>
         <Text style={{ fontSize: 18, fontFamily: fonts.bold, color: colors.text }}>{shown.name}</Text>
         <Text style={{ fontSize: 12.5, color: colors.textDim55, marginTop: 3 }}>
-          •••• {shown.last4} · {formatMoney(shown.balance, baseCur, 2)} at {shown.apr}% APR
+          {shown.last4 ? `•••• ${shown.last4} · ` : ''}
+          {formatMoney(shown.balance, baseCur, 2)} at {shown.apr}% APR
         </Text>
       </View>
 

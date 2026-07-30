@@ -33,14 +33,12 @@ function Field({ label, value, onChangeText, placeholder, keyboardType, maxLengt
 export function AddCardSheet() {
   const store = useSpendOwl();
   const [name, setName] = useState('');
-  const [last4, setLast4] = useState('');
   const [balanceDigits, setBalanceDigits] = useState('');
   const [limitDigits, setLimitDigits] = useState('');
   const [apr, setApr] = useState('');
 
   const reset = () => {
     setName('');
-    setLast4('');
     setBalanceDigits('');
     setLimitDigits('');
     setApr('');
@@ -53,11 +51,11 @@ export function AddCardSheet() {
 
   const balance = parseThousands(balanceDigits);
   const limit = parseThousands(limitDigits);
-  const canSubmit = name.trim().length > 0 && last4.trim().length > 0 && balance >= 0 && limit > 0 && Number(apr) >= 0;
+  const canSubmit = name.trim().length > 0 && balance >= 0 && limit > 0 && Number(apr) >= 0;
 
   const submit = () => {
     if (!canSubmit) return;
-    store.addCreditCard({ name: name.trim(), last4: last4.trim(), balance, limit, apr: Number(apr) });
+    store.addCreditCard({ name: name.trim(), balance, limit, apr: Number(apr) });
     close();
   };
 
@@ -81,7 +79,6 @@ export function AddCardSheet() {
       <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>Add a card</Text>
 
       <Field label="Card name" value={name} onChangeText={setName} placeholder="Visa Platinum" />
-      <Field label="Last 4 digits" value={last4} onChangeText={setLast4} placeholder="1234" keyboardType="number-pad" maxLength={4} />
       <Field
         label="Balance owed"
         value={formatThousands(balanceDigits)}

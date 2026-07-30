@@ -5,7 +5,9 @@ import { query, queryOne } from '../db.ts';
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(80),
-  last4: z.string().regex(/^\d{4}$/, 'last4 must be exactly 4 digits'),
+  // Optional: the app no longer asks for it. Still validated when a client does
+  // send it, so the column never holds something that isn't four digits.
+  last4: z.string().regex(/^\d{4}$/, 'last4 must be exactly 4 digits').optional(),
   balanceMinor: z.int().nonnegative(),
   limitMinor: z.int().nonnegative(),
   apr: z.number().min(0).max(100),
@@ -42,7 +44,7 @@ export const cardsRoute = new Hono<AppEnv>()
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, name, last4, balance_minor AS "balanceMinor",
                  credit_limit_minor AS "limitMinor", apr, color`,
-      [c.get('userId'), body.name, body.last4, body.balanceMinor, body.limitMinor, body.apr, body.color]
+      [c.get('userId'), body.name, body.last4 ?? null, body.balanceMinor, body.limitMinor, body.apr, body.color]
     );
     return c.json(row, 201);
   })

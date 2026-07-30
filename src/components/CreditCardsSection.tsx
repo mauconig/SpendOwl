@@ -33,7 +33,8 @@ export function CreditCardsSection() {
                       {c.name}
                     </Text>
                     <Text style={{ fontSize: 11, color: colors.textDim45, marginTop: 1 }}>
-                      •••• {c.last4} · {c.apr}% APR
+                      {c.last4 ? `•••• ${c.last4} · ` : ''}
+                      {c.apr}% APR
                     </Text>
                   </View>
                   <Pressable onPress={() => store.removeCreditCard(c.id)} style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: colors.iconBg, alignItems: 'center', justifyContent: 'center' }}>
