@@ -112,6 +112,63 @@ the app automatically.
 native shadows/blur in some cases), but all the screens, state, and
 interactions work.
 
+## Always-on deployment (VPS)
+
+The API and its database also run 24/7 on the VPS reachable as `ssh vps`
+(147.93.180.120), so the app works without a laptop serving it.
+
+**Base URL: `https://api.147-93-180-120.sslip.io`** — set as
+`EXPO_PUBLIC_API_URL` in `.env.local`, which overrides the Metro-host detection
+in `src/api/client.ts`. Unset it to go back to a local server.
+
+Layout on the box:
+
+| Path | What |
+| --- | --- |
+| `/opt/spendowl/app` | the clone; deploys `git reset --hard origin/main` onto it |
+| `/opt/spendowl/api.env` | `CLERK_SECRET_KEY`, `DATABASE_URL`, `PORT` — `chmod 600`, deliberately outside the checkout so deploys can't clobber it |
+| `/opt/spendowl/db/` | compose file + generated Postgres password |
+| `/etc/systemd/system/spendowl-api.service` | the API unit |
+| `/etc/caddy/Caddyfile` | TLS termination + reverse proxy |
+
+- **Runtime**: Node 24 (NodeSource). Node runs the TypeScript directly, same as
+  locally, so deploys have no build step.
+- **Service user**: the API runs as the unprivileged `spendowl` user, not root.
+- **TLS**: Caddy holds a real Let's Encrypt cert for the `sslip.io` hostname
+  (which resolves to the IP without any DNS setup) and auto-renews it.
+- **Network**: ufw allows only 22/80/443. The API's 8787 and Postgres' 5432 are
+  **not** publicly reachable — verified from off-box. Note Postgres is published
+  as `127.0.0.1:5432` on purpose: Docker writes its own nat rules and *bypasses
+  ufw*, so a bare `5432:5432` would have exposed it to the internet.
+- **Clerk**: still the **development** instance (`sk_test_`). Fine for now, but
+  dev instances cap at 100 users and Google/Apple run on Clerk's shared OAuth
+  credentials. A production instance needs its own keys — see `.docs/BACKEND.md`.
+
+Deploy after pushing to `main`:
+
+```sh
+ssh vps spendowl-deploy
+```
+
+That fetches, resets to `origin/main`, reinstalls server deps, fixes ownership,
+restarts the unit, and curls `/api/health` — exiting non-zero and printing the
+journal if the service fails to come back.
+
+Operating it:
+
+```sh
+ssh vps 'systemctl status spendowl-api'
+ssh vps 'journalctl -u spendowl-api -f'         # live logs
+ssh vps 'docker exec spendowl-db psql -U spendowl -d spendowl -c "SELECT count(*) FROM transactions;"'
+```
+
+Everything (`docker`, `caddy`, `spendowl-api`, and the `spendowl-db` container)
+is enabled at boot, so a reboot brings the whole stack back unattended.
+
+The box also hosts an unrelated `maubot` stack (a neo4j container plus
+`maubot.service`). SpendOwl uses its own container, volume, ports and systemd
+unit, and does not touch it.
+
 ## Troubleshooting
 
 - **"Port 8081 is being used by another process"** — either stop whatever's
