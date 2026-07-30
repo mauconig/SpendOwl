@@ -9,15 +9,38 @@ import { PulseDot } from '../components/PulseDot';
 import { Toggle } from '../components/Toggle';
 import { Wave } from '../components/Wave';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-import { Icon } from '../icons';
+import { Icon, IconName } from '../icons';
 import { CATS, CatKey, GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
 import { FACTURAS_ENABLED, Msg } from '../store/constants';
 import { useSpendOwl } from '../store/SpendOwlContext';
+import { ordinalDay } from '../utils/date';
 
-function CardMessage({ m }: { m: Extract<Msg, { type: 'card' }> }) {
+type CardMsg = Extract<Msg, { type: 'card' }>;
+
+/**
+ * The header strip and confirmed-state wording for each thing the coach can
+ * propose. Everything else about the card — the amount, the approve/reject
+ * row, the shell — is shared, so a new action only needs a row here plus a
+ * body below.
+ */
+const CARD_CHROME: Record<CardMsg['action'], { icon: IconName; tint: string; label: string; done: string }> = {
+  expense: { icon: 'card', tint: colors.mint, label: 'Expense', done: 'Logged' },
+  card_payment: { icon: 'card', tint: '#78ADEE', label: 'Card payment', done: 'Payment recorded' },
+  sub_cancel: { icon: 'close', tint: colors.rose, label: 'Cancel subscription', done: 'Cancelled' },
+  sub_add: { icon: 'plus', tint: '#C9B8F5', label: 'New subscription', done: 'Added' },
+};
+
+function CardMessage({ m }: { m: CardMsg }) {
   const store = useSpendOwl();
   const card = store.cardFor(m.id);
-  const cat = CATS[m.cat as CatKey];
+  const { baseCur } = store;
+
+  // Expenses keep the category strip and the business-expense toggle; the
+  // other three have neither a category nor anything tax-deductible about them.
+  const cat = m.action === 'expense' ? CATS[m.cat as CatKey] : null;
+  const chrome = CARD_CHROME[m.action];
+  const tint = cat?.color ?? chrome.tint;
+
   return (
     <View
       style={{
@@ -35,26 +58,39 @@ function CardMessage({ m }: { m: Extract<Msg, { type: 'card' }> }) {
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <View style={{ width: 26, height: 26, borderRadius: 9, backgroundColor: cat.color + '26', alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: cat.color, fontSize: 12, fontFamily: fonts.bold }}>{cat.name[0]}</Text>
+        <View style={{ width: 26, height: 26, borderRadius: 9, backgroundColor: tint + '26', alignItems: 'center', justifyContent: 'center' }}>
+          {cat ? (
+            <Text style={{ color: tint, fontSize: 12, fontFamily: fonts.bold }}>{cat.name[0]}</Text>
+          ) : (
+            <Icon name={chrome.icon} size={13} color={tint} />
+          )}
         </View>
-        <Text style={{ fontSize: 12, color: colors.textDim50 }}>{cat.name}</Text>
+        <Text style={{ fontSize: 12, color: colors.textDim50 }}>{cat ? cat.name : chrome.label}</Text>
       </View>
+
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
         <View style={{ flexShrink: 1 }}>
-          <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: '#FFFFFF' }}>{m.merchant}</Text>
-          <Text style={{ fontSize: 12, color: colors.textDim45, marginTop: 2 }}>{m.note}</Text>
+          <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: '#FFFFFF' }}>{cardTitle(m)}</Text>
+          <Text style={{ fontSize: 12, color: colors.textDim45, marginTop: 2 }}>{cardSubtitle(m)}</Text>
         </View>
-        <Text style={{ fontSize: 27, fontFamily: moneyFont(store.baseCur, 'bold'), letterSpacing: -0.5, color: '#FFFFFF' }}>{formatMoney(m.amountEur, store.baseCur, 2)}</Text>
+        <Text style={{ fontSize: 27, fontFamily: moneyFont(baseCur, 'bold'), letterSpacing: -0.5, color: '#FFFFFF' }}>
+          {formatMoney(m.amountEur, baseCur, 2)}
+        </Text>
       </View>
-      <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ fontSize: 13, color: colors.textDim70 }}>Business expense</Text>
-        <Toggle on={card.tax} onToggle={() => store.setCard(m.id, { tax: !card.tax })} />
-      </View>
+
+      {m.action === 'expense' && (
+        <>
+          <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 13, color: colors.textDim70 }}>Business expense</Text>
+            <Toggle on={card.tax} onToggle={() => store.setCard(m.id, { tax: !card.tax })} />
+          </View>
+        </>
+      )}
+
       {!card.ok ? (
         // Reject deletes the draft outright — see rejectCard in SpendOwlContext.
-        // Only offered before approval: afterwards a real transaction exists and
+        // Only offered before approval: afterwards the write has happened and
         // removing just the card would be a lie.
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>
           <Pressable
@@ -81,7 +117,7 @@ function CardMessage({ m }: { m: Extract<Msg, { type: 'card' }> }) {
               end={{ x: 1, y: -0.1 }}
               style={{ borderRadius: 999, paddingVertical: 11, alignItems: 'center' }}
             >
-              <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 13.5 }}>Approve & log</Text>
+              <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 13.5 }}>{approveLabel(m)}</Text>
             </LinearGradient>
           </Pressable>
         </View>
@@ -99,11 +135,51 @@ function CardMessage({ m }: { m: Extract<Msg, { type: 'card' }> }) {
           }}
         >
           <Icon name="check" size={15} color={colors.mint} />
-          <Text style={{ color: colors.mint, fontFamily: fonts.medium, fontSize: 13 }}>Logged to July</Text>
+          <Text style={{ color: colors.mint, fontFamily: fonts.medium, fontSize: 13 }}>{chrome.done}</Text>
         </View>
       )}
     </View>
   );
+}
+
+function cardTitle(m: CardMsg): string {
+  switch (m.action) {
+    case 'card_payment':
+      return m.cardName;
+    case 'sub_cancel':
+    case 'sub_add':
+      return m.subName;
+    default:
+      return m.merchant;
+  }
+}
+
+function cardSubtitle(m: CardMsg): string {
+  switch (m.action) {
+    case 'card_payment':
+      return 'Towards this card — lowers what you owe';
+    case 'sub_cancel':
+      return 'Stops counting towards your monthly total';
+    case 'sub_add':
+      return `Every month, from the ${ordinalDay(m.dayOfMonth)}`;
+    default:
+      // Charging a card is two writes, and the card is the half that is easy to
+      // miss, so it is said on the draft rather than discovered afterwards.
+      return m.cardName ? [m.note, `On ${m.cardName}`].filter(Boolean).join(' · ') : m.note;
+  }
+}
+
+function approveLabel(m: CardMsg): string {
+  switch (m.action) {
+    case 'card_payment':
+      return 'Approve & pay';
+    case 'sub_cancel':
+      return 'Approve & cancel';
+    case 'sub_add':
+      return 'Approve & add';
+    default:
+      return 'Approve & log';
+  }
 }
 
 function MessageBubble({ m }: { m: Msg }) {

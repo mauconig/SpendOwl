@@ -66,16 +66,32 @@ export type ApiReceipt = {
 
 export type ApiMessageKind = 'ai' | 'user' | 'voice' | 'receipt' | 'card';
 
+/**
+ * What a `card` message proposes. Absent on rows written before card payments
+ * and subscriptions existed, which were all plain expenses — so a missing
+ * action reads as 'expense' everywhere.
+ */
+export type ApiCardAction = 'expense' | 'card_payment' | 'sub_cancel' | 'sub_add';
+
 export type ApiMessage = {
   id: string;
   kind: ApiMessageKind;
   payload: {
     text?: string;
     dur?: string;
+    action?: ApiCardAction;
     merchant?: string;
     cat?: CatKey;
+    /** Always positive here; the sign is applied when the write happens. */
     amountMinor?: number;
     note?: string;
+    /** Set when an expense was charged to a card, and on card_payment. */
+    cardId?: string;
+    cardName?: string;
+    /** sub_cancel and sub_add. */
+    subId?: string;
+    subName?: string;
+    dayOfMonth?: number;
   };
   createdAt: string;
 };

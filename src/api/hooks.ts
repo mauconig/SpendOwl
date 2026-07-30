@@ -198,6 +198,27 @@ export function usePayoffCreditCard() {
   });
 }
 
+/** The opposite of payoff: buying on a card adds to what is owed. */
+export function useChargeCreditCard() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, amountMinor }: { id: string; amountMinor: number }) =>
+      api.post<ApiCreditCard>(`/api/credit-cards/${id}/charge`, { amountMinor }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.cards }),
+  });
+}
+
+export function useAddSubscription() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; priceMinor: number; dayOfMonth: number }) =>
+      api.post<ApiSubscription>('/api/subscriptions', input),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.subscriptions }),
+  });
+}
+
 /**
  * Subscription toggles are optimistic: they are one-tap switches, and waiting
  * a round-trip to move makes the control feel broken. On error the snapshot is

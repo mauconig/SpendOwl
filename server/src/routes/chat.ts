@@ -91,7 +91,32 @@ The two mistakes that matter most:
 
 Use only the merchant they named. Never reuse one from their past transactions or
 from an earlier draft. If they did not name a shop at all, ask which one it was —
-do not guess and do not substitute a plausible-sounding name.`;
+do not guess and do not substitute a plausible-sounding name.
+
+CARDS AND SUBSCRIPTIONS. Four different things can be said about them, and they
+are easy to confuse. Read which one it is before choosing a tool:
+
+  · "I bought X with my Visa" — money spent, using a card.
+    propose_expense with paidWithCard set. Approving logs the expense AND adds
+    it to that card's balance.
+  · "I paid 200 to my Visa" — money paid TO a card, reducing what they owe.
+    propose_card_payment. This is not spending and is never an expense.
+  · "I cancelled Netflix" — propose_cancel_subscription.
+  · "I subscribed to Netflix, 50 a month" — propose_new_subscription.
+
+The first two are opposites. "Con la Visa", "with my card", "pagué con" mean
+they *spent* using it. "Pagué a la Visa", "paid off", "towards" mean they *paid
+it down*. If a message genuinely could be either, ask.
+
+Name matching is done for you: pass the card or subscription name the way they
+said it and it will be matched to theirs. If the tool comes back saying there
+was no match or several, do exactly what it says — ask them which one. Never
+retry with a name you invented, and never fall back to proposing a plain expense
+when they clearly named a card.
+
+Everything above is a draft. None of these tools change anything: each one shows
+a card the user must approve. Never say something is cancelled, paid, added or
+logged — say it is waiting for them.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +145,19 @@ const toolArgs = {
     // model never handles either.
     amount: z.number().positive().finite(),
     note: z.string().trim().max(280).optional(),
+    paidWithCard: z.string().trim().min(1).max(80).optional(),
+  }),
+  propose_card_payment: z.object({
+    card: z.string().trim().min(1).max(80),
+    amount: z.number().positive().finite(),
+  }),
+  propose_cancel_subscription: z.object({
+    subscription: z.string().trim().min(1).max(80),
+  }),
+  propose_new_subscription: z.object({
+    name: z.string().trim().min(1).max(80),
+    monthlyPrice: z.number().positive().finite(),
+    renewsOnDay: z.int().min(1).max(31).optional(),
   }),
 } as const;
 
@@ -180,17 +218,131 @@ export function buildTools(currency: Currency): Anthropic.Tool[] {
                 : ', e.g. 12.40.'),
           },
           note: { type: 'string', description: 'Optional short context, e.g. "lunch with the team".' },
+          paidWithCard: {
+            type: 'string',
+            description:
+              'Only if they said they paid with a credit card. The card name as they said it — ' +
+              'it is matched against their cards, so "visa" finds "Visa Signature". Approving ' +
+              'then also adds the amount to that card\'s balance.',
+          },
         },
         required: ['merchant', 'category', 'amount'],
+      },
+    },
+    {
+      name: 'propose_card_payment',
+      description:
+        'Draft a payment towards a credit card, for when they say they paid money TO a card ' +
+        'rather than spent money with one. Approving reduces that card\'s balance. Records nothing ' +
+        'on its own.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          card: { type: 'string', description: 'The card name as they said it, e.g. "visa".' },
+          amount: { type: 'number', description: `A positive amount in ${currency}.` },
+        },
+        required: ['card', 'amount'],
+      },
+    },
+    {
+      name: 'propose_cancel_subscription',
+      description:
+        'Draft the cancellation of a subscription they already have. Approving marks it cancelled ' +
+        'so it stops counting towards their monthly total. Cancels nothing on its own.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          subscription: { type: 'string', description: 'The subscription name as they said it.' },
+        },
+        required: ['subscription'],
+      },
+    },
+    {
+      name: 'propose_new_subscription',
+      description:
+        'Draft a new recurring subscription, for when they say they have signed up to something ' +
+        'that bills monthly. Approving adds it. Adds nothing on its own.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'The service, e.g. "Spotify".' },
+          monthlyPrice: { type: 'number', description: `What it costs per month, in ${currency}.` },
+          renewsOnDay: {
+            type: 'integer',
+            description: 'Day of the month it renews, 1-31. Omit if they did not say — today is assumed.',
+          },
+        },
+        required: ['name', 'monthlyPrice'],
       },
     },
   ];
 }
 
-type Proposal = { merchant: string; cat: string; amountMinor: number; note: string };
+/**
+ * What a `card` message can propose. Every one is a draft: the tool records it
+ * here and returns an acknowledgement, and the write only happens when the user
+ * taps approve in ChatScreen. No model mistake reaches the database unreviewed.
+ *
+ * `action` is absent on rows written before card payments and subscriptions
+ * existed, so the client and buildHistory below both read a missing action as
+ * 'expense'.
+ */
+type Proposal =
+  | {
+      action: 'expense';
+      merchant: string;
+      cat: string;
+      amountMinor: number;
+      note: string;
+      cardId?: string;
+      cardName?: string;
+    }
+  | { action: 'card_payment'; cardId: string; cardName: string; amountMinor: number }
+  | { action: 'sub_cancel'; subId: string; subName: string; amountMinor: number }
+  | { action: 'sub_add'; subName: string; amountMinor: number; dayOfMonth: number };
 
 /**
- * Runs one validated tool call. `proposals` collects propose_expense calls for
+ * Resolves the name a person actually says to one of their rows.
+ *
+ * The model is never given ids. It is bad at copying uuids, and a wrong one
+ * would silently act on someone else's row shape; a name it misheard fails
+ * loudly here instead. Exact match first, then unique prefix, then unique
+ * substring — so "visa" finds "Visa Signature" but an ambiguous "card" comes
+ * back as an error the model can ask about.
+ */
+type Named = { id: string; name: string };
+
+function resolveByName<T extends Named>(rows: T[], typed: string): T | { error: string } {
+  const needle = typed.trim().toLowerCase();
+  const exact = rows.filter(r => r.name.toLowerCase() === needle);
+  const prefix = rows.filter(r => r.name.toLowerCase().startsWith(needle));
+  const loose = rows.filter(r => r.name.toLowerCase().includes(needle));
+
+  for (const bucket of [exact, prefix, loose]) {
+    if (bucket.length === 1) return bucket[0]!;
+    if (bucket.length > 1) {
+      return { error: `"${typed}" matches more than one: ${bucket.map(r => r.name).join(', ')}. Ask which one they mean.` };
+    }
+  }
+  return {
+    error: rows.length
+      ? `No match for "${typed}". They have: ${rows.map(r => r.name).join(', ')}. Ask which one they mean — do not guess.`
+      : `They have none set up, so "${typed}" cannot be matched. Tell them that.`,
+  };
+}
+
+/**
+ * A tool's answer. `isError` comes back as an `is_error` tool_result so the
+ * model corrects itself — an unmatched card or subscription name is a question
+ * to ask the user, not a turn to abandon.
+ */
+type ToolResult = { content: string; isError?: boolean };
+
+const ok = (content: string): ToolResult => ({ content });
+const failed = (content: string): ToolResult => ({ content, isError: true });
+
+/**
+ * Runs one validated tool call. `proposals` collects the propose_* calls for
  * the caller to persist as `card` messages once the turn finishes.
  */
 async function runTool(
@@ -199,18 +351,31 @@ async function runTool(
   userId: string,
   currency: Currency,
   proposals: Proposal[]
-): Promise<string> {
+): Promise<ToolResult> {
   // Everything handed to the model is in the display currency, and says so.
   const money = (minor: number) => minorToDisplay(minor, currency);
+
+  const loadCards = () =>
+    query<Named & { balanceMinor: number }>(
+      `SELECT id, name, balance_minor AS "balanceMinor" FROM credit_cards WHERE user_id = $1`,
+      [userId]
+    );
+
+  const loadSubs = () =>
+    query<Named & { priceMinor: number; off: boolean }>(
+      `SELECT id, name, price_minor AS "priceMinor", cancelled AS "off"
+         FROM subscriptions WHERE user_id = $1`,
+      [userId]
+    );
 
   switch (name) {
     case 'get_budget_summary': {
       const summary = await getSummary(userId);
-      if (!summary) return JSON.stringify({ error: 'No account data yet.' });
+      if (!summary) return ok(JSON.stringify({ error: 'No account data yet.' }));
       // `trend` is a day-by-day cumulative series that exists to draw the
       // Dashboard chart. It answers no question the coach is asked, and 30 rows
       // of noise measurably hurts a smaller model's focus — so it is omitted.
-      return JSON.stringify({
+      return ok(JSON.stringify({
         currency,
         month: summary.month,
         spent: money(summary.spentMinor),
@@ -222,7 +387,7 @@ async function runTool(
         daysLeft: summary.daysLeft,
         aheadOfPaceBy: money(summary.paceDeltaMinor),
         categories: summary.categories.map(c => ({ category: c.key, spent: money(c.spentMinor) })),
-      });
+      }));
     }
 
     case 'list_transactions': {
@@ -236,7 +401,7 @@ async function runTool(
           LIMIT $3`,
         [userId, category ?? null, limit ?? 10]
       );
-      return JSON.stringify({
+      return ok(JSON.stringify({
         currency,
         transactions: rows.map(r => ({
           merchant: r.merchant,
@@ -245,7 +410,7 @@ async function runTool(
           date: r.occurredAt,
           note: r.note,
         })),
-      });
+      }));
     }
 
     case 'list_subscriptions': {
@@ -256,7 +421,7 @@ async function runTool(
            FROM subscriptions WHERE user_id = $1 ORDER BY price_minor DESC`,
         [userId]
       );
-      return JSON.stringify({
+      return ok(JSON.stringify({
         currency,
         subscriptions: rows.map(r => ({
           name: r.name,
@@ -265,7 +430,7 @@ async function runTool(
           alertsMuted: r.muted,
           cancelled: r.off,
         })),
-      });
+      }));
     }
 
     case 'list_credit_cards': {
@@ -275,7 +440,7 @@ async function runTool(
            FROM credit_cards WHERE user_id = $1 ORDER BY balance_minor DESC`,
         [userId]
       );
-      return JSON.stringify({
+      return ok(JSON.stringify({
         currency,
         cards: rows.map(r => ({
           name: r.name,
@@ -284,19 +449,92 @@ async function runTool(
           limit: money(r.limitMinor),
           apr: r.apr,
         })),
-      });
+      }));
     }
 
     case 'propose_expense': {
       const p = args as z.infer<(typeof toolArgs)['propose_expense']>;
+
+      // Only resolved when they actually named a card. An unmatched name is an
+      // error rather than a silent drop: "I paid with my Visa" turning into a
+      // cash expense would leave the card balance quietly wrong.
+      let card: (Named & { balanceMinor: number }) | undefined;
+      if (p.paidWithCard) {
+        const found = resolveByName(await loadCards(), p.paidWithCard);
+        if ('error' in found) return failed(found.error);
+        card = found;
+      }
+
       proposals.push({
+        action: 'expense',
         merchant: p.merchant,
         cat: p.category,
         // The one place the display currency is converted back to storage.
         amountMinor: displayToMinor(p.amount, currency),
         note: p.note ?? '',
+        ...(card ? { cardId: card.id, cardName: card.name } : {}),
       });
-      return `Expense card for ${p.amount} ${currency} shown to the user for approval. It is not recorded until they tap "Approve & log". Tell them it is drafted and awaiting their approval.`;
+
+      return ok(
+        `Expense card for ${p.amount} ${currency}${card ? ` on ${card.name}` : ''} shown to the user for approval. ` +
+          `It is not recorded until they tap "Approve & log". Tell them it is drafted and awaiting their approval.`
+      );
+    }
+
+    case 'propose_card_payment': {
+      const p = args as z.infer<(typeof toolArgs)['propose_card_payment']>;
+      const found = resolveByName(await loadCards(), p.card);
+      if ('error' in found) return failed(found.error);
+
+      proposals.push({
+        action: 'card_payment',
+        cardId: found.id,
+        cardName: found.name,
+        amountMinor: displayToMinor(p.amount, currency),
+      });
+      return ok(
+        `Payment card for ${p.amount} ${currency} towards ${found.name} shown for approval. Its balance is ` +
+          `${money(found.balanceMinor)} ${currency} and does not change until they approve.`
+      );
+    }
+
+    case 'propose_cancel_subscription': {
+      const p = args as z.infer<(typeof toolArgs)['propose_cancel_subscription']>;
+      const found = resolveByName(await loadSubs(), p.subscription);
+      if ('error' in found) return failed(found.error);
+      if (found.off) return failed(`${found.name} is already cancelled. Tell them, and do not propose anything.`);
+
+      proposals.push({
+        action: 'sub_cancel',
+        subId: found.id,
+        subName: found.name,
+        amountMinor: found.priceMinor,
+      });
+      return ok(`Cancellation card for ${found.name} shown for approval. It stays active until they approve.`);
+    }
+
+    case 'propose_new_subscription': {
+      const p = args as z.infer<(typeof toolArgs)['propose_new_subscription']>;
+
+      // A duplicate is far more likely to be a misunderstanding than a genuine
+      // second subscription to the same service.
+      const existing = (await loadSubs()).find(s => s.name.toLowerCase() === p.name.trim().toLowerCase());
+      if (existing && !existing.off) {
+        return failed(`${existing.name} is already in their subscriptions. Tell them, and do not propose anything.`);
+      }
+
+      proposals.push({
+        action: 'sub_add',
+        subName: p.name,
+        amountMinor: displayToMinor(p.monthlyPrice, currency),
+        // Today's date is the sensible default for something they just signed
+        // up to, and it is visible on the card for them to correct.
+        dayOfMonth: p.renewsOnDay ?? new Date().getDate(),
+      });
+      return ok(
+        `New subscription card for ${p.name} at ${p.monthlyPrice} ${currency}/month shown for approval. ` +
+          `Nothing is added until they approve.`
+      );
     }
   }
 }
@@ -306,6 +544,59 @@ async function runTool(
 // ---------------------------------------------------------------------------
 
 type MessageRow = { kind: string; payload: Record<string, unknown> };
+
+/**
+ * Turns a stored `card` row back into the tool call that produced it.
+ *
+ * Every proposal must round-trip through here, not just expenses. A card the
+ * model can see in history but cannot recognise as one of its own tool calls is
+ * exactly what taught it to *describe* proposals instead of making them — the
+ * failure that took propose_expense from 8/8 down to 1/8 before this replay
+ * existed. A new action that gets forgotten here reintroduces it for that action.
+ */
+function replayOf(
+  action: string,
+  card: Record<string, unknown>,
+  amount: number,
+  currency: Currency
+): { name: string; input: Record<string, unknown>; ack: string } {
+  switch (action) {
+    case 'card_payment':
+      return {
+        name: 'propose_card_payment',
+        input: { card: String(card.cardName ?? 'card'), amount },
+        ack: `Payment card for ${amount} ${currency} towards ${card.cardName} shown for approval.`,
+      };
+    case 'sub_cancel':
+      return {
+        name: 'propose_cancel_subscription',
+        input: { subscription: String(card.subName ?? '') },
+        ack: `Cancellation card for ${card.subName} shown for approval.`,
+      };
+    case 'sub_add':
+      return {
+        name: 'propose_new_subscription',
+        input: {
+          name: String(card.subName ?? ''),
+          monthlyPrice: amount,
+          renewsOnDay: Number(card.dayOfMonth ?? 1),
+        },
+        ack: `New subscription card for ${card.subName} at ${amount} ${currency}/month shown for approval.`,
+      };
+    default:
+      return {
+        name: 'propose_expense',
+        input: {
+          merchant: String(card.merchant ?? 'Unknown'),
+          category: String(card.cat ?? 'food'),
+          amount,
+          note: String(card.note ?? ''),
+          ...(card.cardName ? { paidWithCard: String(card.cardName) } : {}),
+        },
+        ack: `Expense card for ${amount} ${currency} shown to the user for approval.`,
+      };
+  }
+}
 
 /**
  * Rebuilds the conversation from the user-visible messages.
@@ -357,22 +648,13 @@ export function buildHistory(rows: MessageRow[], currency: Currency): Anthropic.
       for (const card of group) {
         const id = `toolu_hist${++toolSeq}`;
         const amount = Math.abs(minorToDisplay(Number(card.amountMinor ?? 0), currency));
-        uses.push({
-          type: 'tool_use',
-          id,
-          name: 'propose_expense',
-          input: {
-            merchant: String(card.merchant ?? 'Unknown'),
-            category: String(card.cat ?? 'food'),
-            amount,
-            note: String(card.note ?? ''),
-          },
-        });
-        results.push({
-          type: 'tool_result',
-          tool_use_id: id,
-          content: `Expense card for ${amount} ${currency} shown to the user for approval.`,
-        });
+        // Rows written before card payments and subscriptions existed carry no
+        // action at all, and were all expenses.
+        const action = String(card.action ?? 'expense');
+        const { name, input, ack } = replayOf(action, card, amount, currency);
+
+        uses.push({ type: 'tool_use', id, name, input });
+        results.push({ type: 'tool_result', tool_use_id: id, content: ack });
       }
       out.push({ role: 'assistant', content: uses });
       out.push({ role: 'user', content: results });
@@ -476,10 +758,12 @@ export const chatRoute = new Hono<AppEnv>().post('/', async c => {
           });
           continue;
         }
+        const result = await runTool(block.name as ToolName, args.data, userId, currency, proposals);
         results.push({
           type: 'tool_result',
           tool_use_id: block.id,
-          content: await runTool(block.name as ToolName, args.data, userId, currency, proposals),
+          content: result.content,
+          ...(result.isError ? { is_error: true } : {}),
         });
       }
 

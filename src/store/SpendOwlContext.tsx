@@ -2,14 +2,17 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import {
   useAddCreditCard,
   useAddMessage,
+  useAddSubscription,
   useAddReceipt,
   useAddTransaction,
   useApproveReceipt,
+  useChargeCreditCard,
   useCreditCards,
   useDeleteMessage,
   useDeleteTransaction,
   useInsights,
   useMessages,
+  usePayoffCreditCard,
   useReceipts,
   useRefreshInsights,
   useRemoveCreditCard,
@@ -192,6 +195,9 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const deleteTransactionMutation = useDeleteTransaction();
   const addCard = useAddCreditCard();
   const removeCard = useRemoveCreditCard();
+  const chargeCard = useChargeCreditCard();
+  const payoffCard = usePayoffCreditCard();
+  const addSubscription = useAddSubscription();
   const updateSubscription = useUpdateSubscription();
   const approveReceipt = useApproveReceipt();
   const addReceipt = useAddReceipt();
@@ -309,15 +315,53 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
             return { id: m.id, type: 'voice', dur: m.payload.dur ?? '0:04' };
           case 'receipt':
             return { id: m.id, type: 'receipt' };
-          case 'card':
-            return {
-              id: m.id,
-              type: 'card',
-              merchant: m.payload.merchant ?? 'Unknown',
-              cat: m.payload.cat ?? 'food',
-              amountEur: Math.abs(minorToEur(m.payload.amountMinor ?? 0)),
-              note: m.payload.note ?? '',
-            };
+          case 'card': {
+            const p = m.payload;
+            const amountEur = Math.abs(minorToEur(p.amountMinor ?? 0));
+            // A missing action means a row written before card payments and
+            // subscriptions existed, all of which were expenses.
+            switch (p.action) {
+              case 'card_payment':
+                return {
+                  id: m.id,
+                  type: 'card',
+                  action: 'card_payment',
+                  cardId: p.cardId ?? '',
+                  cardName: p.cardName ?? 'your card',
+                  amountEur,
+                };
+              case 'sub_cancel':
+                return {
+                  id: m.id,
+                  type: 'card',
+                  action: 'sub_cancel',
+                  subId: p.subId ?? '',
+                  subName: p.subName ?? 'that subscription',
+                  amountEur,
+                };
+              case 'sub_add':
+                return {
+                  id: m.id,
+                  type: 'card',
+                  action: 'sub_add',
+                  subName: p.subName ?? 'New subscription',
+                  amountEur,
+                  dayOfMonth: p.dayOfMonth ?? 1,
+                };
+              default:
+                return {
+                  id: m.id,
+                  type: 'card',
+                  action: 'expense',
+                  merchant: p.merchant ?? 'Unknown',
+                  cat: p.cat ?? 'food',
+                  amountEur,
+                  note: p.note ?? '',
+                  cardId: p.cardId,
+                  cardName: p.cardName,
+                };
+            }
+          }
           default:
             return { id: m.id, type: 'ai', text: m.payload.text ?? '' };
         }
@@ -352,11 +396,31 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     (id: string, patch: Partial<CardState>) => {
       setCards(prev => ({ ...prev, [id]: { ...(prev[id] ?? { tax: false, ok: false }), ...patch } }));
 
-      // "Approve & log" now actually writes a transaction, rather than only
-      // flipping a local flag.
-      if (patch.ok) {
-        const message = serverMessages.find(m => m.id === id);
-        if (message?.type === 'card') {
+      // Approving is the only place any of this is written. Which write depends
+      // on what was proposed — an expense charged to a card is two of them, and
+      // both are true: the money was spent, and the card now owes more.
+      if (!patch.ok) return;
+      const message = serverMessages.find(m => m.id === id);
+      if (message?.type !== 'card') return;
+
+      switch (message.action) {
+        case 'card_payment':
+          if (message.cardId) payoffCard.mutate({ id: message.cardId, amountMinor: eurToMinor(message.amountEur) });
+          return;
+
+        case 'sub_cancel':
+          if (message.subId) updateSubscription.mutate({ id: message.subId, off: true });
+          return;
+
+        case 'sub_add':
+          addSubscription.mutate({
+            name: message.subName,
+            priceMinor: eurToMinor(message.amountEur),
+            dayOfMonth: message.dayOfMonth,
+          });
+          return;
+
+        default:
           addTransaction.mutate({
             merchant: message.merchant,
             category: message.cat,
@@ -364,10 +428,12 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
             note: message.note,
             taxDeductible: cards[id]?.tax ?? false,
           });
-        }
+          if (message.cardId) {
+            chargeCard.mutate({ id: message.cardId, amountMinor: eurToMinor(message.amountEur) });
+          }
       }
     },
-    [serverMessages, cards, addTransaction]
+    [serverMessages, cards, addTransaction, chargeCard, payoffCard, addSubscription, updateSubscription]
   );
 
   /**

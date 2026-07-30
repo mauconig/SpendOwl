@@ -14,7 +14,23 @@ export type Msg =
   | { id: string; type: 'scanning' }
   | { id: string; type: 'thinking' }
   | { id: string; type: 'error'; text: string }
-  | { id: string; type: 'card'; merchant: string; cat: CatKey; amountEur: number; note: string };
+  // One card message per thing the coach can propose. All four are drafts —
+  // nothing is written until "Approve" is tapped, so the shape carries whatever
+  // the approval will need (a resolved card or subscription id, a renewal day).
+  | {
+      id: string;
+      type: 'card';
+      action: 'expense';
+      merchant: string;
+      cat: CatKey;
+      amountEur: number;
+      note: string;
+      cardId?: string;
+      cardName?: string;
+    }
+  | { id: string; type: 'card'; action: 'card_payment'; cardId: string; cardName: string; amountEur: number }
+  | { id: string; type: 'card'; action: 'sub_cancel'; subId: string; subName: string; amountEur: number }
+  | { id: string; type: 'card'; action: 'sub_add'; subName: string; amountEur: number; dayOfMonth: number };
 
 /**
  * Facturas (the receipt vault) are parked. The feature is built and the code is

@@ -67,6 +67,26 @@ export const cardsRoute = new Hono<AppEnv>()
     return c.json(row);
   })
 
+  // The mirror of payoff: buying something on a card increases what you owe.
+  // Deliberately not capped at the credit limit — going over one is a real
+  // thing that happens, and silently clamping would make the balance disagree
+  // with the statement, which is worse than showing an uncomfortable number.
+  .post('/:id/charge', async c => {
+    const parsed = payoffSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+
+    const row = await queryOne(
+      `UPDATE credit_cards
+          SET balance_minor = balance_minor + $3
+        WHERE id = $1 AND user_id = $2
+        RETURNING id, name, last4, balance_minor AS "balanceMinor",
+                  credit_limit_minor AS "limitMinor", apr, color`,
+      [c.req.param('id'), c.get('userId'), parsed.data.amountMinor]
+    );
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    return c.json(row);
+  })
+
   .delete('/:id', async c => {
     const row = await queryOne('DELETE FROM credit_cards WHERE id = $1 AND user_id = $2 RETURNING id', [
       c.req.param('id'),
