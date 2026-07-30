@@ -134,9 +134,24 @@ see — a merchant that has quietly become a large share of the month, several r
 landing on the same few days, a category that has stopped or started, spending that
 does not look like the rest of the month, a card balance that costs real interest.
 
-Ground every claim in the numbers you were given. Never estimate, extrapolate a trend
-you cannot see, or invent a merchant, amount or date. If the data is thin — a nearly
-empty month — say less rather than padding: two honest cards beat four hollow ones.
+NEVER DO ARITHMETIC. This is the rule that matters most, because you are reliably bad
+at it and a wrong number here is worse than no card at all. Every figure you write must
+appear, digit for digit, somewhere in the data you were given. Do not add, subtract,
+multiply, average, total, or take a percentage of anything — every total, share and
+per-day figure you could want has already been worked out for you. Copy the number,
+never derive it.
+
+In particular: recentTransactionsSample is the newest few transactions, NOT the whole
+month. Never add its rows together and never describe a figure taken from it as a
+monthly total. For per-merchant totals use topMerchantsThisMonth; for per-category
+totals use categoriesThisMonth. Likewise, if you talk about how many subscriptions
+someone has, use activeSubscriptionCount — do not count the list yourself.
+
+Copy amounts exactly as given, digit for digit. Dropping or adding a digit turns a
+helpful card into a false one.
+
+If the data is thin — a nearly empty month — say less rather than padding: two honest
+cards beat four hollow ones.
 
 VOICE. Second person, warm, specific, no scolding. Title at most six words. Body one or
 two sentences, always containing the actual figure. cta is a short action label like
@@ -197,13 +212,28 @@ const emitTool: Anthropic.Tool = {
 async function buildSnapshot(userId: string, currency: Currency) {
   const money = (minor: number) => minorToDisplay(minor, currency);
 
-  const [summary, transactions, subscriptions, cards, facturas] = await Promise.all([
+  const [summary, transactions, merchants, subscriptions, cards, facturas] = await Promise.all([
     getSummary(userId),
     query<{ merchant: string; category: string; amountMinor: number; occurredAt: string; note: string | null }>(
       `SELECT merchant, category, amount_minor AS "amountMinor", occurred_at AS "occurredAt", note
          FROM transactions WHERE user_id = $1
         ORDER BY occurred_at DESC, created_at DESC LIMIT $2`,
       [userId, TX_SAMPLE]
+    ),
+    // Aggregated over the *whole month*, not the sample above. Without this the
+    // model sums the 25 recent rows and calls the result a monthly total —
+    // measured, and wrong by 20% on the first live run.
+    query<{ merchant: string; category: string; spentMinor: number; visits: number }>(
+      `SELECT merchant, MIN(category) AS category, SUM(-amount_minor)::bigint AS "spentMinor",
+              COUNT(*)::int AS visits
+         FROM transactions
+        WHERE user_id = $1 AND amount_minor < 0
+          AND occurred_at >= date_trunc('month', CURRENT_DATE)::date
+          AND occurred_at <= CURRENT_DATE
+        GROUP BY merchant
+        ORDER BY "spentMinor" DESC
+        LIMIT 8`,
+      [userId]
     ),
     query<{ name: string; priceMinor: number; dayOfMonth: number; off: boolean }>(
       `SELECT name, price_minor AS "priceMinor", day_of_month AS "dayOfMonth", cancelled AS "off"
@@ -225,6 +255,15 @@ async function buildSnapshot(userId: string, currency: Currency) {
 
   if (!summary) return null;
 
+  // Percentages are computed here for the same reason amounts are converted
+  // here: it is arithmetic, and arithmetic in the model's head is where every
+  // wrong figure on the first live run came from.
+  const share = (minor: number) =>
+    summary.spentMinor > 0 ? Math.round((minor / summary.spentMinor) * 100) : 0;
+
+  const active = subscriptions.filter(s => !s.off);
+  const daysLeft = Math.max(summary.daysLeft, 1);
+
   return {
     // `trend` is omitted for the same reason the coach omits it: 30 rows of
     // cumulative chart series answer no question and crowd out the rest.
@@ -237,17 +276,34 @@ async function buildSnapshot(userId: string, currency: Currency) {
       spent: money(summary.spentMinor),
       income: money(summary.incomeMinor),
       safeToSpend: money(summary.safeToSpendMinor),
+      safeToSpendPerRemainingDay: money(Math.round(summary.safeToSpendMinor / daysLeft)),
       overBudget: summary.overBudget,
       percentOfBudget: Math.round(summary.percentOfBudget),
       aheadOfPaceBy: money(summary.paceDeltaMinor),
-      categories: summary.categories.map(c => ({ category: c.key, spent: money(c.spentMinor) })),
-      recentTransactions: transactions.map(t => ({
+      categoriesThisMonth: summary.categories.map(c => ({
+        category: c.key,
+        spent: money(c.spentMinor),
+        percentOfSpending: share(c.spentMinor),
+      })),
+      topMerchantsThisMonth: merchants.map(m => ({
+        merchant: m.merchant,
+        category: m.category,
+        spent: money(m.spentMinor),
+        visits: m.visits,
+        percentOfSpending: share(m.spentMinor),
+      })),
+      // Named a sample on purpose — it is the newest 25 rows, not the month.
+      // The prompt forbids adding these up; topMerchantsThisMonth is the
+      // aggregate to quote instead.
+      recentTransactionsSample: transactions.map(t => ({
         merchant: t.merchant,
         category: t.category,
         amount: money(t.amountMinor),
         date: t.occurredAt,
         note: t.note,
       })),
+      activeSubscriptionCount: active.length,
+      activeSubscriptionMonthlyTotal: money(active.reduce((sum, s) => sum + s.priceMinor, 0)),
       subscriptions: subscriptions.map(s => ({
         name: s.name,
         monthlyPrice: money(s.priceMinor),
@@ -259,6 +315,7 @@ async function buildSnapshot(userId: string, currency: Currency) {
         balance: money(c.balanceMinor),
         limit: money(c.limitMinor),
         apr: c.apr,
+        monthlyInterest: money(Math.round((c.balanceMinor * c.apr) / 100 / 12)),
       })),
       facturasNeedingReview: facturas.map(f => ({
         id: f.id,
@@ -292,65 +349,74 @@ function lockKey(userId: string): number {
 export async function generateInsights(userId: string, currency: Currency): Promise<InsightSet> {
   if (!env.llmApiKey) return readInsights(userId, currency);
 
-  const built = await buildSnapshot(userId, currency);
-  if (!built) return readInsights(userId, currency);
-
-  const client = new Anthropic({ apiKey: env.llmApiKey, baseURL: env.llmBaseUrl });
-  const response = await client.messages.create({
-    model: env.llmModel,
-    max_tokens: MAX_TOKENS,
-    system: systemPrompt(currency),
-    tools: [emitTool],
-    // Forcing the tool is what makes the output a schema rather than prose.
-    // It is rejected outright while thinking is on, so thinking is off — which
-    // also happens to halve the output tokens for a task that is noticing and
-    // phrasing rather than reasoning.
-    tool_choice: { type: 'tool', name: 'emit_insights' },
-    thinking: { type: 'disabled' },
-    messages: [
-      {
-        role: 'user',
-        content: `Here is their money right now. Write the cards.\n\n${JSON.stringify(built.snapshot)}`,
-      },
-    ],
-  });
-
-  const call = response.content.find(block => block.type === 'tool_use' && block.name === 'emit_insights');
-  if (!call || call.type !== 'tool_use') {
-    throw new Error(`Model returned no emit_insights call (stop_reason: ${response.stop_reason})`);
-  }
-
-  const parsed = argsSchema.safeParse(call.input);
-  if (!parsed.success) {
-    throw new Error(`Malformed insights: ${parsed.error.issues.map(i => `${i.path.join('.')} ${i.message}`).join('; ')}`);
-  }
-
-  const insights: Insight[] = parsed.data.insights.map(card => ({
-    title: card.title,
-    body: card.body,
-    cta: card.cta,
-    icon: card.icon,
-    action: card.action,
-    // A targetId is only ever an id we handed over. Anything else — a
-    // hallucinated uuid, an id from another account — degrades the card to
-    // "open the vault" rather than deep-linking somewhere wrong.
-    targetId: card.action === 'vault' && card.targetId && built.receiptIds.has(card.targetId) ? card.targetId : null,
-  }));
-
+  // The whole generation happens inside the lock, model call included. Taking
+  // it only around the write would stop the duplicate INSERT but not the
+  // duplicate spend: both racers would pay for a call and one result would be
+  // thrown away. That costs a transaction held open for the length of an HTTP
+  // request, which is acceptable exactly because it happens once per user per
+  // day.
   await transaction(async client => {
     await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey(userId)]);
 
-    // Re-check under the lock: whoever we were queued behind may have just
-    // written today's cards, in which case theirs stand and ours are dropped.
+    // Re-check under the lock: whoever we queued behind may have just written
+    // today's cards, in which case theirs stand and we call nothing.
     const { rows } = await client.query(SELECT_FRESH, [userId, currency]);
     if (rows.length > 0) return;
 
+    const built = await buildSnapshot(userId, currency);
+    if (!built) return;
+
+    const anthropic = new Anthropic({ apiKey: env.llmApiKey, baseURL: env.llmBaseUrl });
+    const response = await anthropic.messages.create({
+      model: env.llmModel,
+      max_tokens: MAX_TOKENS,
+      system: systemPrompt(currency),
+      tools: [emitTool],
+      // Forcing the tool is what makes the output a schema rather than prose.
+      // It is rejected outright while thinking is on, so thinking is off —
+      // which also halves the output tokens for a task that is noticing and
+      // phrasing rather than reasoning.
+      tool_choice: { type: 'tool', name: 'emit_insights' },
+      thinking: { type: 'disabled' },
+      messages: [
+        {
+          role: 'user',
+          content: `Here is their money right now. Write the cards.\n\n${JSON.stringify(built.snapshot)}`,
+        },
+      ],
+    });
+
+    const call = response.content.find(block => block.type === 'tool_use' && block.name === 'emit_insights');
+    if (!call || call.type !== 'tool_use') {
+      throw new Error(`Model returned no emit_insights call (stop_reason: ${response.stop_reason})`);
+    }
+
+    const parsed = argsSchema.safeParse(call.input);
+    if (!parsed.success) {
+      throw new Error(
+        `Malformed insights: ${parsed.error.issues.map(i => `${i.path.join('.')} ${i.message}`).join('; ')}`
+      );
+    }
+
     await client.query(`DELETE FROM insights WHERE user_id = $1 AND generated_on = CURRENT_DATE`, [userId]);
-    for (const [rank, card] of insights.entries()) {
+    for (const [rank, card] of parsed.data.insights.entries()) {
       await client.query(
         `INSERT INTO insights (user_id, generated_on, currency, rank, title, body, cta, icon, action, target_id)
          VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [userId, currency, rank, card.title, card.body, card.cta, card.icon, card.action, card.targetId]
+        [
+          userId,
+          currency,
+          rank,
+          card.title,
+          card.body,
+          card.cta,
+          card.icon,
+          card.action,
+          // A targetId is only ever an id we handed over. Anything else — a
+          // hallucinated uuid, an id from another account — degrades the card
+          // to "open the vault" rather than deep-linking somewhere wrong.
+          card.action === 'vault' && card.targetId && built.receiptIds.has(card.targetId) ? card.targetId : null,
+        ]
       );
     }
   });
