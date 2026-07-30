@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { ModalShell } from '../components/ModalShell';
 import { Toggle } from '../components/Toggle';
 import { Icon } from '../icons';
@@ -15,6 +16,7 @@ import {
 } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { formatAmountInput, parseAmountInput } from '../utils/moneyInput';
+import { longDate, parseDay, toDayString } from '../utils/date';
 
 const CAT_KEYS = Object.keys(CATS) as CatKey[];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -65,6 +67,7 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
   const [date, setDate] = useState('');
   const [note, setNote] = useState('');
   const [tax, setTax] = useState(false);
+  const [pickingDate, setPickingDate] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Reload the form whenever a different transaction is opened. Keyed on the id
@@ -79,12 +82,14 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
     setNote(tx.note ?? '');
     setTax(tx.taxDeductible);
     setConfirmingDelete(false);
+    setPickingDate(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editTx?.id, baseCur]);
 
   const close = () => {
     store.closeEditTx();
     setConfirmingDelete(false);
+    setPickingDate(false);
   };
 
   const amountValue = parseAmountInput(amount, baseCur);
@@ -196,14 +201,34 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
         </Field>
 
         <Field label="DATE">
-          <TextInput
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor="rgba(245,245,247,.3)"
-            autoCapitalize="none"
-            style={{ ...inputStyle, borderWidth: 1, borderColor: ISO_DATE.test(date) ? 'transparent' : colors.rose }}
-          />
+          <Pressable
+            onPress={() => setPickingDate(v => !v)}
+            style={{ ...inputStyle, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+          >
+            <Text style={{ fontSize: 14.5, color: colors.text }}>{date ? longDate(date) : 'Pick a date'}</Text>
+            <Icon name="chev" size={16} color={colors.textDim40} />
+          </Pressable>
+
+          {pickingDate && date ? (
+            <DateTimePicker
+              value={parseDay(date)}
+              mode="date"
+              // iOS renders the calendar in place, which sits fine inside the
+              // sheet; Android puts up its own dialog and dismisses itself.
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              // A transaction cannot have happened tomorrow.
+              maximumDate={new Date()}
+              themeVariant="dark"
+              accentColor={colors.mint}
+              onChange={(event, selected) => {
+                if (Platform.OS !== 'ios') setPickingDate(false);
+                if (event.type === 'dismissed' || !selected) return;
+                // toDayString, never toISOString: the latter converts to UTC
+                // first, so picking the 30th in Asunción would save the 29th.
+                setDate(toDayString(selected));
+              }}
+            />
+          ) : null}
         </Field>
 
         <Field label="NOTE">

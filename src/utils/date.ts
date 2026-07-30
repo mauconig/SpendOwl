@@ -7,6 +7,16 @@ export function parseDay(iso: string): Date {
   return new Date(year ?? 1970, (month ?? 1) - 1, day ?? 1);
 }
 
+/**
+ * The inverse of parseDay: a Date back to 'YYYY-MM-DD'. Built from the local
+ * fields for the same reason parseDay reads them — `toISOString()` converts to
+ * UTC first, so picking the 30th anywhere west of Greenwich would save the 29th.
+ */
+export function toDayString(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function startOfToday(): Date {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
