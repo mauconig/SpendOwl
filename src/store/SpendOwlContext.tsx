@@ -9,6 +9,7 @@ import {
   useMessages,
   useReceipts,
   useRemoveCreditCard,
+  useSendChat,
   useSubscriptions,
   useSummary,
   useTransactions,
@@ -24,7 +25,6 @@ import {
   CARD_COLORS,
   CreditCard,
   Msg,
-  REPLIES,
   SAVINGS_TODAY,
   Subscription,
   VaultItem,
@@ -164,6 +164,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const approveReceipt = useApproveReceipt();
   const addReceipt = useAddReceipt();
   const addMessage = useAddMessage();
+  const sendChat = useSendChat();
   const updateSettings = useUpdateSettings();
 
   const queries = [transactionsQuery, summaryQuery, cardsQuery, subsQuery, receiptsQuery, messagesQuery, settingsQuery];
@@ -176,7 +177,6 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transactionsQuery.refetch, summaryQuery.refetch, cardsQuery.refetch, subsQuery.refetch, receiptsQuery.refetch, messagesQuery.refetch, settingsQuery.refetch]);
 
-  const replyIxRef = useRef(0);
   const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -266,9 +266,24 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     [messagesQuery.data]
   );
 
+  // A failed turn is surfaced but never persisted, so a network blip doesn't
+  // leave an apology stuck in the transcript forever. It clears on next send.
+  const chatError = sendChat.isError
+    ? sendChat.error instanceof Error
+      ? sendChat.error.message
+      : 'Something went wrong.'
+    : null;
+
   const messages = useMemo<Msg[]>(
-    () => [...serverMessages, ...pendingScans.map((id): Msg => ({ id, type: 'scanning' }))],
-    [serverMessages, pendingScans]
+    () => [
+      ...serverMessages,
+      ...pendingScans.map((id): Msg => ({ id, type: 'scanning' })),
+      // isPending stays true through the messages refetch (see useSendChat), so
+      // the indicator hands off directly to the rendered reply with no gap.
+      ...(sendChat.isPending ? [{ id: 'thinking', type: 'thinking' } as Msg] : []),
+      ...(chatError ? [{ id: 'chat-error', type: 'error', text: chatError } as Msg] : []),
+    ],
+    [serverMessages, pendingScans, sendChat.isPending, chatError]
   );
 
   // ---- Actions ----
@@ -329,10 +344,11 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     const text = input.trim();
     if (!text) return;
     setInput('');
-    addMessage.mutate({ kind: 'user', payload: { text } });
-    const reply = REPLIES[replyIxRef.current++ % REPLIES.length] ?? REPLIES[0]!;
-    after(900, () => addMessage.mutate({ kind: 'ai', payload: { text: reply } }));
-  }, [attachment, input, addMessage, addReceipt, after]);
+    // One call runs the whole turn server-side — it persists this message, asks
+    // the coach, and persists the reply. The user's bubble appears immediately
+    // via the optimistic update inside useSendChat.
+    sendChat.mutate(text);
+  }, [attachment, input, addMessage, addReceipt, after, sendChat]);
 
   const startRec = useCallback(() => {
     setRecording(true);

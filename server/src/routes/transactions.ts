@@ -3,7 +3,10 @@ import { z } from 'zod';
 import type { AppEnv } from '../auth.ts';
 import { query, queryOne } from '../db.ts';
 
-const CATEGORIES = ['food', 'bills', 'shopping', 'transport', 'income', 'debt'] as const;
+// Exported so the chat coach's propose_expense tool offers exactly these — a
+// proposal carrying a category this endpoint would reject turns into a card the
+// user can tap "Approve & log" on and get a 400.
+export const CATEGORIES = ['food', 'bills', 'shopping', 'transport', 'income', 'debt'] as const;
 
 const createSchema = z.object({
   merchant: z.string().trim().min(1).max(120),

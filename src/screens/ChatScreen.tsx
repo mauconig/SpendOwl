@@ -183,6 +183,49 @@ function MessageBubble({ m }: { m: Msg }) {
       </FadeIn>
     );
   }
+  if (m.type === 'thinking') {
+    return (
+      <FadeIn>
+        <View
+          style={{
+            alignSelf: 'flex-start',
+            backgroundColor: colors.bubbleAi,
+            paddingVertical: 15,
+            paddingHorizontal: 18,
+            borderRadius: 20,
+            borderTopLeftRadius: 6,
+          }}
+        >
+          <Dots />
+        </View>
+      </FadeIn>
+    );
+  }
+  if (m.type === 'error') {
+    return (
+      <FadeIn>
+        <View
+          style={{
+            alignSelf: 'flex-start',
+            maxWidth: '84%',
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 9,
+            backgroundColor: colors.bubbleAi,
+            borderWidth: 1,
+            borderColor: 'rgba(248,113,113,.35)',
+            padding: 11,
+            paddingHorizontal: 15,
+            borderRadius: 20,
+            borderTopLeftRadius: 6,
+          }}
+        >
+          <Icon name="warn" size={15} color={colors.rose} />
+          <Text style={{ flex: 1, fontSize: 13.5, lineHeight: 20, color: colors.rose }}>{m.text}</Text>
+        </View>
+      </FadeIn>
+    );
+  }
   return (
     <FadeIn>
       <CardMessage m={m} />

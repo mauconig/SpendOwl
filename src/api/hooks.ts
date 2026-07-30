@@ -201,6 +201,45 @@ export function useAddMessage() {
   });
 }
 
+/**
+ * One round trip runs the entire coach turn: the server persists the user's
+ * message, calls the model with tools bound to their data, and persists the
+ * reply. Nothing about the provider reaches the client.
+ *
+ * The user's own message is added optimistically so it appears the instant they
+ * hit send, rather than after the model has finished thinking.
+ *
+ * `onSettled` deliberately *returns* the invalidation promise: that keeps
+ * `isPending` true until the refetched messages have actually landed, which is
+ * what drives the typing indicator. Without it the indicator vanishes a beat
+ * before the reply renders, and the chat looks briefly empty.
+ */
+export function useSendChat() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (text: string) => api.post<void>('/api/chat', { text }),
+    onMutate: async text => {
+      await client.cancelQueries({ queryKey: keys.messages });
+      const previous = client.getQueryData<ApiMessage[]>(keys.messages);
+      const optimistic: ApiMessage = {
+        id: `pending-${Date.now()}`,
+        kind: 'user',
+        payload: { text },
+        createdAt: new Date().toISOString(),
+      };
+      client.setQueryData<ApiMessage[]>(keys.messages, current => [...(current ?? []), optimistic]);
+      return { previous };
+    },
+    onError: (_error, _text, context) => {
+      // The refetch below is the source of truth — if the server got as far as
+      // storing the message before failing, it comes straight back.
+      if (context?.previous) client.setQueryData(keys.messages, context.previous);
+    },
+    onSettled: () => client.invalidateQueries({ queryKey: keys.messages }),
+  });
+}
+
 export function useUpdateSettings() {
   const api = useApi();
   const client = useQueryClient();

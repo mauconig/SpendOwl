@@ -12,6 +12,7 @@
     "db:reset": "docker compose down -v && docker compose up -d"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@clerk/backend": "^3.13.2",
     "@hono/node-server": "^2.0.12",
     "hono": "^4.12.32",

@@ -4,20 +4,17 @@ import type { CatKey } from '../theme';
 // per-user seed (server/src/seed.ts); everything here is genuine client-side
 // constant or view-model type, not stand-in data.
 
+// 'scanning', 'thinking' and 'error' are client-only: transient states the UI
+// renders while something is in flight, never rows in the messages table.
 export type Msg =
   | { id: string; type: 'ai'; text: string }
   | { id: string; type: 'user'; text: string }
   | { id: string; type: 'voice'; dur: string }
   | { id: string; type: 'receipt' }
   | { id: string; type: 'scanning' }
+  | { id: string; type: 'thinking' }
+  | { id: string; type: 'error'; text: string }
   | { id: string; type: 'card'; merchant: string; cat: CatKey; amountEur: number; note: string };
-
-/** Still canned — the real LLM coach is the next slice in .docs/BACKEND.md. */
-export const REPLIES = [
-  "Logged. Want the food breakdown?",
-  'Done. Anything else from today?',
-  "On it. I'll nudge you if this pushes Food past its cap.",
-];
 
 export const AFFORD_OPTS = [
   { name: 'Headphones', v: 129 },
