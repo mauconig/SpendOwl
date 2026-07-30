@@ -50,6 +50,17 @@ export function monthLong(monthKey: string): string {
   return MONTHS_LONG[index] ?? '';
 }
 
+/** '2026-07' -> 'July 2026'. Month headings in the full transaction list. */
+export function monthYearLong(monthKey: string): string {
+  const name = monthLong(monthKey);
+  return name ? `${name} ${monthKey.slice(0, 4)}` : '';
+}
+
+/** '2026-07-14' -> '2026-07'. The key transactions are grouped by. */
+export function monthKeyOf(iso: string): string {
+  return iso.slice(0, 7);
+}
+
 /** 3 -> '3rd'. Subscription rows show an ordinal day of month. */
 export function ordinalDay(day: number): string {
   if (day % 100 >= 11 && day % 100 <= 13) return `${day}th`;

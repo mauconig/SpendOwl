@@ -13,6 +13,10 @@ import { cardInterestMonthly } from '../utils/payoff';
 
 const CAT_KEYS: CatKey[] = ['food', 'bills', 'shopping', 'transport'];
 
+// The dashboard card is a preview, not the ledger. The full history — grouped
+// by month — lives behind "See all" in TransactionsSheet.
+const VISIBLE_TX = 8;
+
 function donutValueFontSize(text: string): number {
   if (text.length <= 7) return 24;
   if (text.length <= 9) return 19;
@@ -61,6 +65,9 @@ export function DashboardScreen() {
         color: cat.color,
       };
     });
+
+  const visibleTx = txList.slice(0, VISIBLE_TX);
+  const hiddenTxCount = txList.length - visibleTx.length;
 
   const subsActive = store.subs.filter(s => !s.off);
   const subsTotal = subsActive.reduce((a, s) => a + s.price, 0);
@@ -206,19 +213,22 @@ export function DashboardScreen() {
       <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>Transactions</Text>
-          {selCat ? (
-            <Pressable
-              onPress={() => setSelCat(null)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#F2F2F4', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 11 }}
-            >
-              <Text style={{ fontSize: 11.5, fontFamily: fonts.medium, color: '#0A0A0B' }}>{CATS[selCat].name} ✕</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {selCat && (
+              <Pressable
+                onPress={() => setSelCat(null)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#F2F2F4', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 11 }}
+              >
+                <Text style={{ fontSize: 11.5, fontFamily: fonts.medium, color: '#0A0A0B' }}>{CATS[selCat].name} ✕</Text>
+              </Pressable>
+            )}
+            <Pressable onPress={store.openTx} hitSlop={8}>
+              <Text style={{ fontSize: 12, color: colors.textDim40 }}>See all</Text>
             </Pressable>
-          ) : (
-            <Text style={{ fontSize: 12, color: colors.textDim40 }}>See all</Text>
-          )}
+          </View>
         </View>
         <View style={{ gap: 4 }}>
-          {txList.map(t => (
+          {visibleTx.map(t => (
             <View key={t.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 7 }}>
               <View
                 style={{
@@ -242,6 +252,17 @@ export function DashboardScreen() {
             </View>
           ))}
         </View>
+        {hiddenTxCount > 0 && (
+          <Pressable
+            onPress={store.openTx}
+            style={{ marginTop: 8, paddingTop: 11, borderTopWidth: 1, borderTopColor: colors.hairline, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }}
+          >
+            <Text style={{ fontSize: 12.5, fontFamily: fonts.medium, color: colors.textDim60 }}>
+              {hiddenTxCount} more
+            </Text>
+            <Icon name="chev" size={16} color={colors.textDim40} />
+          </Pressable>
+        )}
       </View>
 
       <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16 }}>

@@ -76,6 +76,9 @@ interface SpendOwlStore {
   overBudget: boolean;
   selCat: CatKey | null;
   setSelCat: (c: CatKey | null) => void;
+  txOpen: boolean;
+  openTx: () => void;
+  closeTx: () => void;
 
   // credit cards
   creditCards: CreditCard[];
@@ -134,6 +137,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const [recSecs, setRecSecs] = useState(0);
   const [cards, setCards] = useState<Record<string, CardState>>({});
   const [selCat, setSelCat] = useState<CatKey | null>(null);
+  const [txOpen, setTxOpen] = useState(false);
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [payoffCardId, setPayoffCardId] = useState<string | null>(null);
   const [affordOpen, setAffordOpen] = useState(false);
@@ -452,6 +456,9 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     overBudget: summary?.overBudget ?? false,
     selCat,
     setSelCat,
+    txOpen,
+    openTx: () => setTxOpen(true),
+    closeTx: () => setTxOpen(false),
 
     creditCards,
     addCardOpen,
