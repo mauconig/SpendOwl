@@ -33,7 +33,7 @@ const MAX_TOKENS = 4096;
 // their own call (not batched with 14 others) and giving that call more
 // room is what keeps a single umbrella promo from starving everything else
 // in its batch of tokens.
-const MAX_TOKENS_MULTI_MERCHANT = 8000;
+const MAX_TOKENS_MULTI_MERCHANT = 12000;
 
 const COMERCIOS_ADHERIDOS_RE = /comercios\s+adherido/i;
 
@@ -89,7 +89,12 @@ const discountSchema = z.object({
   // a plain string array rather than asking the model to repeat every other
   // field once per business: a numbered list is cheap and reliable, 100+
   // full discount objects is neither.
-  affiliatedMerchants: z.array(z.string().trim().min(1).max(120)).max(150).nullish(),
+  // Real data broke both original limits: some entries carry a full list of
+  // shopping-mall branches in parentheses (e.g. "BELLINI PASTA (Paseo
+  // Carmelitas, Shopping del Sol, ...)"), and at least one promo listed more
+  // than 150 affiliated businesses. Both are now generous enough that a
+  // legitimate long promo doesn't lose its entire discount to one item.
+  affiliatedMerchants: z.array(z.string().trim().min(1).max(300)).max(400).nullish(),
 });
 
 // Loose at the top level (just "an array of somethings") — each item is
