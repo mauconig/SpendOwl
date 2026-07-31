@@ -12,6 +12,7 @@
     "db:reset": "docker compose down -v && docker compose up -d",
     "scrape:gnb": "node --env-file-if-exists=../.env.local src/scraper/scrape.ts gnb",
     "scrape:sudameris": "node --env-file-if-exists=../.env.local src/scraper/scrape.ts sudameris",
+    "scrape:universitaria": "node --env-file-if-exists=../.env.local src/scraper/scrape.ts universitaria",
     "import": "node --env-file-if-exists=../.env.local src/scraper/import.ts"
   },
   "dependencies": {

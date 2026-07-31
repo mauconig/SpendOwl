@@ -11,11 +11,16 @@ import type { RawPromo } from './common.ts';
  *
  * Two rules matter most here:
  *
- * 1. THE TIER RULE. GNB's promos routinely list two tiers in the same
- *    paragraph — a higher rate for Black/Black Premier/Metalcard Premier and
- *    a lower one for Clasica/Oro (verified against a live Bases y
- *    Condiciones PDF: "Hasta 25%... Black..." vs "Hasta 20%... Clasicas y
- *    Oro..."). We only ever want the lower number.
+ * 1. THE RATE RULE. A promo routinely quotes several percentages, and which
+ *    one is *this* person's is a two-step question, not a preference for high
+ *    or low. First narrow to what they can get — they hold a standard
+ *    Mastercard and may pay however they like, so a Black rate is not theirs
+ *    (GNB, live: "Hasta 25%... Black" vs "Hasta 20%... Clasicas y Oro" -> 20)
+ *    but paying by QR instead of plastic *is* theirs to choose (Universitaria,
+ *    live: "MASTERCARD QR 30% / PAGO CON TC FISICA 10%" -> 30). Then take the
+ *    lowest of whatever survives, because what remains varies by product line,
+ *    which they do not control. Getting the order wrong is not academic: it
+ *    read Punto Farma as 45% when the till gives 30%.
  *
  * 2. UMBRELLA PROMOS. Some promos (verified live: "La Ruta Gastronómica",
  *    112 restaurants; "La Ruta del Café", 23 cafés) are not a single
@@ -168,7 +173,7 @@ const emitTool: Anthropic.Tool = {
               description:
                 'groceries: supermarkets/convenience. restaurants: dining, cafes, bars, food delivery. fashion: clothing, shoes, accessories, jewelry, retail. beauty_health: pharmacies, cosmetics, clinics, opticians. home: furniture, home goods, home improvement. electronics: electronics, media/entertainment tech. auto_fuel: automotive, gas stations. entertainment_travel: cinemas, events, travel, sports, books, toys, pets. other: anything else (education, financial services, memberships).',
             },
-            percent: { type: 'number', description: 'The LOWER tier percentage only. See system prompt rule.' },
+            percent: { type: 'number', description: 'The rate this member actually gets — standard card tier, Mastercard brand, best payment method. See the rate rule in the system prompt.' },
             installments: { type: 'number', description: 'Interest-free installment count, if offered.' },
             eligibleDays: { type: 'string', description: 'e.g. "viernes". Omit if the promo applies every day.' },
             monthlyCapAmount: { type: 'number', description: 'The monthly cap amount in guaranies exactly as written (e.g. 1000000 for "Gs. 1.000.000"). Omit if none.' },
@@ -215,12 +220,34 @@ on-page summary, and (usually) the full text of its "Bases y Condiciones" PDF �
 authoritative legal terms. Prefer the Bases y Condiciones text over the summary when they
 disagree; it is always more complete and more precise.
 
-THE TIER RULE — this is what matters most. Many of these promos state two different
-percentages for the same offer: a higher one for premium/exclusive cards (named things
-like Black, Black Premier, Metalcard Premier, Infinite, Elite) and a lower one for
-standard/base cards (named things like Clasica, Oro, Classic, Gold). Whenever you see two
-tiers like this, output ONLY the lower number as "percent" — never the premium one, and
-never an average. If only one rate is mentioned for all cards, use that one.
+THE RATE RULE — this is what matters most, and it is a procedure, not a preference for
+high or low numbers. Many of these promos quote several percentages. Work in this order:
+
+STEP 1 — keep only the rates this person can actually get. They hold a standard MASTERCARD
+credit card and may pay however they like.
+  · CARD TIER: premium rates (Black, Black Premier, Metalcard Premier, Infinite, Elite)
+    are not theirs. Keep the standard ones (Clasica, Oro, Classic, Gold).
+  · CARD BRAND: keep the MASTERCARD rates. If Mastercard is not listed, keep the lowest
+    brand's.
+  · PAYMENT METHOD: paying by QR in the bank's app and paying with the physical card are
+    both open to them on that same card, so keep whichever pays better — usually the QR
+    one. This is a choice they make, not a tier they are shut out of.
+
+STEP 2 — of the rates that survive, report the LOWEST as "percent". What is left varies by
+things they do not control, chiefly product line, and the lowest is the only figure that is
+true of any purchase. "Hasta N%" is a ceiling, not a promise: ignore it whenever a concrete
+rate is stated alongside, and fall back to it only when nothing else is given.
+
+Worked example, from a real Punto Farma promo:
+
+    QR PANAL, CABAL Y MASTERCARD HASTA 45%   No farma (productos varios)
+    QR PANAL, CABAL Y MASTERCARD 35%         Farma (medicamentos nacionales)
+    QR PANAL, CABAL Y MASTERCARD 30%
+    TARJETAS DE CRÉDITO FÍSICAS 30%          Farma y No Farma
+
+Step 1 keeps the three QR rows, because QR pays at least as well as the physical card.
+Step 2 answers 30 — not 45, which is a ceiling on one product line, and not 35, which only
+covers national medicines. Reporting 45 would promise half again what the till gives.
 
 UMBRELLA PROMOS. Some promos are not a single merchant at all — they are a campaign or a
 geographic zone, and the Bases y Condiciones lists the businesses the discount actually
