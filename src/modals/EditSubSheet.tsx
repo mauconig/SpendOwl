@@ -116,18 +116,17 @@ export function EditSubSheet() {
     <ModalShell
       visible={sheet !== null}
       onClose={close}
+      scrollable
       contentStyle={{
         backgroundColor: colors.bottomSheet,
         borderTopWidth: 1,
         borderTopColor: 'rgba(255,255,255,.1)',
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
-        paddingHorizontal: 18,
-        paddingTop: 10,
-        paddingBottom: 22,
-        gap: 14,
-        maxHeight: '88%',
       }}
+      // The 88% cap this used to carry is now the keyboard-aware one in
+      // ModalShell, which is the figure that actually matters here.
+      bodyStyle={{ paddingHorizontal: 18, paddingTop: 10, paddingBottom: 22, gap: 14 }}
     >
       <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,.2)', alignSelf: 'center' }} />
       <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>Edit subscription</Text>

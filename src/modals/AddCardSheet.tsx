@@ -88,17 +88,17 @@ export function AddCardSheet() {
     <ModalShell
       visible={sheet !== null}
       onClose={close}
+      scrollable
       contentStyle={{
         backgroundColor: colors.bottomSheet,
         borderTopWidth: 1,
         borderTopColor: 'rgba(255,255,255,.1)',
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
-        paddingHorizontal: 18,
-        paddingTop: 10,
-        paddingBottom: 22,
-        gap: 14,
       }}
+      // Padding lives on the scrolling body, not the sheet: on the sheet it
+      // would stay put while the form scrolled underneath it.
+      bodyStyle={{ paddingHorizontal: 18, paddingTop: 10, paddingBottom: 22, gap: 14 }}
     >
       <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,.2)', alignSelf: 'center' }} />
       <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>

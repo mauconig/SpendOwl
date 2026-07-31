@@ -1,6 +1,17 @@
 import { BlurView } from 'expo-blur';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Modal, Pressable, StyleSheet, View, ViewStyle, useWindowDimensions } from 'react-native';
+import {
+  Animated,
+  Easing,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  ViewStyle,
+  useWindowDimensions,
+} from 'react-native';
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 
 /**
  * The shared chrome behind every overlay: backdrop, tap-to-dismiss, and a slide
@@ -30,10 +41,37 @@ type Props = {
   blur?: boolean;
   /** Applied to the sliding container — the sheet's own background and radii. */
   contentStyle?: ViewStyle;
+  /**
+   * For sheets holding a form. Caps the sheet at the space the keyboard leaves
+   * and scrolls the body, so a tall form loses nothing off the top instead of
+   * being clipped. Put the body's own padding and gap in `bodyStyle`, not
+   * `contentStyle` — padding on the clipped container would not scroll with it.
+   */
+  scrollable?: boolean;
+  /** Padding and gap for the scrolling body. Only used with `scrollable`. */
+  bodyStyle?: ViewStyle;
 };
 
-export function ModalShell({ visible, onClose, children, variant = 'sheet', blur = false, contentStyle }: Props) {
+export function ModalShell({
+  visible,
+  onClose,
+  children,
+  variant = 'sheet',
+  blur = false,
+  contentStyle,
+  scrollable = false,
+  bodyStyle,
+}: Props) {
   const { height } = useWindowDimensions();
+  // A bottom sheet rests against the bottom edge, which is exactly where the
+  // keyboard appears — so typing into one hides the field being typed into.
+  //
+  // Nothing does this for us. On Android a Modal renders in its own window,
+  // which the system does not resize for the keyboard the way it resizes the
+  // activity, so adjustResize never reaches these. Reserving the keyboard's
+  // height at the bottom lifts the sheet clear of it, the same approach
+  // AuthScreen and ChatScreen already take.
+  const keyboardHeight = useKeyboardHeight();
   const anim = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
   const [contentHeight, setContentHeight] = useState(0);
@@ -89,7 +127,13 @@ export function ModalShell({ visible, onClose, children, variant = 'sheet', blur
 
   return (
     <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: variant === 'sheet' ? 'flex-end' : 'center' }}>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: variant === 'sheet' ? 'flex-end' : 'center',
+          paddingBottom: keyboardHeight,
+        }}
+      >
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: anim }]} pointerEvents="none">
           {blur ? (
             <BlurView intensity={30} tint="dark" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(4,5,8,.5)' }]} />
@@ -125,10 +169,28 @@ export function ModalShell({ visible, onClose, children, variant = 'sheet', blur
             // overridden by it, leaving the card flush to the screen edges.
             variant === 'center' ? { marginHorizontal: 20 } : null,
             contentStyle,
+            // Leaves a strip of backdrop above a full-height sheet, so it still
+            // reads as a sheet over the app rather than a new screen.
+            scrollable ? { maxHeight: height - keyboardHeight - 48 } : null,
             { transform: [{ translateY }], opacity: contentOpacity },
           ]}
         >
-          {children}
+          {scrollable ? (
+            <ScrollView
+              // flexShrink lets it give way to the maxHeight above rather than
+              // growing to its content and overflowing the sheet.
+              style={{ flexShrink: 1 }}
+              contentContainerStyle={bodyStyle}
+              // Without this the first tap on a field only dismisses the
+              // keyboard, so moving between inputs takes two taps.
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {children}
+            </ScrollView>
+          ) : (
+            children
+          )}
         </Animated.View>
       </View>
     </Modal>
