@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { FadeIn } from '../components/FadeIn';
 import { useDiscounts } from '../api/hooks';
 import type { ApiDiscountCategory } from '../api/types';
@@ -64,6 +64,7 @@ export function OffersScreen() {
   const discounts = data?.discounts ?? [];
 
   const [selCategory, setSelCategory] = useState<string>(ALL);
+  const [search, setSearch] = useState('');
 
   const categories = useMemo(
     () => [...new Set(discounts.map(d => d.category).filter((c): c is ApiDiscountCategory => !!c))],
@@ -74,7 +75,10 @@ export function OffersScreen() {
     if (selCategory !== ALL && !categories.includes(selCategory as ApiDiscountCategory)) setSelCategory(ALL);
   }, [categories, selCategory]);
 
-  const filtered = discounts.filter(d => selCategory === ALL || d.category === selCategory);
+  const query = search.trim().toLowerCase();
+  const filtered = discounts.filter(
+    d => (selCategory === ALL || d.category === selCategory) && (!query || d.merchant.toLowerCase().includes(query))
+  );
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 64 }}>
@@ -83,9 +87,25 @@ export function OffersScreen() {
         {isLoading ? 'LOADING…' : `${filtered.length} ACTIVE`}
       </Text>
 
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.input, borderRadius: 14, paddingHorizontal: 14, marginBottom: 14 }}>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search a shop or restaurant"
+          placeholderTextColor="rgba(245,245,247,.3)"
+          style={{ flex: 1, paddingVertical: 12, color: colors.text, fontSize: 14.5 }}
+        />
+        {search.length > 0 && (
+          <Pressable onPress={() => setSearch('')} hitSlop={8}>
+            <Icon name="close" size={14} color={colors.textDim45} />
+          </Pressable>
+        )}
+      </View>
+
       {categories.length > 0 && (
         <ScrollView
           horizontal
+          nestedScrollEnabled
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: 8, paddingRight: 16, marginBottom: 16 }}
         >
@@ -118,7 +138,9 @@ export function OffersScreen() {
           <Text style={{ fontSize: 13, lineHeight: 20, color: colors.textDim55, textAlign: 'center' }}>
             {discounts.length === 0
               ? "Card discounts from your banks will show up here once they're synced."
-              : 'Try a different category.'}
+              : query
+                ? `No match for "${search.trim()}". Try a different spelling or category.`
+                : 'Try a different category.'}
           </Text>
         </View>
       ) : (
