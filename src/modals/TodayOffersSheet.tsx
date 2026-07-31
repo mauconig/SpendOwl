@@ -22,7 +22,7 @@ export function TodayOffersSheet() {
 
   const offers = useMemo(() => {
     if (!category) return [];
-    return todaysOfferGroups(data?.discounts ?? [], new Date()).find(g => g.category === category)?.offers ?? [];
+    return todaysOfferGroups(data?.discounts ?? []).find(g => g.category === category)?.offers ?? [];
   }, [data?.discounts, category]);
 
   return (

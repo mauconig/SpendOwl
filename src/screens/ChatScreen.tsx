@@ -78,11 +78,49 @@ function CardMessage({ m }: { m: CardMsg }) {
             which is often not the user's — showing 9.99 with a ₲ in front of
             it would be wrong by three orders of magnitude. */}
         {m.amountEur != null && (
-          <Text style={{ fontSize: 27, fontFamily: moneyFont(cardCurrency(m, baseCur), 'bold'), letterSpacing: -0.5, color: '#FFFFFF' }}>
-            {formatMoney(m.amountEur, cardCurrency(m, baseCur), decimalsFor(cardCurrency(m, baseCur)))}
-          </Text>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ fontSize: 27, fontFamily: moneyFont(cardCurrency(m, baseCur), 'bold'), letterSpacing: -0.5, color: '#FFFFFF' }}>
+              {formatMoney(m.amountEur, cardCurrency(m, baseCur), decimalsFor(cardCurrency(m, baseCur)))}
+            </Text>
+            {/* The amount above is already net, so the struck-through original
+                is the only thing that shows a discount was applied at all. */}
+            {m.action === 'expense' && m.discountEur != null && m.discountEur > 0 && (
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontFamily: moneyFont(baseCur, 'mono'),
+                  color: colors.textDim45,
+                  textDecorationLine: 'line-through',
+                  marginTop: 1,
+                }}
+              >
+                {formatMoney(m.amountEur + m.discountEur, baseCur, decimalsFor(baseCur))}
+              </Text>
+            )}
+          </View>
         )}
       </View>
+
+      {m.action === 'expense' && m.discountEur != null && m.discountEur > 0 && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 7,
+            backgroundColor: colors.mint + '14',
+            borderWidth: 1,
+            borderColor: colors.mint + '33',
+            borderRadius: 12,
+            paddingVertical: 7,
+            paddingHorizontal: 10,
+          }}
+        >
+          <Icon name="spark" size={12} color={colors.mint} />
+          <Text style={{ fontSize: 12, color: colors.mintText2, flexShrink: 1 }}>
+            {m.discountBank} {m.discountPercent}% off — saved {formatMoney(m.discountEur, baseCur, decimalsFor(baseCur))}
+          </Text>
+        </View>
+      )}
 
       {m.action === 'expense' && (
         <>

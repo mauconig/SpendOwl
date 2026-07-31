@@ -27,10 +27,16 @@ export type Msg =
       action: 'expense';
       merchant: string;
       cat: CatKey;
+      /** Already net of any bank discount below. */
       amountEur: number;
       note: string;
       cardId?: string;
       cardName?: string;
+      // A promo the card's own bank was running for this merchant today,
+      // found and applied server-side — see server/src/cardDiscounts.ts.
+      discountBank?: string;
+      discountPercent?: number;
+      discountEur?: number;
     }
   | { id: string; type: 'card'; action: 'card_payment'; cardId: string; cardName: string; amountEur: number }
   | { id: string; type: 'card'; action: 'sub_cancel'; subId: string; subName: string; amountEur: number }

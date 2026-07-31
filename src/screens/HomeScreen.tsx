@@ -46,10 +46,7 @@ export function HomeScreen() {
    * and pharmacies first, capped at four cards so this doesn't crowd out the
    * insights below it. See utils/discounts.
    */
-  const todayOffers = useMemo(
-    () => todaysOfferGroups(discountData?.discounts ?? [], new Date()),
-    [discountData?.discounts]
-  );
+  const todayOffers = useMemo(() => todaysOfferGroups(discountData?.discounts ?? []), [discountData?.discounts]);
 
   const spent = minorToEur(summary?.spentMinor ?? 0);
   const income = minorToEur(summary?.incomeMinor ?? 0);

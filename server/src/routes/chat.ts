@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '../auth.ts';
+import { findDiscount } from '../cardDiscounts.ts';
 import { query, queryOne } from '../db.ts';
 import {
   CURRENCIES,
@@ -111,6 +112,15 @@ The two mistakes that matter most:
 Use only the merchant they named. Never reuse one from their past transactions or
 from an earlier draft. If they did not name a shop at all, ask which one it was —
 do not guess and do not substitute a plausible-sounding name.
+
+CARD DISCOUNTS. Their banks run promos — 20% off fuel at Petrosur on Fridays, and
+hundreds more. When an expense is paid with a card belonging to the bank running
+the promo, the discount is found and applied for you, and the tool result tells
+you what came off. Always pass the amount they actually said, before any
+discount; never work one out yourself, never adjust the number to account for
+one, and never promise a discount before the tool has confirmed it. If the
+result reports one, say what it saved and where it came from. If it does not,
+say nothing about discounts at all.
 
 CARDS AND SUBSCRIPTIONS. Five different things can be said about them, and they
 are easy to confuse. Read which one it is before choosing a tool:
@@ -385,6 +395,11 @@ type Proposal =
       note: string;
       cardId?: string;
       cardName?: string;
+      // Present when the card's bank was running a promo for this merchant
+      // today. amountMinor above is already net of it.
+      discountBank?: string;
+      discountPercent?: number;
+      discountMinor?: number;
     }
   | { action: 'card_payment'; cardId: string; cardName: string; amountMinor: number }
   | { action: 'sub_cancel'; subId: string; subName: string; amountMinor: number }
@@ -573,19 +588,50 @@ async function runTool(
         card = found;
       }
 
+      // The one place the display currency is converted back to storage.
+      const grossMinor = displayToMinor(p.amount, currency);
+
+      // Paying with a bank's own card at a merchant it runs a promo for takes
+      // the discount off automatically — the person should not have to know
+      // Petrosur is 20% off on Fridays, let alone do the arithmetic.
+      const discount = card ? await findDiscount(userId, card.name, p.merchant, grossMinor) : null;
+      const netMinor = grossMinor - (discount?.discountMinor ?? 0);
+
       proposals.push({
         action: 'expense',
         merchant: p.merchant,
         cat: p.category,
-        // The one place the display currency is converted back to storage.
-        amountMinor: displayToMinor(p.amount, currency),
+        // Net, not gross: this is what the purchase actually cost, and it is
+        // what the budget should be built on. The parts are kept alongside so
+        // nothing is lost — see migration 9.
+        amountMinor: netMinor,
         note: p.note ?? '',
         ...(card ? { cardId: card.id, cardName: card.name } : {}),
+        ...(discount
+          ? {
+              discountBank: discount.bank,
+              discountPercent: discount.percent,
+              discountMinor: discount.discountMinor,
+            }
+          : {}),
       });
 
+      if (!discount) {
+        return ok(
+          `Expense card for ${p.amount} ${currency}${card ? ` on ${card.name}` : ''} shown to the user for approval. ` +
+            `It is not recorded until they tap "Approve & log". Tell them it is drafted and awaiting their approval.`
+        );
+      }
+
       return ok(
-        `Expense card for ${p.amount} ${currency}${card ? ` on ${card.name}` : ''} shown to the user for approval. ` +
-          `It is not recorded until they tap "Approve & log". Tell them it is drafted and awaiting their approval.`
+        `Expense card shown for approval, with ${discount.bank}'s ${discount.percent}% discount at ` +
+          `${discount.merchant} already applied: ${p.amount} ${currency} less ` +
+          `${money(discount.discountMinor)} ${currency} comes to ${money(netMinor)} ${currency}. ` +
+          (discount.cappedByMonthlyLimit
+            ? `This month's cap for that promo trimmed the discount, so it is smaller than the headline rate — say so. `
+            : '') +
+          `Tell them the discount was applied and what it saved. Do not recompute the numbers; use these. ` +
+          `Nothing is recorded until they approve.`
       );
     }
 
@@ -747,18 +793,28 @@ function replayOf(
         },
         ack: `Change card for ${card.subName} shown for approval.`,
       };
-    default:
+    default: {
+      // A discounted expense stores the net, but the model passed the gross —
+      // replaying the net would show it a tool call it never made, and teach it
+      // to hand back already-discounted amounts.
+      const discount = Number(card.discountMinor ?? 0);
+      const gross = discount > 0 ? amount + Math.abs(minorToDisplay(discount, currency)) : amount;
       return {
         name: 'propose_expense',
         input: {
           merchant: String(card.merchant ?? 'Unknown'),
           category: String(card.cat ?? 'food'),
-          amount,
+          amount: gross,
           note: String(card.note ?? ''),
           ...(card.cardName ? { paidWithCard: String(card.cardName) } : {}),
         },
-        ack: `Expense card for ${amount} ${currency} shown to the user for approval.`,
+        ack:
+          discount > 0
+            ? `Expense card for ${gross} ${currency} shown for approval, with ${card.discountBank}'s ` +
+              `${card.discountPercent}% discount applied, coming to ${amount} ${currency}.`
+            : `Expense card for ${amount} ${currency} shown to the user for approval.`,
       };
+    }
   }
 }
 

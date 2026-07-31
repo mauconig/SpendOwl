@@ -228,6 +228,21 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
           })()
         ) : null}
 
+        {/* The amount field above holds the net, so without this there is
+            nothing on the row explaining why it isn't the number they said. */}
+        {tx?.discountMinor != null && tx.discountMinor > 0 && (
+          <Field label="DISCOUNT APPLIED">
+            <Text style={{ fontSize: 14.5, color: colors.mint }}>
+              {tx.discountBank} {tx.discountPercent}% — saved{' '}
+              {formatMoney(minorToEur(tx.discountMinor), baseCur, decimalsFor(baseCur))}
+            </Text>
+            <Text style={{ fontSize: 11.5, fontFamily: fonts.mono, color: colors.textDim45, marginTop: 4 }}>
+              {formatMoney(minorToEur(Math.abs(tx.amountMinor) + tx.discountMinor), baseCur, decimalsFor(baseCur))} before
+              the discount
+            </Text>
+          </Field>
+        )}
+
         {/* Only on rows a subscription generated. The rate is shown because it
             is frozen: this charge used the rate on the day it happened, and
             next month's will use a different one — which is the whole reason

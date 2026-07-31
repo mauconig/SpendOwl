@@ -444,6 +444,9 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
                   note: p.note ?? '',
                   cardId: p.cardId,
                   cardName: p.cardName,
+                  discountBank: p.discountBank,
+                  discountPercent: p.discountPercent,
+                  discountEur: p.discountMinor == null ? undefined : minorToEur(p.discountMinor),
                 };
             }
           }
@@ -544,8 +547,13 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
             note: message.note,
             taxDeductible: cards[id]?.tax ?? false,
             cardId: message.cardId,
+            discountBank: message.discountBank,
+            discountPercent: message.discountPercent,
+            discountMinor: message.discountEur == null ? undefined : eurToMinor(message.discountEur),
           });
           if (message.cardId) {
+            // The card is charged the same net amount: the discount is taken
+            // off by the bank, so it never appears on the balance either.
             chargeCard.mutate({ id: message.cardId, amountMinor: eurToMinor(message.amountEur) });
           }
       }

@@ -117,6 +117,9 @@ export function useAddTransaction() {
       note?: string | null;
       taxDeductible?: boolean;
       cardId?: string;
+      discountBank?: string;
+      discountPercent?: number;
+      discountMinor?: number;
     }) => api.post<ApiTransaction>('/api/transactions', input),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.transactions });

@@ -269,6 +269,31 @@ const migrations: Migration[] = [
         WHERE subscription_id IS NOT NULL;
     `,
   },
+  {
+    version: 9,
+    name: 'transaction_card_discount',
+    sql: /* sql */ `
+      -- Buying with a bank's card at a merchant that bank is running a promo
+      -- for gets the discount taken off automatically. amount_minor holds the
+      -- net — what the purchase actually cost — because that is the figure a
+      -- budget should be built on.
+      --
+      -- These columns are what stop that from being lossy: the pre-discount
+      -- total is amount_minor + discount_minor, and the bank and rate that
+      -- produced it are recorded, so a charge can always be explained. Same
+      -- principle as the FX columns above.
+      ALTER TABLE transactions
+        ADD COLUMN discount_bank    TEXT,
+        ADD COLUMN discount_percent DOUBLE PRECISION,
+        ADD COLUMN discount_minor   INTEGER CHECK (discount_minor IS NULL OR discount_minor >= 0);
+
+      -- Monthly caps are per promo ("tope mensual Gs. 1.000.000"), so applying
+      -- one needs to know how much of that cap this month has already used.
+      CREATE INDEX transactions_discount_month_idx
+        ON transactions (user_id, discount_bank, occurred_at)
+        WHERE discount_bank IS NOT NULL;
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {

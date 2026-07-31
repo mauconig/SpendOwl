@@ -21,6 +21,14 @@ export type ApiTransaction = {
   originalCurrency: Currency | null;
   /** The rate the conversion actually used — frozen, never recomputed. */
   fxRate: number | null;
+  /**
+   * Set when a bank promo was applied because this was paid with that bank's
+   * card. `amountMinor` is already net of it, so the pre-discount total is
+   * |amountMinor| + discountMinor.
+   */
+  discountBank: string | null;
+  discountPercent: number | null;
+  discountMinor: number | null;
 };
 
 export type ApiCategoryTotal = { key: CatKey; spentMinor: number };
@@ -121,6 +129,10 @@ export type ApiMessage = {
      * a currency of their own, which were all in the user's.
      */
     subCurrency?: Currency;
+    /** A bank promo applied to an expense; amountMinor is already net of it. */
+    discountBank?: string;
+    discountPercent?: number;
+    discountMinor?: number;
   };
   createdAt: string;
 };
@@ -190,6 +202,15 @@ export type ApiDiscount = {
   monthlyCapMinor: number | null;
   validUntil: string | null;
   description: string;
+  /**
+   * Resolved server-side from the free-text Spanish in `eligibleDays` — see
+   * server/src/discountDays.ts. Only true for a discount that is *restricted*
+   * to certain days and runs on this one; an always-on discount is false,
+   * since it is never news.
+   */
+  activeToday: boolean;
+  /** How many weekdays it runs on, 7 when unrestricted. Lower is more notable. */
+  weekdayCount: number;
 };
 
 export type ApiSettings = {

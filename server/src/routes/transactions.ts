@@ -19,6 +19,11 @@ const createSchema = z.object({
   note: z.string().trim().max(280).nullish(),
   taxDeductible: z.boolean().optional(),
   cardId: z.uuid().optional(),
+  // Set by the coach when a bank promo was applied (see ../cardDiscounts.ts).
+  // amountMinor is already net of this; these record what came off and why.
+  discountBank: z.string().trim().max(40).optional(),
+  discountPercent: z.number().min(0).max(100).optional(),
+  discountMinor: z.int().nonnegative().optional(),
 });
 
 const updateSchema = createSchema.partial();
@@ -35,7 +40,10 @@ const SELECT = `
          subscription_id AS "subscriptionId",
          original_minor  AS "originalMinor",
          original_currency AS "originalCurrency",
-         fx_rate::float8 AS "fxRate"
+         fx_rate::float8 AS "fxRate",
+         discount_bank    AS "discountBank",
+         discount_percent AS "discountPercent",
+         discount_minor   AS "discountMinor"
   FROM transactions
 `;
 
@@ -73,12 +81,15 @@ export const transactionsRoute = new Hono<AppEnv>()
     }
 
     const row = await queryOne(
-      `INSERT INTO transactions (user_id, merchant, category, amount_minor, occurred_at, note, tax_deductible, card_id)
-       VALUES ($1, $2, $3, $4, COALESCE($5::date, CURRENT_DATE), $6, COALESCE($7, FALSE), $8)
+      `INSERT INTO transactions (user_id, merchant, category, amount_minor, occurred_at, note, tax_deductible, card_id,
+                                 discount_bank, discount_percent, discount_minor)
+       VALUES ($1, $2, $3, $4, COALESCE($5::date, CURRENT_DATE), $6, COALESCE($7, FALSE), $8, $9, $10, $11)
        RETURNING id, merchant, category, amount_minor AS "amountMinor", occurred_at AS "occurredAt",
                  note, tax_deductible AS "taxDeductible", card_id AS "cardId",
                  subscription_id AS "subscriptionId", original_minor AS "originalMinor",
-                 original_currency AS "originalCurrency", fx_rate::float8 AS "fxRate"`,
+                 original_currency AS "originalCurrency", fx_rate::float8 AS "fxRate",
+                 discount_bank AS "discountBank", discount_percent AS "discountPercent",
+                 discount_minor AS "discountMinor"`,
       [
         userId,
         body.merchant,
@@ -88,6 +99,9 @@ export const transactionsRoute = new Hono<AppEnv>()
         body.note ?? null,
         body.taxDeductible ?? null,
         body.cardId ?? null,
+        body.discountBank ?? null,
+        body.discountPercent ?? null,
+        body.discountMinor ?? null,
       ]
     );
     return c.json(row, 201);
@@ -118,7 +132,9 @@ export const transactionsRoute = new Hono<AppEnv>()
         RETURNING id, merchant, category, amount_minor AS "amountMinor", occurred_at AS "occurredAt",
                   note, tax_deductible AS "taxDeductible", card_id AS "cardId",
                  subscription_id AS "subscriptionId", original_minor AS "originalMinor",
-                 original_currency AS "originalCurrency", fx_rate::float8 AS "fxRate"`,
+                 original_currency AS "originalCurrency", fx_rate::float8 AS "fxRate",
+                 discount_bank AS "discountBank", discount_percent AS "discountPercent",
+                 discount_minor AS "discountMinor"`,
       [
         c.req.param('id'),
         userId,
