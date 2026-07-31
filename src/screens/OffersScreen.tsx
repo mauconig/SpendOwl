@@ -2,10 +2,30 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { FadeIn } from '../components/FadeIn';
 import { useDiscounts } from '../api/hooks';
+import type { ApiDiscountCategory } from '../api/types';
 import { Icon } from '../icons';
 import { colors, fonts, formatPYG } from '../theme';
 
 const ALL = 'all';
+
+// Mirrors server/src/scraper/extract.ts's DISCOUNT_CATEGORIES labels.
+const CATEGORY_LABELS: Record<ApiDiscountCategory, string> = {
+  groceries: 'Supermarkets & Groceries',
+  restaurants: 'Restaurants & Food',
+  fashion: 'Fashion & Accessories',
+  beauty_health: 'Beauty & Health',
+  home: 'Home & Furniture',
+  electronics: 'Electronics & Media',
+  auto_fuel: 'Automotive & Fuel',
+  entertainment_travel: 'Entertainment & Travel',
+  other: 'Other / Services',
+};
+
+// Each bank's own brand accent — GNB's confirmed from beneficios.css
+// (`.beneficios { background-color: #7AB83F; }`), not a guess.
+const BANK_COLORS: Record<string, string> = {
+  GNB: '#7AB83F',
+};
 
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
@@ -33,33 +53,28 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
  * with no per-user filtering. Replaces the factura vault, which stayed
  * "coming soon" (FACTURAS_ENABLED in ../store/constants) and never shipped.
  *
- * Only GNB is scraped today, but bank/category chips are derived from
- * whatever's actually in the data — not a hardcoded list — so Sudameris and
- * Cooperativa Universitaria show up here for free once they're scraped too.
+ * Only GNB is scraped today. Category chips are derived from whatever's
+ * actually present — not a hardcoded list — so Sudameris and Cooperativa
+ * Universitaria show up here for free once they're scraped too. No bank
+ * filter: with one bank live it was speculative, and category is the
+ * filter worth keeping.
  */
 export function OffersScreen() {
   const { data, isLoading } = useDiscounts();
   const discounts = data?.discounts ?? [];
 
-  const [selBank, setSelBank] = useState<string>(ALL);
   const [selCategory, setSelCategory] = useState<string>(ALL);
 
-  const banks = useMemo(() => [...new Set(discounts.map(d => d.bank))].sort(), [discounts]);
-
-  // Scoped to the selected bank, so switching banks never leaves a category
-  // chip visible that has no offers under the newly-selected bank.
-  const categories = useMemo(() => {
-    const scoped = selBank === ALL ? discounts : discounts.filter(d => d.bank === selBank);
-    return [...new Set(scoped.map(d => d.category).filter((c): c is string => !!c))].sort();
-  }, [discounts, selBank]);
+  const categories = useMemo(
+    () => [...new Set(discounts.map(d => d.category).filter((c): c is ApiDiscountCategory => !!c))],
+    [discounts]
+  );
 
   useEffect(() => {
-    if (selCategory !== ALL && !categories.includes(selCategory)) setSelCategory(ALL);
+    if (selCategory !== ALL && !categories.includes(selCategory as ApiDiscountCategory)) setSelCategory(ALL);
   }, [categories, selCategory]);
 
-  const filtered = discounts.filter(
-    d => (selBank === ALL || d.bank === selBank) && (selCategory === ALL || d.category === selCategory)
-  );
+  const filtered = discounts.filter(d => selCategory === ALL || d.category === selCategory);
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 64 }}>
@@ -68,22 +83,17 @@ export function OffersScreen() {
         {isLoading ? 'LOADING…' : `${filtered.length} ACTIVE`}
       </Text>
 
-      {banks.length > 0 && (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-          <Chip label="All banks" active={selBank === ALL} onPress={() => setSelBank(ALL)} />
-          {banks.map(bank => (
-            <Chip key={bank} label={bank} active={selBank === bank} onPress={() => setSelBank(bank)} />
-          ))}
-        </View>
-      )}
-
       {categories.length > 0 && (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingRight: 16, marginBottom: 16 }}
+        >
           <Chip label="All categories" active={selCategory === ALL} onPress={() => setSelCategory(ALL)} />
           {categories.map(cat => (
-            <Chip key={cat} label={cat} active={selCategory === cat} onPress={() => setSelCategory(cat)} />
+            <Chip key={cat} label={CATEGORY_LABELS[cat]} active={selCategory === cat} onPress={() => setSelCategory(cat)} />
           ))}
-        </View>
+        </ScrollView>
       )}
 
       {!isLoading && filtered.length === 0 ? (
@@ -108,7 +118,7 @@ export function OffersScreen() {
           <Text style={{ fontSize: 13, lineHeight: 20, color: colors.textDim55, textAlign: 'center' }}>
             {discounts.length === 0
               ? "Card discounts from your banks will show up here once they're synced."
-              : 'Try a different bank or category.'}
+              : 'Try a different category.'}
           </Text>
         </View>
       ) : (
@@ -139,9 +149,13 @@ export function OffersScreen() {
                 <Text style={{ fontSize: 12, lineHeight: 17, color: colors.textDim60 }}>{d.description}</Text>
 
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
-                  <Text style={{ fontSize: 10.5, color: colors.textDim45, fontFamily: fonts.mono }}>{d.bank}</Text>
+                  <Text style={{ fontSize: 10.5, fontFamily: fonts.mono, color: BANK_COLORS[d.bank] ?? colors.textDim45 }}>
+                    {d.bank}
+                  </Text>
                   {d.category && (
-                    <Text style={{ fontSize: 10.5, color: colors.textDim45, fontFamily: fonts.mono }}>{d.category}</Text>
+                    <Text style={{ fontSize: 10.5, color: colors.textDim45, fontFamily: fonts.mono }}>
+                      {CATEGORY_LABELS[d.category]}
+                    </Text>
                   )}
                   {d.eligibleDays && (
                     <Text style={{ fontSize: 10.5, color: colors.textDim45, fontFamily: fonts.mono }}>{d.eligibleDays}</Text>

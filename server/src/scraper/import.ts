@@ -40,7 +40,7 @@ async function main(): Promise<void> {
             monthly_cap_minor, monthly_cap_currency, valid_from, valid_until, description,
             source_url, bases_url)
          VALUES ('GNB', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-         ON CONFLICT (bank, external_id) DO UPDATE SET
+         ON CONFLICT (bank, external_id, merchant) DO UPDATE SET
            merchant = EXCLUDED.merchant,
            category = EXCLUDED.category,
            percent = EXCLUDED.percent,

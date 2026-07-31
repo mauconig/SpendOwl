@@ -9,21 +9,51 @@ import type { RawPromo } from './gnb.ts';
  * schema (forced via tool_choice), not an action, so a result is a validated
  * object rather than prose to be parsed.
  *
- * The one rule that matters: GNB's promos routinely list two tiers in the
- * same paragraph — a higher rate for Black/Black Premier/Metalcard Premier
- * and a lower one for Clasica/Oro (verified against a live Bases y
- * Condiciones PDF: "Hasta 25%... Black..." vs "Hasta 20%... Clasicas y
- * Oro..."). We only ever want the lower number, and the prompt below states
- * that explicitly rather than leaving it to be inferred.
+ * Two rules matter most here:
+ *
+ * 1. THE TIER RULE. GNB's promos routinely list two tiers in the same
+ *    paragraph — a higher rate for Black/Black Premier/Metalcard Premier and
+ *    a lower one for Clasica/Oro (verified against a live Bases y
+ *    Condiciones PDF: "Hasta 25%... Black..." vs "Hasta 20%... Clasicas y
+ *    Oro..."). We only ever want the lower number.
+ *
+ * 2. UMBRELLA PROMOS. Some promos (verified live: "La Ruta Gastronómica",
+ *    112 restaurants; "La Ruta del Café", 23 cafés) are not a single
+ *    merchant at all — their Bases y Condiciones PDF has a "Comercios
+ *    Adheridos" section listing every affiliated business the discount
+ *    actually applies to. Extracting the promo's own title as `merchant`
+ *    for these is useless: "La Ruta Gastronómica" is not a place anyone
+ *    transacts at, so it can never match a real transaction merchant. These
+ *    expand into one row per listed business (see `affiliatedMerchants`).
  */
 
 const BATCH_SIZE = 15;
 const MAX_TOKENS = 4096;
+// Comercios-Adheridos promos list up to ~100+ names — isolating them in
+// their own call (not batched with 14 others) and giving that call more
+// room is what keeps a single umbrella promo from starving everything else
+// in its batch of tokens.
+const MAX_TOKENS_MULTI_MERCHANT = 8000;
+
+const COMERCIOS_ADHERIDOS_RE = /comercios\s+adherido/i;
+
+export const DISCOUNT_CATEGORIES = [
+  'groceries',
+  'restaurants',
+  'fashion',
+  'beauty_health',
+  'home',
+  'electronics',
+  'auto_fuel',
+  'entertainment_travel',
+  'other',
+] as const;
+export type DiscountCategory = (typeof DISCOUNT_CATEGORIES)[number];
 
 export type ExtractedDiscount = {
   externalId: string;
   merchant: string;
-  category: string | null;
+  category: DiscountCategory;
   percent: number | null;
   installments: number | null;
   eligibleDays: string | null;
@@ -41,7 +71,7 @@ export type ExtractedDiscount = {
 const discountSchema = z.object({
   externalId: z.string().trim().min(1),
   merchant: z.string().trim().min(1).max(120),
-  category: z.string().trim().min(1).max(40).nullish(),
+  category: z.enum(DISCOUNT_CATEGORIES),
   percent: z.number().min(0).max(100).nullish(),
   installments: z.number().int().min(0).max(60).nullish(),
   eligibleDays: z.string().trim().max(120).nullish(),
@@ -55,6 +85,11 @@ const discountSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .nullish(),
   description: z.string().trim().min(1).max(320),
+  // Present only for umbrella promos — see the class comment above. Kept as
+  // a plain string array rather than asking the model to repeat every other
+  // field once per business: a numbered list is cheap and reliable, 100+
+  // full discount objects is neither.
+  affiliatedMerchants: z.array(z.string().trim().min(1).max(120)).max(150).nullish(),
 });
 
 // Loose at the top level (just "an array of somethings") — each item is
@@ -76,8 +111,17 @@ const emitTool: Anthropic.Tool = {
           type: 'object',
           properties: {
             externalId: { type: 'string', description: 'Copy exactly from the promo you were given.' },
-            merchant: { type: 'string' },
-            category: { type: 'string', description: 'A short merchant category, e.g. "supermarket", "pharmacy", "restaurant". Omit if unclear.' },
+            merchant: {
+              type: 'string',
+              description:
+                'The promo\'s own name/title. For an umbrella promo (see affiliatedMerchants) this is just a label — the actual merchant rows come from that list instead.',
+            },
+            category: {
+              type: 'string',
+              enum: [...DISCOUNT_CATEGORIES],
+              description:
+                'groceries: supermarkets/convenience. restaurants: dining, cafes, bars, food delivery. fashion: clothing, shoes, accessories, jewelry, retail. beauty_health: pharmacies, cosmetics, clinics, opticians. home: furniture, home goods, home improvement. electronics: electronics, media/entertainment tech. auto_fuel: automotive, gas stations. entertainment_travel: cinemas, events, travel, sports, books, toys, pets. other: anything else (education, financial services, memberships).',
+            },
             percent: { type: 'number', description: 'The LOWER tier percentage only. See system prompt rule.' },
             installments: { type: 'number', description: 'Interest-free installment count, if offered.' },
             eligibleDays: { type: 'string', description: 'e.g. "viernes". Omit if the promo applies every day.' },
@@ -85,8 +129,14 @@ const emitTool: Anthropic.Tool = {
             validFrom: { type: 'string', description: 'ISO date (YYYY-MM-DD), if a start date is given.' },
             validUntil: { type: 'string', description: 'ISO date (YYYY-MM-DD), if an end date is given.' },
             description: { type: 'string', description: 'One short plain-language sentence summarizing the offer, under 200 characters.' },
+            affiliatedMerchants: {
+              type: 'array',
+              items: { type: 'string' },
+              description:
+                'Only for umbrella promos: if the Bases y Condiciones text has a numbered section listing affiliated businesses (titled "Comercios Adheridos", "Comercios adheridos", or similar), put each one\'s name here. Strip "(aplica desde ...)" date qualifiers and skip non-numbered city/section sub-headers, but keep meaningful branch/location text that is part of a numbered entry\'s own name. Omit entirely for a normal single-merchant promo.',
+            },
           },
-          required: ['externalId', 'merchant', 'description'],
+          required: ['externalId', 'merchant', 'category', 'description'],
         },
       },
     },
@@ -106,6 +156,21 @@ like Black, Black Premier, Metalcard Premier, Infinite, Elite) and a lower one f
 standard/base cards (named things like Clasica, Oro, Classic, Gold). Whenever you see two
 tiers like this, output ONLY the lower number as "percent" — never the premium one, and
 never an average. If only one rate is mentioned for all cards, use that one.
+
+UMBRELLA PROMOS. Some promos are not a single merchant at all — they are a named campaign
+("La Ruta Gastronómica", "La Ruta del Café") whose Bases y Condiciones has a numbered
+section titled something like "5. Comercios Adheridos" listing every affiliated business
+the discount actually applies to (e.g. "La Ruta Gastronómica" lists 112 restaurants
+including KFC, Subway, Mostaza; "La Ruta del Café" lists 23 cafés, grouped under
+non-numbered city sub-headers like "Asunción" / "Encarnación" that are not businesses
+themselves). When you see a section like this, put every listed business's name in
+affiliatedMerchants — strip "(aplica desde ...)" qualifiers, skip the city sub-headers,
+but do keep meaningful location text that is genuinely part of a numbered entry's name.
+Still fill in merchant/category/percent/etc. as usual for the promo itself. A normal
+single-merchant promo has no such section — leave affiliatedMerchants empty for those.
+
+CATEGORY. Always pick the closest of the nine fixed categories listed in the tool schema —
+never invent your own label, never leave it blank. When in doubt, use "other".
 
 Only report a monthly cap when the text states one explicitly (e.g. "Tope de compra
 mensual: Gs. 1.000.000" -> monthlyCapAmount: 1000000). Dates in the source are Spanish
@@ -144,14 +209,34 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
   }
 }
 
-async function extractBatch(promos: RawPromo[]): Promise<ExtractedDiscount[]> {
+/** Mechanical, not model-driven: cheaper and more reliable than asking the model to repeat every field per business. */
+function expand(d: z.infer<typeof discountSchema>): ExtractedDiscount[] {
+  const base = {
+    externalId: d.externalId,
+    category: d.category,
+    percent: d.percent ?? null,
+    installments: d.installments ?? null,
+    eligibleDays: d.eligibleDays ?? null,
+    monthlyCapMinor: d.monthlyCapAmount ?? null,
+    validFrom: d.validFrom ?? null,
+    validUntil: d.validUntil ?? null,
+    description: d.description,
+  };
+
+  if (d.affiliatedMerchants && d.affiliatedMerchants.length > 0) {
+    return d.affiliatedMerchants.map(merchant => ({ ...base, merchant }));
+  }
+  return [{ ...base, merchant: d.merchant }];
+}
+
+async function extractBatch(promos: RawPromo[], maxTokens: number): Promise<ExtractedDiscount[]> {
   if (!env.llmApiKey) return [];
 
   const anthropic = new Anthropic({ apiKey: env.llmApiKey, baseURL: env.llmBaseUrl });
   const response = await withRetry(() =>
     anthropic.messages.create({
       model: env.llmModel,
-      max_tokens: MAX_TOKENS,
+      max_tokens: maxTokens,
       system: SYSTEM_PROMPT,
       tools: [emitTool],
       tool_choice: { type: 'tool', name: 'emit_discounts' },
@@ -184,19 +269,7 @@ async function extractBatch(promos: RawPromo[]): Promise<ExtractedDiscount[]> {
       );
       continue;
     }
-    const d = parsed.data;
-    discounts.push({
-      externalId: d.externalId,
-      merchant: d.merchant,
-      category: d.category ?? null,
-      percent: d.percent ?? null,
-      installments: d.installments ?? null,
-      eligibleDays: d.eligibleDays ?? null,
-      monthlyCapMinor: d.monthlyCapAmount ?? null,
-      validFrom: d.validFrom ?? null,
-      validUntil: d.validUntil ?? null,
-      description: d.description,
-    });
+    discounts.push(...expand(parsed.data));
   }
   return discounts;
 }
@@ -216,22 +289,38 @@ export type ExtractResult = {
 
 /**
  * Chunks promos into batches so no single call carries the whole site's
- * text. A batch that still fails after withRetry's attempts is logged and
- * skipped rather than aborting the run — its promos are simply left out of
- * resolvedIds, so the rest of the run's work isn't lost and nothing gets
+ * text — except Comercios-Adheridos promos, which are pulled out and given
+ * their own isolated call with a larger token budget (see the class
+ * comment). A batch that still fails after withRetry's attempts is logged
+ * and skipped rather than aborting the run — its promos are simply left out
+ * of resolvedIds, so the rest of the run's work isn't lost and nothing gets
  * deleted out from under a transient failure.
  */
 export async function extractDiscounts(promos: RawPromo[]): Promise<ExtractResult> {
   const discounts: ExtractedDiscount[] = [];
   const resolvedIds = new Set<string>();
-  for (let i = 0; i < promos.length; i += BATCH_SIZE) {
-    const batch = promos.slice(i, i + BATCH_SIZE);
+
+  const multiMerchant = promos.filter(p => p.basesText && COMERCIOS_ADHERIDOS_RE.test(p.basesText));
+  const normal = promos.filter(p => !multiMerchant.includes(p));
+
+  const runBatch = async (batch: RawPromo[], maxTokens: number) => {
     try {
-      discounts.push(...(await extractBatch(batch)));
+      discounts.push(...(await extractBatch(batch, maxTokens)));
       for (const promo of batch) resolvedIds.add(promo.externalId);
     } catch (error) {
-      console.error(`[scraper:gnb] batch starting at index ${i} failed after retries, skipping:`, error);
+      console.error(
+        `[scraper:gnb] batch (${batch.map(p => p.externalId).join(',')}) failed after retries, skipping:`,
+        error
+      );
     }
+  };
+
+  for (const promo of multiMerchant) {
+    await runBatch([promo], MAX_TOKENS_MULTI_MERCHANT);
   }
+  for (let i = 0; i < normal.length; i += BATCH_SIZE) {
+    await runBatch(normal.slice(i, i + BATCH_SIZE), MAX_TOKENS);
+  }
+
   return { discounts, resolvedIds };
 }

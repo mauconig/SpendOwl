@@ -136,10 +136,26 @@ export type ApiInsights = {
  * going through minorToEur()/formatMoney(), which assume the account's own
  * currency convention.
  */
+/**
+ * Mirrors server/src/scraper/extract.ts's DISCOUNT_CATEGORIES by hand — client
+ * and server share no module, the same duplication FACTURAS_ENABLED already
+ * uses across both codebases.
+ */
+export type ApiDiscountCategory =
+  | 'groceries'
+  | 'restaurants'
+  | 'fashion'
+  | 'beauty_health'
+  | 'home'
+  | 'electronics'
+  | 'auto_fuel'
+  | 'entertainment_travel'
+  | 'other';
+
 export type ApiDiscount = {
   bank: string;
   merchant: string;
-  category: string | null;
+  category: ApiDiscountCategory | null;
   /** The lower of the bank's tiers (base card, not premium) — see extract.ts. */
   percent: number | null;
   installments: number | null;

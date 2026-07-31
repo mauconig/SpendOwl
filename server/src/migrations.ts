@@ -194,6 +194,20 @@ const migrations: Migration[] = [
       ALTER TABLE transactions ADD COLUMN card_id UUID REFERENCES credit_cards(id) ON DELETE SET NULL;
     `,
   },
+  {
+    version: 6,
+    name: 'bank_discounts_multi_merchant',
+    sql: /* sql */ `
+      -- Some promos are umbrellas covering dozens of affiliated merchants (e.g.
+      -- GNB's "La Ruta Gastronómica" lists 112 restaurants in its Bases y
+      -- Condiciones PDF) rather than being a single merchant themselves.
+      -- scraper/extract.ts now expands those into one row per merchant, all
+      -- sharing the same external_id — so external_id alone can no longer be
+      -- unique; merchant joins it.
+      DROP INDEX bank_discounts_bank_external_idx;
+      CREATE UNIQUE INDEX bank_discounts_bank_external_merchant_idx ON bank_discounts (bank, external_id, merchant);
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {
