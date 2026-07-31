@@ -49,10 +49,14 @@ const discountSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
-  description: z.string().trim().min(1).max(240),
+  description: z.string().trim().min(1).max(320),
 });
 
-const argsSchema = z.object({ discounts: z.array(discountSchema) });
+// Loose at the top level (just "an array of somethings") — each item is
+// validated individually below so one malformed entry (a model that ran a
+// touch long on 'description', say) doesn't discard the other 14 good ones
+// in the same batch.
+const rawArgsSchema = z.object({ discounts: z.array(z.unknown()) });
 
 const emitTool: Anthropic.Tool = {
   name: 'emit_discounts',
@@ -75,7 +79,7 @@ const emitTool: Anthropic.Tool = {
             monthlyCapAmount: { type: 'number', description: 'The monthly purchase/discount cap amount in guaranies, if stated (e.g. 1000000 for "Gs. 1.000.000"). Omit if none.' },
             validFrom: { type: 'string', description: 'ISO date (YYYY-MM-DD), if a start date is given.' },
             validUntil: { type: 'string', description: 'ISO date (YYYY-MM-DD), if an end date is given.' },
-            description: { type: 'string', description: 'One short plain-language sentence summarizing the offer.' },
+            description: { type: 'string', description: 'One short plain-language sentence summarizing the offer, under 200 characters.' },
           },
           required: ['externalId', 'merchant', 'description'],
         },
@@ -141,23 +145,35 @@ async function extractBatch(promos: RawPromo[]): Promise<ExtractedDiscount[]> {
     throw new Error(`Model returned no emit_discounts call (stop_reason: ${response.stop_reason})`);
   }
 
-  const parsed = argsSchema.safeParse(call.input);
-  if (!parsed.success) {
-    throw new Error(`Malformed discounts: ${parsed.error.issues.map(i => `${i.path.join('.')} ${i.message}`).join('; ')}`);
+  const raw = rawArgsSchema.safeParse(call.input);
+  if (!raw.success) {
+    throw new Error(`Malformed emit_discounts call: ${raw.error.issues.map(i => `${i.path.join('.')} ${i.message}`).join('; ')}`);
   }
 
-  return parsed.data.discounts.map(d => ({
-    externalId: d.externalId,
-    merchant: d.merchant,
-    category: d.category ?? null,
-    percent: d.percent ?? null,
-    installments: d.installments ?? null,
-    eligibleDays: d.eligibleDays ?? null,
-    monthlyCapMinor: d.monthlyCapAmount ?? null,
-    validFrom: d.validFrom ?? null,
-    validUntil: d.validUntil ?? null,
-    description: d.description,
-  }));
+  const discounts: ExtractedDiscount[] = [];
+  for (const item of raw.data.discounts) {
+    const parsed = discountSchema.safeParse(item);
+    if (!parsed.success) {
+      console.error(
+        `[scraper:gnb] skipping malformed discount: ${parsed.error.issues.map(i => `${i.path.join('.')} ${i.message}`).join('; ')}`
+      );
+      continue;
+    }
+    const d = parsed.data;
+    discounts.push({
+      externalId: d.externalId,
+      merchant: d.merchant,
+      category: d.category ?? null,
+      percent: d.percent ?? null,
+      installments: d.installments ?? null,
+      eligibleDays: d.eligibleDays ?? null,
+      monthlyCapMinor: d.monthlyCapAmount ?? null,
+      validFrom: d.validFrom ?? null,
+      validUntil: d.validUntil ?? null,
+      description: d.description,
+    });
+  }
+  return discounts;
 }
 
 /** Chunks promos into batches so no single call carries the whole site's text. */
