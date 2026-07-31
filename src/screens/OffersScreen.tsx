@@ -17,7 +17,14 @@ const BANK_COLORS: Record<string, string> = {
   Sudameris: '#D90613',
 };
 
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+/**
+ * `tint` is what separates the two filter rows at a glance: a selected bank
+ * chip goes to that bank's own brand colour — the same one its label carries on
+ * every card below — while a selected category stays neutral. Without it two
+ * stacked rows of identical white pills are easy to confuse.
+ */
+function Chip({ label, active, onPress, tint }: { label: string; active: boolean; onPress: () => void; tint?: string }) {
+  const activeBg = tint ?? '#F2F2F4';
   return (
     <Pressable
       onPress={onPress}
@@ -25,12 +32,18 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
         borderRadius: 999,
         paddingVertical: 6,
         paddingHorizontal: 12,
-        backgroundColor: active ? '#F2F2F4' : colors.cardAlt,
+        backgroundColor: active ? activeBg : colors.cardAlt,
         borderWidth: 1,
-        borderColor: active ? '#F2F2F4' : colors.cardBorder,
+        borderColor: active ? activeBg : colors.cardBorder,
       }}
     >
-      <Text style={{ fontSize: 12, fontFamily: active ? fonts.bold : fonts.medium, color: active ? '#0A0A0B' : colors.textDim60 }}>
+      <Text
+        style={{
+          fontSize: 12,
+          fontFamily: active ? fonts.bold : fonts.medium,
+          color: active ? (tint ? '#FFFFFF' : '#0A0A0B') : colors.textDim60,
+        }}
+      >
         {label}
       </Text>
     </Pressable>
@@ -107,17 +120,34 @@ export function OffersScreen() {
   const { data, isLoading } = useDiscounts();
   const discounts = data?.discounts ?? [];
 
+  const [selBank, setSelBank] = useState<string>(ALL);
   const [selCategory, setSelCategory] = useState<string>(ALL);
   const [search, setSearch] = useState('');
 
+  // Most rows first, so whichever bank has the deeper catalogue leads.
+  const banks = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const d of discounts) counts.set(d.bank, (counts.get(d.bank) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([bank]) => bank);
+  }, [discounts]);
+
+  // Scoped to the selected bank: offering "Automotive & Fuel" when the chosen
+  // bank has no fuel promo would just be a chip that empties the list.
   const categories = useMemo(() => {
-    const present = new Set(discounts.map(d => d.category).filter((c): c is ApiDiscountCategory => !!c));
+    const inBank = selBank === ALL ? discounts : discounts.filter(d => d.bank === selBank);
+    const present = new Set(inBank.map(d => d.category).filter((c): c is ApiDiscountCategory => !!c));
     const ordered = CATEGORY_ORDER.filter(c => present.has(c));
     // Any future category the server adds before this list catches up still
     // shows, just parked at the end rather than silently dropped.
     return [...ordered, ...[...present].filter(c => !CATEGORY_ORDER.includes(c))];
-  }, [discounts]);
+  }, [discounts, selBank]);
 
+  useEffect(() => {
+    if (selBank !== ALL && !banks.includes(selBank)) setSelBank(ALL);
+  }, [banks, selBank]);
+
+  // Switching bank can strip the selected category out from under the filter —
+  // leaving it set would show an empty list with no obvious way back.
   useEffect(() => {
     if (selCategory !== ALL && !categories.includes(selCategory as ApiDiscountCategory)) setSelCategory(ALL);
   }, [categories, selCategory]);
@@ -126,9 +156,12 @@ export function OffersScreen() {
   const filtered = useMemo(
     () =>
       discounts.filter(
-        d => (selCategory === ALL || d.category === selCategory) && (!query || d.merchant.toLowerCase().includes(query))
+        d =>
+          (selBank === ALL || d.bank === selBank) &&
+          (selCategory === ALL || d.category === selCategory) &&
+          (!query || d.merchant.toLowerCase().includes(query))
       ),
-    [discounts, selCategory, query]
+    [discounts, selBank, selCategory, query]
   );
 
   // An element, not a component function — an inline `() => <View/>` would be a
@@ -166,6 +199,29 @@ export function OffersScreen() {
         )}
       </View>
 
+      {/* Bank first, category second — a bank is the coarser cut, and which
+          card is in your pocket is usually what you're deciding by. Only worth
+          a row once there is more than one bank to choose between. */}
+      {banks.length > 1 && (
+        <ScrollView
+          horizontal
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingRight: 16, marginBottom: 10 }}
+        >
+          <Chip label="All banks" active={selBank === ALL} onPress={() => setSelBank(ALL)} />
+          {banks.map(bank => (
+            <Chip
+              key={bank}
+              label={bank}
+              active={selBank === bank}
+              onPress={() => setSelBank(selBank === bank ? ALL : bank)}
+              tint={BANK_COLORS[bank] ?? colors.textDim60}
+            />
+          ))}
+        </ScrollView>
+      )}
+
       {categories.length > 0 && (
         <ScrollView
           horizontal
@@ -175,7 +231,12 @@ export function OffersScreen() {
         >
           <Chip label="All categories" active={selCategory === ALL} onPress={() => setSelCategory(ALL)} />
           {categories.map(cat => (
-            <Chip key={cat} label={CATEGORY_LABELS[cat]} active={selCategory === cat} onPress={() => setSelCategory(cat)} />
+            <Chip
+              key={cat}
+              label={CATEGORY_LABELS[cat]}
+              active={selCategory === cat}
+              onPress={() => setSelCategory(selCategory === cat ? ALL : cat)}
+            />
           ))}
         </ScrollView>
       )}
@@ -202,11 +263,17 @@ export function OffersScreen() {
         {discounts.length === 0 ? 'No offers right now' : 'No offers match this filter'}
       </Text>
       <Text style={{ fontSize: 13, lineHeight: 20, color: colors.textDim55, textAlign: 'center' }}>
+        {/* Name the filters actually narrowing things, so the way out is the
+            thing the sentence points at rather than a guess. */}
         {discounts.length === 0
           ? "Card discounts from your banks will show up here once they're synced."
           : query
-            ? `No match for "${search.trim()}". Try a different spelling or category.`
-            : 'Try a different category.'}
+            ? `No match for "${search.trim()}"${selBank === ALL ? '' : ` at ${selBank}`}. Try a different spelling${
+                selBank === ALL ? '' : ', or All banks'
+              }.`
+            : selBank === ALL
+              ? 'Try a different category.'
+              : `${selBank} has nothing in this category. Try another, or All banks.`}
       </Text>
     </View>
   );
