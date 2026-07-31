@@ -215,6 +215,27 @@ modules whether or not you declared them, so a missing peer dependency is
 invisible in development and crashes only in a standalone build — which is
 exactly what it caught here (`expo-audio` needs `expo-asset`).
 
+### `.npmrc` and the npm version gap
+
+EAS installs with **npm 10**; a current local Node ships **npm 11**. They
+disagree about one thing that matters here, and the disagreement is invisible
+locally: `@clerk/react` asks for a `react-dom` peer that Expo SDK 54's pinned
+`19.1.0` does not satisfy. npm 11 warns and continues. npm 10 tries to
+auto-install a version that does satisfy it, finds no lockfile entry, and fails
+`npm ci` — a build that cannot succeed on retry.
+
+`legacy-peer-deps=true` in `.npmrc` makes both behave the same. Do not remove
+it to "clean up" a peer warning: the resolution npm 10 wants would put a second
+copy of React in the bundle, which breaks every hook — and only in the
+standalone build, never in Expo Go.
+
+You can reproduce an EAS install locally in about a minute rather than waiting
+out the build queue:
+
+```sh
+npx -y npm@10.8.2 ci
+```
+
 ### Why the env vars are duplicated in `eas.json`
 
 `.env.local` is gitignored, and EAS uploads the project **through git**. The
