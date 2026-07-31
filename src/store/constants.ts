@@ -41,14 +41,14 @@ export type Msg =
  * all still here — this switches off the ways *in* to it, so nothing offers a
  * user something that isn't ready:
  *
- *   · VaultScreen renders a "coming soon" panel instead of the grid
  *   · the camera button in ChatScreen is hidden (it is the only way to file one)
  *   · HomeScreen drops its "facturas need review" card and sends any `vault`
  *     insight to the Dashboard instead
  *
- * The bottom-nav tab deliberately stays, so the screen is still reachable and
- * says what's coming. `InvoiceDetail` and the receipts API are untouched and
- * simply go unreached.
+ * The bottom-nav tab that used to hold the (never-shipped) factura vault now
+ * shows OffersScreen instead — an unrelated, already-live feature. `InvoiceDetail`
+ * and the receipts API are untouched and simply go unreached until this flips
+ * back on, at which point the vault would need a nav slot of its own again.
  *
  * There is a matching FACTURAS_ENABLED in server/src/insights.ts — the two
  * codebases share no module, so flipping this back on means flipping both.

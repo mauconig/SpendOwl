@@ -296,7 +296,7 @@ async function buildSnapshot(userId: string, currency: Currency) {
       eligibleDays: string | null;
       monthlyCapMinor: number | null;
     }>(
-      `SELECT merchant, category, percent, installments, eligible_days AS "eligibleDays",
+      `SELECT merchant, category, percent::float8 AS percent, installments, eligible_days AS "eligibleDays",
               monthly_cap_minor AS "monthlyCapMinor"
          FROM bank_discounts
         WHERE valid_until IS NULL OR valid_until >= CURRENT_DATE`

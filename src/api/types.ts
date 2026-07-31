@@ -125,6 +125,28 @@ export type ApiInsights = {
   insights: ApiInsight[];
 };
 
+/**
+ * A card discount/"reintegro" scraped from a bank's public promo pages (see
+ * server/src/scraper/). Global, not user-scoped — every account sees the
+ * same rows. `monthlyCapMinor` is always in Paraguayan guaranies regardless
+ * of the account's own currency — these are bank-side figures, not this
+ * user's data, so they're rendered with formatPYG() directly rather than
+ * going through minorToEur()/formatMoney(), which assume the account's own
+ * currency convention.
+ */
+export type ApiDiscount = {
+  bank: string;
+  merchant: string;
+  category: string | null;
+  /** The lower of the bank's tiers (base card, not premium) — see extract.ts. */
+  percent: number | null;
+  installments: number | null;
+  eligibleDays: string | null;
+  monthlyCapMinor: number | null;
+  validUntil: string | null;
+  description: string;
+};
+
 export type ApiSettings = {
   baseCurrency: Currency;
   monthlyBudgetMinor: number;

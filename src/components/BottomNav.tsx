@@ -65,7 +65,10 @@ export function BottomNav() {
     { id: 'dashboard', icon: 'bars', onTap: store.goDash },
   ];
   const navRight: { id: TabId; icon: IconName; onTap: () => void }[] = [
-    { id: 'vault', icon: 'folder', onTap: () => store.setNav('vault') },
+    // 'vault' stays the internal nav id (it's never shown to the user) —
+    // only the tab's content and icon changed, from the parked factura vault
+    // to the Offers screen.
+    { id: 'vault', icon: 'card', onTap: () => store.setNav('vault') },
     { id: 'settings', icon: 'person', onTap: () => store.setNav('settings') },
   ];
 

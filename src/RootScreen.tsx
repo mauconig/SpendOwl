@@ -11,8 +11,8 @@ import { TransactionsSheet } from './modals/TransactionsSheet';
 import { ChatScreen } from './screens/ChatScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { HomeScreen } from './screens/HomeScreen';
+import { OffersScreen } from './screens/OffersScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { VaultScreen } from './screens/VaultScreen';
 import { useSpendOwl, Nav } from './store/SpendOwlContext';
 import { colors } from './theme';
 
@@ -73,7 +73,7 @@ export function RootScreen() {
             <ChatScreen />
           </View>
           <View style={{ width, flex: 1 }}>
-            <VaultScreen />
+            <OffersScreen />
           </View>
           <View style={{ width, flex: 1 }}>
             <SettingsScreen />

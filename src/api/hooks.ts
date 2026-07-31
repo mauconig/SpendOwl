@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { createApi } from './client';
 import type {
   ApiCreditCard,
+  ApiDiscount,
   ApiInsights,
   ApiMessage,
   ApiMessageKind,
@@ -23,6 +24,7 @@ export const keys = {
   messages: ['messages'] as const,
   settings: ['settings'] as const,
   insights: ['insights'] as const,
+  discounts: ['discounts'] as const,
 };
 
 function useApi() {
@@ -90,6 +92,12 @@ export function useRefreshInsights() {
     mutationFn: () => api.post<ApiInsights>('/api/insights/refresh'),
     onSuccess: data => client.setQueryData(keys.insights, data),
   });
+}
+
+/** The Offers screen's list. Global, not user-scoped — see routes/discounts.ts. */
+export function useDiscounts() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.discounts, queryFn: () => api.get<{ discounts: ApiDiscount[] }>('/api/discounts') });
 }
 
 export function useSettings() {
