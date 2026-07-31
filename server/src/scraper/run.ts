@@ -31,18 +31,20 @@ async function main(): Promise<void> {
   console.log(`[scraper:gnb] fetched ${raw.length}/${ids.length} promos`);
 
   const withText = raw.filter(p => p.merchant && (p.basesText || p.summaryText));
-  const discounts = await extractDiscounts(withText);
-  console.log(`[scraper:gnb] extracted ${discounts.length} discounts from ${withText.length} promos with text`);
+  const { discounts, resolvedIds } = await extractDiscounts(withText);
+  console.log(`[scraper:gnb] extracted ${discounts.length} discounts from ${resolvedIds.size}/${withText.length} promos (rest skipped after retries)`);
 
-  const fetchedIds = raw.map(p => p.externalId);
   const byId = new Map(raw.map(p => [p.externalId, p]));
 
   await transaction(async client => {
-    // Clears every promo we successfully re-checked this run, so a promo the
-    // model decided has no real discount anymore actually disappears. Ids we
-    // failed to fetch are left alone entirely.
-    if (fetchedIds.length > 0) {
-      await client.query(`DELETE FROM bank_discounts WHERE bank = 'GNB' AND external_id = ANY($1::text[])`, [fetchedIds]);
+    // Clears exactly the promos whose extraction batch actually completed —
+    // NOT everything we fetched. A promo whose batch failed after retries
+    // keeps its existing row untouched rather than being deleted with
+    // nothing to replace it.
+    if (resolvedIds.size > 0) {
+      await client.query(`DELETE FROM bank_discounts WHERE bank = 'GNB' AND external_id = ANY($1::text[])`, [
+        [...resolvedIds],
+      ]);
     }
 
     for (const d of discounts) {

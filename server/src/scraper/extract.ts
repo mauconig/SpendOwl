@@ -126,24 +126,44 @@ function promoBlock(promo: RawPromo): string {
   ].join('\n');
 }
 
+/**
+ * A ~15-batch run over a flaky connection is exactly the shape that hits a
+ * transient ECONNRESET partway through — observed live against this same
+ * endpoint. Retrying the one failed batch is far cheaper than restarting the
+ * whole run (and re-fetching nothing, since batches don't share state).
+ */
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      console.error(`[scraper:gnb] batch attempt ${attempt} failed, retrying:`, error);
+      await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+    }
+  }
+}
+
 async function extractBatch(promos: RawPromo[]): Promise<ExtractedDiscount[]> {
   if (!env.llmApiKey) return [];
 
   const anthropic = new Anthropic({ apiKey: env.llmApiKey, baseURL: env.llmBaseUrl });
-  const response = await anthropic.messages.create({
-    model: env.llmModel,
-    max_tokens: MAX_TOKENS,
-    system: SYSTEM_PROMPT,
-    tools: [emitTool],
-    tool_choice: { type: 'tool', name: 'emit_discounts' },
-    thinking: { type: 'disabled' },
-    messages: [
-      {
-        role: 'user',
-        content: `Here are ${promos.length} promos. Extract each one's discount.\n\n${promos.map(promoBlock).join('\n\n---\n\n')}`,
-      },
-    ],
-  });
+  const response = await withRetry(() =>
+    anthropic.messages.create({
+      model: env.llmModel,
+      max_tokens: MAX_TOKENS,
+      system: SYSTEM_PROMPT,
+      tools: [emitTool],
+      tool_choice: { type: 'tool', name: 'emit_discounts' },
+      thinking: { type: 'disabled' },
+      messages: [
+        {
+          role: 'user',
+          content: `Here are ${promos.length} promos. Extract each one's discount.\n\n${promos.map(promoBlock).join('\n\n---\n\n')}`,
+        },
+      ],
+    })
+  );
 
   const call = response.content.find(block => block.type === 'tool_use' && block.name === 'emit_discounts');
   if (!call || call.type !== 'tool_use') {
@@ -181,12 +201,37 @@ async function extractBatch(promos: RawPromo[]): Promise<ExtractedDiscount[]> {
   return discounts;
 }
 
-/** Chunks promos into batches so no single call carries the whole site's text. */
-export async function extractDiscounts(promos: RawPromo[]): Promise<ExtractedDiscount[]> {
-  const results: ExtractedDiscount[] = [];
+export type ExtractResult = {
+  discounts: ExtractedDiscount[];
+  /**
+   * externalIds of promos whose batch actually completed — a superset of the
+   * ids that ended up with a discount, since a promo can resolve to "no real
+   * discount" and correctly get zero rows. run.ts deletes exactly this set
+   * before inserting, NOT every id it fetched: a promo whose batch failed
+   * (see below) keeps whatever row it already had rather than being wiped
+   * with nothing to replace it.
+   */
+  resolvedIds: Set<string>;
+};
+
+/**
+ * Chunks promos into batches so no single call carries the whole site's
+ * text. A batch that still fails after withRetry's attempts is logged and
+ * skipped rather than aborting the run — its promos are simply left out of
+ * resolvedIds, so the rest of the run's work isn't lost and nothing gets
+ * deleted out from under a transient failure.
+ */
+export async function extractDiscounts(promos: RawPromo[]): Promise<ExtractResult> {
+  const discounts: ExtractedDiscount[] = [];
+  const resolvedIds = new Set<string>();
   for (let i = 0; i < promos.length; i += BATCH_SIZE) {
     const batch = promos.slice(i, i + BATCH_SIZE);
-    results.push(...(await extractBatch(batch)));
+    try {
+      discounts.push(...(await extractBatch(batch)));
+      for (const promo of batch) resolvedIds.add(promo.externalId);
+    } catch (error) {
+      console.error(`[scraper:gnb] batch starting at index ${i} failed after retries, skipping:`, error);
+    }
   }
-  return results;
+  return { discounts, resolvedIds };
 }
