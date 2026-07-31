@@ -15,6 +15,7 @@
  */
 
 import { CURRENCIES, type Currency } from './currency.ts';
+import { localDate } from './dates.ts';
 import { query, queryOne } from './db.ts';
 
 const ENDPOINT = 'https://open.er-api.com/v6/latest/USD';
@@ -25,7 +26,9 @@ const PIVOT: Currency = 'USD';
 
 type RateRow = { rate: number };
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+// Local calendar day, never the UTC one — see dates.ts. A charge dated the 31st
+// must look up the 31st's rate, not the 30th's.
+const iso = localDate;
 
 /**
  * Today's USD legs, fetched at most once per day.

@@ -21,6 +21,7 @@
  */
 
 import { getUserCurrency, type Currency } from './currency.ts';
+import { localDate, localPeriod } from './dates.ts';
 import { query, transaction } from './db.ts';
 import { convertMinor, getRate } from './fx.ts';
 
@@ -39,9 +40,6 @@ type SubRow = {
   cardId: string | null;
   chargeStart: string;
 };
-
-/** Periods are 'YYYY-MM': one charge per subscription per calendar month. */
-const periodOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
 const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
 
@@ -64,7 +62,7 @@ export function duePeriods(sub: SubRow, today: Date): { period: string; on: Date
     const on = new Date(year, month, Math.min(sub.dayOfMonth, daysInMonth(year, month)));
     // Not before the subscription started, and not in the future — a renewal
     // later this month has not happened yet.
-    if (on >= start && on <= today) due.push({ period: periodOf(on), on });
+    if (on >= start && on <= today) due.push({ period: localPeriod(on), on });
     cursor.setMonth(cursor.getMonth() + 1);
   }
 
@@ -123,7 +121,9 @@ export async function materializeDueCharges(userId: string): Promise<void> {
             sub.name,
             CATEGORY,
             -amountMinor,
-            on.toISOString().slice(0, 10),
+            // localDate, not toISOString: `on` is local midnight, and this
+            // server is UTC+2, so the UTC form is the previous day.
+            localDate(on),
             'Subscription',
             sub.id,
             period,

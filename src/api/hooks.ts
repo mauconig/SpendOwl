@@ -250,7 +250,16 @@ export function useAddSubscription() {
       currency?: Currency;
       cardId?: string | null;
     }) => api.post<ApiSubscription>('/api/subscriptions', input),
-    onSuccess: () => void client.invalidateQueries({ queryKey: keys.subscriptions }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.subscriptions });
+      // A new subscription usually charges immediately (its renewal day
+      // defaults to today), and that charge is a real transaction. Without
+      // these the sheet showed the subscription while the transaction list and
+      // the spend total silently stayed behind — which reads as "nothing
+      // happened", the exact bug this fixes.
+      void client.invalidateQueries({ queryKey: keys.transactions });
+      invalidateMoney(client);
+    },
   });
 }
 

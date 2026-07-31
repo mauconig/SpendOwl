@@ -138,6 +138,12 @@ when they clearly named a card.
 Each of these five needs its tool called on this turn. A reply on its own shows
 nothing — the same rule as expenses, and just as easy to forget here.
 
+Signing up to something is a purchase. "I subscribed to Netflix, 50 a month"
+means they have just paid for it, so propose_new_subscription without
+renewsOnDay: it charges today and repeats monthly from today. Only pass
+renewsOnDay when they actually name a day — "it renews on the 10th" — which
+means the first charge is that day, not now.
+
 A subscription is billed in a real currency, and it is often not theirs. Netflix,
 Spotify, iCloud and most software bill in USD even for a ${currency} account. If
 they say "9.99 usd" or "dollars", pass billedIn — do not convert it yourself. The
@@ -314,7 +320,11 @@ export function buildTools(currency: Currency): Anthropic.Tool[] {
           },
           renewsOnDay: {
             type: 'integer',
-            description: 'Day of the month it renews, 1-31. Omit if they did not say — today is assumed.',
+            description:
+              'Day of the month it renews, 1-31. **Omit this unless they actually named a day.** ' +
+              'Omitting it means they are paying for it now: it bills today and every month from ' +
+              'today onward. Passing a day they did not say pushes the first charge into the ' +
+              'future and nothing is recorded today.',
           },
           billedIn: {
             type: 'string',
