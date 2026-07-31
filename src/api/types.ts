@@ -184,7 +184,17 @@ export type ApiDiscountCategory =
   | 'groceries'
   | 'restaurants'
   | 'fashion'
+  /**
+   * Beauty and wellness — salons, spas, barbershops, aesthetic clinics, labs.
+   * Pharmacies used to live here and are now split out below.
+   */
   | 'beauty_health'
+  /**
+   * Derived server-side from the merchant's name, never scraped — see
+   * server/src/discountCategories.ts. The scraper's own taxonomy has no such
+   * category, so this is the one value here that DISCOUNT_CATEGORIES lacks.
+   */
+  | 'pharmacy'
   | 'home'
   | 'electronics'
   | 'auto_fuel'

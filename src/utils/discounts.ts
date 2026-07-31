@@ -12,12 +12,17 @@ import type { ApiDiscount, ApiDiscountCategory } from '../api/types';
  * having.
  */
 
-/** Mirrors server/src/scraper/extract.ts's DISCOUNT_CATEGORIES. */
+/**
+ * The scraper's DISCOUNT_CATEGORIES, plus `pharmacy` — which the server derives
+ * from the merchant's name on the way out (server/src/discountCategories.ts)
+ * because the scraped bucket lumped 13 real pharmacies in with 144 salons.
+ */
 export const CATEGORY_LABELS: Record<ApiDiscountCategory, string> = {
   groceries: 'Supermarkets & Groceries',
   restaurants: 'Restaurants & Food',
   fashion: 'Fashion & Accessories',
-  beauty_health: 'Beauty & Health',
+  beauty_health: 'Beauty & Wellness',
+  pharmacy: 'Pharmacies',
   home: 'Home & Furniture',
   electronics: 'Electronics & Media',
   auto_fuel: 'Automotive & Fuel',
@@ -25,12 +30,13 @@ export const CATEGORY_LABELS: Record<ApiDiscountCategory, string> = {
   other: 'Other / Services',
 };
 
-/** The same nine, short enough to headline a Home card. */
+/** The same set, short enough to headline a Home card. */
 export const CATEGORY_SHORT: Record<ApiDiscountCategory, string> = {
   groceries: 'Supermarkets',
   restaurants: 'Restaurants',
   fashion: 'Fashion',
-  beauty_health: 'Pharmacy & beauty',
+  beauty_health: 'Beauty & spa',
+  pharmacy: 'Pharmacies',
   home: 'Home',
   electronics: 'Electronics',
   auto_fuel: 'Fuel & auto',
@@ -45,6 +51,7 @@ export const CATEGORY_SHORT: Record<ApiDiscountCategory, string> = {
 export const CATEGORY_ORDER: ApiDiscountCategory[] = [
   'auto_fuel',
   'restaurants',
+  'pharmacy',
   'beauty_health',
   'groceries',
   'fashion',
@@ -60,6 +67,7 @@ export const CATEGORY_COLORS: Record<ApiDiscountCategory, string> = {
   restaurants: '#F2A65A',
   fashion: '#D98BC8',
   beauty_health: '#78ADEE',
+  pharmacy: '#5EC8B0',
   home: '#C4A87A',
   electronics: '#8FD4D4',
   auto_fuel: '#E8845C',
@@ -88,8 +96,12 @@ export type TodayOfferGroup = {
   bestPercent: number | null;
 };
 
-/** Gas and pharmacies lead; everything else earns its slot by being narrow. */
-const LEAD_CATEGORIES: ApiDiscountCategory[] = ['auto_fuel', 'beauty_health'];
+/**
+ * Gas and pharmacies lead; everything else earns its slot by being narrow.
+ * `pharmacy`, not `beauty_health` — the point of that split is that a "fuel and
+ * pharmacies today" card should not be filled with barbershops.
+ */
+const LEAD_CATEGORIES: ApiDiscountCategory[] = ['auto_fuel', 'pharmacy'];
 const MAX_GROUPS = 4;
 
 /**

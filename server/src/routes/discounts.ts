@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../auth.ts';
 import { query } from '../db.ts';
+import { refineCategory } from '../discountCategories.ts';
 import { eligibleWeekdayCount, evaluateDays } from '../discountDays.ts';
 
 /**
@@ -45,6 +46,9 @@ export const discountsRoute = new Hono<AppEnv>().get('/', async c => {
   const now = new Date();
   const resolved: Resolved[] = rows.map(r => ({
     ...r,
+    // Pharmacies come out of the beauty/health bucket here rather than in the
+    // scraper — see ../discountCategories.ts.
+    category: refineCategory(r.category, r.merchant),
     // 'always' is not "today": a discount with no day restriction runs every
     // day, so it is never news on the Home screen. Only an explicit match
     // counts. 'unknown' deliberately falls on the false side.
