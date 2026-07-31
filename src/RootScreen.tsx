@@ -59,6 +59,12 @@ export function RootScreen() {
           style={{ flex: 1 }}
           horizontal
           pagingEnabled
+          // Swiping here fought with horizontal scrolling inside a page (e.g.
+          // Offers' category chips) and could flip screens by accident.
+          // Navigation is button-only now; scrollTo() below still drives the
+          // transition programmatically, scrollEnabled only blocks the
+          // user's own touch-drag.
+          scrollEnabled={false}
           showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={onMomentumEnd}
           contentOffset={{ x: pageIndex * width, y: 0 }}
