@@ -33,22 +33,27 @@ export type ExtractedDiscount = {
   description: string;
 };
 
+// .nullish() rather than .optional() on every optional field: forced tool
+// calls routinely come back with an explicit `null` for "not applicable"
+// instead of the key being omitted, and .optional() alone rejects that (only
+// undefined passes) — confirmed against a live 219-promo run, where it threw
+// away ~25 otherwise-good extractions for exactly this reason.
 const discountSchema = z.object({
   externalId: z.string().trim().min(1),
   merchant: z.string().trim().min(1).max(120),
-  category: z.string().trim().min(1).max(40).optional(),
-  percent: z.number().min(0).max(100).optional(),
-  installments: z.number().int().min(0).max(60).optional(),
-  eligibleDays: z.string().trim().max(120).optional(),
-  monthlyCapAmount: z.number().nonnegative().optional(),
+  category: z.string().trim().min(1).max(40).nullish(),
+  percent: z.number().min(0).max(100).nullish(),
+  installments: z.number().int().min(0).max(60).nullish(),
+  eligibleDays: z.string().trim().max(120).nullish(),
+  monthlyCapAmount: z.number().nonnegative().nullish(),
   validFrom: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
+    .nullish(),
   validUntil: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
+    .nullish(),
   description: z.string().trim().min(1).max(320),
 });
 
