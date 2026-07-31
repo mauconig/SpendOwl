@@ -36,6 +36,9 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# scraper output, transferred to the VPS by hand, never committed
+server/gnb-discounts.json
+
 # generated native folders
 /ios
 /android
