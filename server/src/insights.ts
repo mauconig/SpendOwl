@@ -320,9 +320,18 @@ async function buildSnapshot(userId: string, currency: Currency) {
   const userMerchants = new Set(
     [...transactions, ...merchants].map(t => t.merchant.toLowerCase().trim())
   );
+  // Exact matches always count, whatever the length — a real merchant
+  // literally named "CAT" must still match. The minimum length only guards
+  // the *substring* check: without it, GNB's (real) "CAT" merchant matches
+  // anyone who shopped at "Decathlon", which merely contains those letters.
+  // Verified live — that exact false positive showed up against a real
+  // account's transaction history, and the two are unrelated stores.
+  const MIN_MATCH_LEN = 5;
   const matchesUser = (discountMerchant: string): boolean => {
     const lower = discountMerchant.toLowerCase().trim();
     for (const u of userMerchants) {
+      if (u === lower) return true;
+      if (Math.min(u.length, lower.length) < MIN_MATCH_LEN) continue;
       if (u.includes(lower) || lower.includes(u)) return true;
     }
     return false;
