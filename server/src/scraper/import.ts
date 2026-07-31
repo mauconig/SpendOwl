@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { transaction } from '../db.ts';
+import { groupBranches } from './groupBranches.ts';
 import type { ScrapeOutput } from './scrape.ts';
 
 /**
@@ -32,6 +33,15 @@ async function main(): Promise<void> {
     `${tag} loaded ${data.discounts.length} discounts (${data.resolvedIds.length} resolved ids), generated ${data.generatedAt}`
   );
 
+  // Folds a chain's branches into one row. Done here rather than in scrape.ts
+  // so the scrape output stays a faithful record of what the bank published,
+  // and so re-importing an existing file is enough to regroup — grouping is a
+  // pure function of the file, and costs no LLM call to redo.
+  const discounts = groupBranches(data.discounts);
+  if (discounts.length !== data.discounts.length) {
+    console.log(`${tag} grouped branches: ${data.discounts.length} -> ${discounts.length} rows`);
+  }
+
   await transaction(async client => {
     // Clears exactly the promos the scrape run resolved — NOT everything it
     // fetched. A promo whose extraction failed after retries was left out of
@@ -43,7 +53,7 @@ async function main(): Promise<void> {
       ]);
     }
 
-    for (const d of data.discounts) {
+    for (const d of discounts) {
       await client.query(
         `INSERT INTO bank_discounts
            (bank, external_id, merchant, category, percent, installments, eligible_days,
