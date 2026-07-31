@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { APP_TIME_ZONE } from './dates.ts';
 import { env } from './env.ts';
 
 // node-postgres returns NUMERIC as a string to avoid precision loss. Every
@@ -19,6 +20,17 @@ export const pool = new pg.Pool({
   connectionString: env.databaseUrl,
   max: 10,
   idleTimeoutMillis: 30_000,
+  // Every CURRENT_DATE, now() and date_trunc('month', ...) in this codebase
+  // answers in this zone, which is the same one dates.ts reckons in. Without
+  // it Postgres ran in UTC while Node ran in the VPS's Europe/Berlin, and the
+  // two disagreed about what day it was for two hours every evening — long
+  // enough to write a subscription charge dated in Postgres' own future, where
+  // the month window in summary.ts could not see it.
+  //
+  // Set on the connection rather than edited into ~15 queries: it is one fact
+  // about the app, and a query that forgot the conversion would reintroduce
+  // exactly this bug.
+  options: `-c timezone=${APP_TIME_ZONE}`,
 });
 
 export type Row = Record<string, unknown>;

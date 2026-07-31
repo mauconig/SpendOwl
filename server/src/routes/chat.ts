@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '../auth.ts';
 import { findDiscount } from '../cardDiscounts.ts';
+import { appToday } from '../dates.ts';
 import { query, queryOne } from '../db.ts';
 import {
   CURRENCIES,
@@ -769,7 +770,7 @@ async function runTool(
         amountMinor: displayToMinor(p.monthlyPrice, billedIn),
         // Today's date is the sensible default for something they just signed
         // up to, and it is visible on the card for them to correct.
-        dayOfMonth: p.renewsOnDay ?? new Date().getDate(),
+        dayOfMonth: p.renewsOnDay ?? appToday().getDate(),
         subCurrency: billedIn,
         ...(card ? { cardId: card.id, cardName: card.name } : {}),
       });

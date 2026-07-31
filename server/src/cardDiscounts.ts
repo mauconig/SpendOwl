@@ -19,7 +19,7 @@
  *    applying nothing.
  */
 
-import { localDate } from './dates.ts';
+import { appToday, localDate } from './dates.ts';
 import { query, queryOne } from './db.ts';
 import { evaluateDays } from './discountDays.ts';
 
@@ -95,7 +95,10 @@ export async function findDiscount(
   cardName: string,
   merchant: string,
   grossMinor: number,
-  on: Date = new Date()
+  // The user's today. Which promos apply turns on the day of the week, so the
+  // server's clock would hand out Saturday's rates on a Paraguayan Friday
+  // evening — and the coach would state a discount the till will not give.
+  on: Date = appToday()
 ): Promise<AppliedDiscount | null> {
   if (grossMinor <= 0) return null;
 

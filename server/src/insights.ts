@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { type Currency, decimalsFor, minorToDisplay } from './currency.ts';
+import { appDate } from './dates.ts';
 import { query, transaction } from './db.ts';
 import { env } from './env.ts';
 import { listSubscriptionsByPrice } from './subscriptions.ts';
@@ -341,7 +342,9 @@ async function buildSnapshot(userId: string, currency: Currency) {
     // cumulative chart series answer no question and crowd out the rest.
     snapshot: {
       currency,
-      today: new Date().toISOString().slice(0, 10),
+      // The user's today. toISOString() would also have said a different day
+      // to the SQL above it for two hours each evening.
+      today: appDate(),
       month: summary.month,
       daysLeft: summary.daysLeft,
       budget: money(summary.budgetMinor),

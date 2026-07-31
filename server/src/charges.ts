@@ -21,7 +21,7 @@
  */
 
 import { getUserCurrency, type Currency } from './currency.ts';
-import { localDate, localPeriod } from './dates.ts';
+import { appToday, localDate, localPeriod } from './dates.ts';
 import { query, transaction } from './db.ts';
 import { convertMinor, getRate } from './fx.ts';
 
@@ -88,7 +88,10 @@ export async function materializeDueCharges(userId: string): Promise<void> {
   if (subs.length === 0) return;
 
   const base = await getUserCurrency(userId);
-  const today = new Date();
+  // The user's today, not the server's. On the VPS these differ for two hours
+  // every evening, and using the server's charged a renewal a day early — into
+  // a date the month window in summary.ts treats as the future.
+  const today = appToday();
 
   for (const sub of subs) {
     const due = duePeriods(sub, today);
