@@ -4,21 +4,9 @@ import { useDiscounts } from '../api/hooks';
 import type { ApiDiscount, ApiDiscountCategory } from '../api/types';
 import { Icon } from '../icons';
 import { colors, fonts, formatPYG } from '../theme';
+import { CATEGORY_LABELS, CATEGORY_ORDER, offerBadge } from '../utils/discounts';
 
 const ALL = 'all';
-
-// Mirrors server/src/scraper/extract.ts's DISCOUNT_CATEGORIES labels.
-const CATEGORY_LABELS: Record<ApiDiscountCategory, string> = {
-  groceries: 'Supermarkets & Groceries',
-  restaurants: 'Restaurants & Food',
-  fashion: 'Fashion & Accessories',
-  beauty_health: 'Beauty & Health',
-  home: 'Home & Furniture',
-  electronics: 'Electronics & Media',
-  auto_fuel: 'Automotive & Fuel',
-  entertainment_travel: 'Entertainment & Travel',
-  other: 'Other / Services',
-};
 
 // Each bank's own brand accent — GNB's confirmed from beneficios.css
 // (`.beneficios { background-color: #7AB83F; }`), not a guess.
@@ -51,6 +39,7 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
 // list rows mount as they scroll into view, so a per-row entrance animation
 // would fire continuously while scrolling instead of once on open.
 const DiscountCard = React.memo(function DiscountCard({ d }: { d: ApiDiscount }) {
+  const badge = offerBadge(d);
   return (
     <View
       style={{
@@ -66,11 +55,12 @@ const DiscountCard = React.memo(function DiscountCard({ d }: { d: ApiDiscount })
         <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.text, flex: 1 }} numberOfLines={2}>
           {d.merchant}
         </Text>
-        {d.percent != null ? (
-          <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.mint }}>{d.percent}%</Text>
-        ) : d.installments != null ? (
-          <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: colors.mint }}>{d.installments}x</Text>
-        ) : null}
+        {badge && (
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.mint }}>{badge.value}</Text>
+            {badge.note && <Text style={{ fontSize: 9, fontFamily: fonts.mono, color: colors.textDim45 }}>{badge.note}</Text>}
+          </View>
+        )}
       </View>
 
       <Text style={{ fontSize: 12, lineHeight: 17, color: colors.textDim60 }}>{d.description}</Text>
@@ -117,10 +107,13 @@ export function OffersScreen() {
   const [selCategory, setSelCategory] = useState<string>(ALL);
   const [search, setSearch] = useState('');
 
-  const categories = useMemo(
-    () => [...new Set(discounts.map(d => d.category).filter((c): c is ApiDiscountCategory => !!c))],
-    [discounts]
-  );
+  const categories = useMemo(() => {
+    const present = new Set(discounts.map(d => d.category).filter((c): c is ApiDiscountCategory => !!c));
+    const ordered = CATEGORY_ORDER.filter(c => present.has(c));
+    // Any future category the server adds before this list catches up still
+    // shows, just parked at the end rather than silently dropped.
+    return [...ordered, ...[...present].filter(c => !CATEGORY_ORDER.includes(c))];
+  }, [discounts]);
 
   useEffect(() => {
     if (selCategory !== ALL && !categories.includes(selCategory as ApiDiscountCategory)) setSelCategory(ALL);

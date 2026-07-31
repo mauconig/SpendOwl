@@ -11,9 +11,11 @@ import {
   decimalsFor,
   displayToMinor,
   fonts,
+  formatMoney,
   minorToDisplay,
   moneyFont,
 } from '../theme';
+import { minorToEur } from '../api/types';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { formatAmountInput, parseAmountInput } from '../utils/moneyInput';
 import { longDate, parseDay, toDayString } from '../utils/date';
@@ -225,6 +227,27 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
             );
           })()
         ) : null}
+
+        {/* Only on rows a subscription generated. The rate is shown because it
+            is frozen: this charge used the rate on the day it happened, and
+            next month's will use a different one — which is the whole reason
+            the subscription stores a currency rather than one fixed amount. */}
+        {tx?.originalCurrency != null && tx.originalMinor != null && (
+          <Field label="BILLED AS">
+            <Text style={{ fontSize: 14.5, color: colors.text }}>
+              {formatMoney(minorToEur(tx.originalMinor), tx.originalCurrency, decimalsFor(tx.originalCurrency))}
+            </Text>
+            {tx.fxRate != null && tx.originalCurrency !== baseCur && (
+              // A plain number, not formatMoney: that helper expects the
+              // minor-units/100 convention and would read a rate of 0.86 as
+              // one cent. A rate is not an amount.
+              <Text style={{ fontSize: 11.5, fontFamily: fonts.mono, color: colors.textDim45, marginTop: 4 }}>
+                1 {tx.originalCurrency} = {tx.fxRate.toLocaleString('en-US', { maximumFractionDigits: 2 })} {baseCur} on
+                this date
+              </Text>
+            )}
+          </Field>
+        )}
 
         <Field label="DATE">
           <Pressable

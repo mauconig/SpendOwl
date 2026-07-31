@@ -76,7 +76,10 @@ export function DashboardScreen() {
   const hiddenTxCount = txList.length - visibleTx.length;
 
   const subsActive = store.subs.filter(s => !s.off);
-  const subsTotal = subsActive.reduce((a, s) => a + s.price, 0);
+  // `price` is the converted figure and is null when no rate was available;
+  // a subscription that cannot be converted is left out rather than counted
+  // as free. Never sum `nativePrice` — those are in different currencies.
+  const subsTotal = subsActive.reduce((a, s) => a + (s.price ?? 0), 0);
 
   const budget = minorToEur(summary?.budgetMinor ?? 0);
   const spent = minorToEur(summary?.spentMinor ?? 0);

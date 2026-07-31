@@ -14,6 +14,7 @@ import type {
   ApiSummary,
   ApiTransaction,
 } from './types';
+import type { Currency } from '../theme';
 
 export const keys = {
   transactions: ['transactions'] as const,
@@ -242,8 +243,13 @@ export function useAddSubscription() {
   const api = useApi();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string; priceMinor: number; dayOfMonth: number }) =>
-      api.post<ApiSubscription>('/api/subscriptions', input),
+    mutationFn: (input: {
+      name: string;
+      priceMinor: number;
+      dayOfMonth: number;
+      currency?: Currency;
+      cardId?: string | null;
+    }) => api.post<ApiSubscription>('/api/subscriptions', input),
     onSuccess: () => void client.invalidateQueries({ queryKey: keys.subscriptions }),
   });
 }
@@ -257,8 +263,19 @@ export function useUpdateSubscription() {
   const api = useApi();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...patch }: { id: string; muted?: boolean; off?: boolean }) =>
-      api.patch<ApiSubscription>(`/api/subscriptions/${id}`, patch),
+    mutationFn: ({
+      id,
+      ...patch
+    }: {
+      id: string;
+      muted?: boolean;
+      off?: boolean;
+      name?: string;
+      priceMinor?: number;
+      dayOfMonth?: number;
+      currency?: Currency;
+      cardId?: string | null;
+    }) => api.patch<ApiSubscription>(`/api/subscriptions/${id}`, patch),
     onMutate: async ({ id, ...patch }) => {
       await client.cancelQueries({ queryKey: keys.subscriptions });
       const previous = client.getQueryData<ApiSubscription[]>(keys.subscriptions);
@@ -270,7 +287,13 @@ export function useUpdateSubscription() {
     onError: (_error, _vars, context) => {
       if (context?.previous) client.setQueryData(keys.subscriptions, context.previous);
     },
-    onSettled: () => void client.invalidateQueries({ queryKey: keys.subscriptions }),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: keys.subscriptions });
+      // Cancelling stops future renewals and re-pricing changes what the next
+      // one costs, so the spend picture that includes them has to refetch.
+      void client.invalidateQueries({ queryKey: keys.transactions });
+      invalidateMoney(client);
+    },
   });
 }
 

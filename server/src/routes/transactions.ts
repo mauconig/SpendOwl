@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '../auth.ts';
+import { materializeDueCharges } from '../charges.ts';
 import { query, queryOne } from '../db.ts';
 
 // Exported so the chat coach's propose_expense tool offers exactly these — a
@@ -30,7 +31,11 @@ const SELECT = `
          occurred_at     AS "occurredAt",
          note,
          tax_deductible  AS "taxDeductible",
-         card_id         AS "cardId"
+         card_id         AS "cardId",
+         subscription_id AS "subscriptionId",
+         original_minor  AS "originalMinor",
+         original_currency AS "originalCurrency",
+         fx_rate::float8 AS "fxRate"
   FROM transactions
 `;
 
@@ -48,6 +53,9 @@ async function ownsCard(userId: string, cardId: string): Promise<boolean> {
 export const transactionsRoute = new Hono<AppEnv>()
 
   .get('/', async c => {
+    // Any subscription renewal that has come due appears in this list as an
+    // ordinary transaction — see ../charges.ts.
+    await materializeDueCharges(c.get('userId'));
     const rows = await query(`${SELECT} WHERE user_id = $1 ORDER BY occurred_at DESC, created_at DESC`, [
       c.get('userId'),
     ]);
@@ -68,7 +76,9 @@ export const transactionsRoute = new Hono<AppEnv>()
       `INSERT INTO transactions (user_id, merchant, category, amount_minor, occurred_at, note, tax_deductible, card_id)
        VALUES ($1, $2, $3, $4, COALESCE($5::date, CURRENT_DATE), $6, COALESCE($7, FALSE), $8)
        RETURNING id, merchant, category, amount_minor AS "amountMinor", occurred_at AS "occurredAt",
-                 note, tax_deductible AS "taxDeductible", card_id AS "cardId"`,
+                 note, tax_deductible AS "taxDeductible", card_id AS "cardId",
+                 subscription_id AS "subscriptionId", original_minor AS "originalMinor",
+                 original_currency AS "originalCurrency", fx_rate::float8 AS "fxRate"`,
       [
         userId,
         body.merchant,
@@ -106,7 +116,9 @@ export const transactionsRoute = new Hono<AppEnv>()
               card_id        = COALESCE($9, card_id)
         WHERE id = $1 AND user_id = $2
         RETURNING id, merchant, category, amount_minor AS "amountMinor", occurred_at AS "occurredAt",
-                  note, tax_deductible AS "taxDeductible", card_id AS "cardId"`,
+                  note, tax_deductible AS "taxDeductible", card_id AS "cardId",
+                 subscription_id AS "subscriptionId", original_minor AS "originalMinor",
+                 original_currency AS "originalCurrency", fx_rate::float8 AS "fxRate"`,
       [
         c.req.param('id'),
         userId,

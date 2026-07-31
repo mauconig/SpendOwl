@@ -1,12 +1,14 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Icon } from '../icons';
 import { CATS, GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
 import { minorToEur, type ApiInsightIcon } from '../api/types';
+import { useDiscounts } from '../api/hooks';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { FACTURAS_ENABLED } from '../store/constants';
 import { monthLong } from '../utils/date';
+import { CATEGORY_COLORS, CATEGORY_SHORT, todaysOfferGroups } from '../utils/discounts';
 
 type Insight = {
   title: string;
@@ -36,6 +38,18 @@ const ICON_COLORS: Record<ApiInsightIcon, string> = {
 export function HomeScreen() {
   const store = useSpendOwl();
   const { baseCur, summary } = store;
+  const { data: discountData } = useDiscounts();
+
+  /**
+   * Card discounts that are live *today specifically* — a promo with no day
+   * restriction is true every day and so isn't news. Grouped by category, gas
+   * and pharmacies first, capped at four cards so this doesn't crowd out the
+   * insights below it. See utils/discounts.
+   */
+  const todayOffers = useMemo(
+    () => todaysOfferGroups(discountData?.discounts ?? [], new Date()),
+    [discountData?.discounts]
+  );
 
   const spent = minorToEur(summary?.spentMinor ?? 0);
   const income = minorToEur(summary?.incomeMinor ?? 0);
@@ -113,6 +127,58 @@ export function HomeScreen() {
       </View>
 
       <Text style={{ fontSize: 15, fontFamily: fonts.bold, color: colors.text, marginTop: 4 }}>For you today</Text>
+
+      {todayOffers.map(g => {
+        const accent = CATEGORY_COLORS[g.category];
+        return (
+          <Pressable
+            key={g.category}
+            onPress={() => store.openTodayOffers(g.category)}
+            style={{
+              backgroundColor: colors.card,
+              borderRadius: 20,
+              padding: 14,
+              paddingHorizontal: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 12,
+                backgroundColor: colors.iconBg,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Icon name="card" size={18} color={accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.text, flexShrink: 1 }}>
+                  {CATEGORY_SHORT[g.category]} today
+                </Text>
+                {g.bestPercent != null && (
+                  <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: accent }}>up to {g.bestPercent}%</Text>
+                )}
+              </View>
+              {/* One line, always: the whole point of grouping is that Home
+                  stays scannable however many merchants are behind it. */}
+              <Text style={{ fontSize: 12, color: colors.textDim50, marginTop: 3 }} numberOfLines={1}>
+                {g.offers.map(o => o.merchant).join(' · ')}
+              </Text>
+              <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: '#78ADEE', marginTop: 8 }}>
+                {g.offers.length === 1 ? 'See the terms' : `See all ${g.offers.length}`}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+
       {insights.map((i, idx) => (
         <Pressable
           key={idx}
@@ -184,7 +250,7 @@ function buildFallbackInsights(store: ReturnType<typeof useSpendOwl>): Insight[]
     insights.push({
       title: `${upcoming.length} renewal${upcoming.length === 1 ? '' : 's'} still to come`,
       body: `${upcoming.map(s => s.name).join(', ')} renew${upcoming.length === 1 ? 's' : ''} later this month — ${formatMoney(
-        upcoming.reduce((sum, s) => sum + s.price, 0),
+        upcoming.reduce((sum, s) => sum + (s.price ?? 0), 0),
         baseCur,
         2
       )} total.`,

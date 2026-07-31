@@ -3,8 +3,17 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '../auth.ts';
 import { query, queryOne } from '../db.ts';
-import { type Currency, decimalsFor, displayToMinor, getUserCurrency, minorToDisplay } from '../currency.ts';
+import {
+  CURRENCIES,
+  type Currency,
+  decimalsFor,
+  displayToMinor,
+  getUserCurrency,
+  isCurrency,
+  minorToDisplay,
+} from '../currency.ts';
 import { env } from '../env.ts';
+import { listSubscriptionsByPrice } from '../subscriptions.ts';
 import { getSummary } from '../summary.ts';
 import { CATEGORIES } from './transactions.ts';
 
@@ -53,9 +62,14 @@ unless they ask for detail — this is a phone chat, not a report.
 
 CURRENCY. This user's currency is ${CURRENCY_NAMES[currency]}. Every amount your
 tools report is already in ${currency}, and every amount you write or pass to a
-tool must be in ${currency}. ${whole} Never convert between currencies and never
-mention another currency — as far as this conversation is concerned, ${currency}
-is the only one that exists.
+tool must be in ${currency}. ${whole} Never convert between currencies yourself —
+you have no exchange rate and any figure you produce that way is invented.
+
+There is exactly one exception, and it is a recording exception, not a licence to
+convert: a subscription can be billed in a currency that is not theirs, and the
+subscription tools take a billedIn field so the app can convert it at the real
+rate. Pass the number they said together with the currency they said it in. Apart
+from that, treat ${currency} as the only currency this conversation has.
 
 Facts about their finances come from your tools. Never guess or invent a number:
 if you need a figure, call a tool. If a tool has no answer, say so plainly.
@@ -98,7 +112,7 @@ Use only the merchant they named. Never reuse one from their past transactions o
 from an earlier draft. If they did not name a shop at all, ask which one it was —
 do not guess and do not substitute a plausible-sounding name.
 
-CARDS AND SUBSCRIPTIONS. Four different things can be said about them, and they
+CARDS AND SUBSCRIPTIONS. Five different things can be said about them, and they
 are easy to confuse. Read which one it is before choosing a tool:
 
   · "I bought X with my Visa" — money spent, using a card.
@@ -108,6 +122,8 @@ are easy to confuse. Read which one it is before choosing a tool:
     propose_card_payment. This is not spending and is never an expense.
   · "I cancelled Netflix" — propose_cancel_subscription.
   · "I subscribed to Netflix, 50 a month" — propose_new_subscription.
+  · "Netflix is actually 9.99 usd" / "Spotify comes out of my Visa" —
+    propose_edit_subscription, for a correction to one they already have.
 
 The first two are opposites. "Con la Visa", "with my card", "pagué con" mean
 they *spent* using it. "Pagué a la Visa", "paid off", "towards" mean they *paid
@@ -119,8 +135,16 @@ was no match or several, do exactly what it says — ask them which one. Never
 retry with a name you invented, and never fall back to proposing a plain expense
 when they clearly named a card.
 
-Each of these four needs its tool called on this turn. A reply on its own shows
+Each of these five needs its tool called on this turn. A reply on its own shows
 nothing — the same rule as expenses, and just as easy to forget here.
+
+A subscription is billed in a real currency, and it is often not theirs. Netflix,
+Spotify, iCloud and most software bill in USD even for a ${currency} account. If
+they say "9.99 usd" or "dollars", pass billedIn — do not convert it yourself. The
+app converts at the real rate every month and the amount in ${currency} changes as
+the rate moves, which is the whole reason the currency is recorded rather than a
+single converted number. If they just say a number with no currency, it is
+${currency} and billedIn should be omitted.
 
 Everything above is a draft. None of these tools change anything: each one shows
 a card the user must approve. Never say something is cancelled, paid, added or
@@ -166,6 +190,15 @@ const toolArgs = {
     name: z.string().trim().min(1).max(80),
     monthlyPrice: z.number().positive().finite(),
     renewsOnDay: z.int().min(1).max(31).optional(),
+    billedIn: z.enum(CURRENCIES).optional(),
+    paidWithCard: z.string().trim().min(1).max(80).optional(),
+  }),
+  propose_edit_subscription: z.object({
+    subscription: z.string().trim().min(1).max(80),
+    monthlyPrice: z.number().positive().finite().optional(),
+    renewsOnDay: z.int().min(1).max(31).optional(),
+    billedIn: z.enum(CURRENCIES).optional(),
+    paidWithCard: z.string().trim().min(1).max(80).optional(),
   }),
 } as const;
 
@@ -269,18 +302,56 @@ export function buildTools(currency: Currency): Anthropic.Tool[] {
       name: 'propose_new_subscription',
       description:
         'Draft a new recurring subscription, for when they say they have signed up to something ' +
-        'that bills monthly. Approving adds it. Adds nothing on its own.',
+        'that bills monthly. Approving adds it, and from then on it charges automatically every ' +
+        'month as a real transaction. Adds nothing on its own.',
       input_schema: {
         type: 'object',
         properties: {
           name: { type: 'string', description: 'The service, e.g. "Spotify".' },
-          monthlyPrice: { type: 'number', description: `What it costs per month, in ${currency}.` },
+          monthlyPrice: {
+            type: 'number',
+            description: `What it costs per month, as the number they said. In ${currency} unless billedIn says otherwise.`,
+          },
           renewsOnDay: {
             type: 'integer',
             description: 'Day of the month it renews, 1-31. Omit if they did not say — today is assumed.',
           },
+          billedIn: {
+            type: 'string',
+            enum: [...CURRENCIES],
+            description:
+              'The currency the service actually bills in, if they said one — most streaming and ' +
+              `software subscriptions bill in USD. Omit when they did not say; ${currency} is assumed.`,
+          },
+          paidWithCard: {
+            type: 'string',
+            description: 'The card it is charged to, named the way they said it. Omit if they did not say.',
+          },
         },
         required: ['name', 'monthlyPrice'],
+      },
+    },
+    {
+      name: 'propose_edit_subscription',
+      description:
+        'Draft a change to a subscription they already have — a new price, a different renewal ' +
+        'day, the currency it bills in, or which card pays for it. Use this when they correct ' +
+        'something about an existing subscription rather than signing up to a new one. Pass only ' +
+        'the fields they actually mentioned. Changes nothing on its own.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          subscription: { type: 'string', description: 'The subscription name as they said it.' },
+          monthlyPrice: { type: 'number', description: 'The new monthly price, if they gave one.' },
+          renewsOnDay: { type: 'integer', description: 'The new renewal day, 1-31, if they gave one.' },
+          billedIn: {
+            type: 'string',
+            enum: [...CURRENCIES],
+            description: 'The currency it bills in, if they are correcting that.',
+          },
+          paidWithCard: { type: 'string', description: 'The card that pays for it, if they named one.' },
+        },
+        required: ['subscription'],
       },
     },
   ];
@@ -307,7 +378,29 @@ type Proposal =
     }
   | { action: 'card_payment'; cardId: string; cardName: string; amountMinor: number }
   | { action: 'sub_cancel'; subId: string; subName: string; amountMinor: number }
-  | { action: 'sub_add'; subName: string; amountMinor: number; dayOfMonth: number };
+  | {
+      action: 'sub_add';
+      subName: string;
+      // In `subCurrency`, which is not necessarily the user's own — see the
+      // billedIn field on propose_new_subscription.
+      amountMinor: number;
+      dayOfMonth: number;
+      subCurrency: Currency;
+      cardId?: string;
+      cardName?: string;
+    }
+  | {
+      action: 'sub_edit';
+      subId: string;
+      subName: string;
+      // Only the fields they actually asked to change are present; the approval
+      // path PATCHes exactly these and leaves the rest alone.
+      amountMinor?: number;
+      dayOfMonth?: number;
+      subCurrency?: Currency;
+      cardId?: string;
+      cardName?: string;
+    };
 
 /**
  * Resolves the name a person actually says to one of their rows.
@@ -369,12 +462,10 @@ async function runTool(
       [userId]
     );
 
-  const loadSubs = () =>
-    query<Named & { priceMinor: number; off: boolean }>(
-      `SELECT id, name, price_minor AS "priceMinor", cancelled AS "off"
-         FROM subscriptions WHERE user_id = $1`,
-      [userId]
-    );
+  // Goes through the shared loader rather than its own SELECT so priceBaseMinor
+  // is present: price_minor is in whatever currency the service bills in, and
+  // every figure this function hands the model must be in the user's.
+  const loadSubs = () => listSubscriptionsByPrice(userId, currency);
 
   switch (name) {
     case 'get_budget_summary': {
@@ -422,18 +513,17 @@ async function runTool(
     }
 
     case 'list_subscriptions': {
-      // The column is `cancelled`; the rest of the API exposes it as "off".
-      const rows = await query<{ name: string; priceMinor: number; dayOfMonth: number; muted: boolean; off: boolean }>(
-        `SELECT name, price_minor AS "priceMinor", day_of_month AS "dayOfMonth", muted,
-                cancelled AS "off"
-           FROM subscriptions WHERE user_id = $1 ORDER BY price_minor DESC`,
-        [userId]
-      );
+      const rows = await loadSubs();
       return ok(JSON.stringify({
         currency,
         subscriptions: rows.map(r => ({
           name: r.name,
-          monthlyPrice: money(r.priceMinor),
+          // Already converted into their currency. billedIn is reported
+          // alongside so the coach can answer "which ones are in dollars?"
+          // without ever doing the arithmetic itself.
+          monthlyPrice: r.priceBaseMinor == null ? null : money(r.priceBaseMinor),
+          billedIn: r.currency,
+          paidWithCard: r.cardName,
           renewsOnDay: r.dayOfMonth,
           alertsMuted: r.muted,
           cancelled: r.off,
@@ -516,7 +606,9 @@ async function runTool(
         action: 'sub_cancel',
         subId: found.id,
         subName: found.name,
-        amountMinor: found.priceMinor,
+        // The card shows what they stop paying, so this is the converted
+        // figure — not the USD one the service actually bills.
+        amountMinor: found.priceBaseMinor ?? 0,
       });
       return ok(`Cancellation card for ${found.name} shown for approval. It stays active until they approve.`);
     }
@@ -531,17 +623,57 @@ async function runTool(
         return failed(`${existing.name} is already in their subscriptions. Tell them, and do not propose anything.`);
       }
 
+      const card = p.paidWithCard ? resolveByName(await loadCards(), p.paidWithCard) : null;
+      if (card && 'error' in card) return failed(card.error);
+
+      // The price is in the currency the service bills in, so the minor-unit
+      // conversion has to use *that* currency's rule — 9.99 USD is 999 cents,
+      // and running it through a PYG account's rule would store 10 guaraníes.
+      const billedIn = p.billedIn ?? currency;
+
       proposals.push({
         action: 'sub_add',
         subName: p.name,
-        amountMinor: displayToMinor(p.monthlyPrice, currency),
+        amountMinor: displayToMinor(p.monthlyPrice, billedIn),
         // Today's date is the sensible default for something they just signed
         // up to, and it is visible on the card for them to correct.
         dayOfMonth: p.renewsOnDay ?? new Date().getDate(),
+        subCurrency: billedIn,
+        ...(card ? { cardId: card.id, cardName: card.name } : {}),
       });
       return ok(
-        `New subscription card for ${p.name} at ${p.monthlyPrice} ${currency}/month shown for approval. ` +
-          `Nothing is added until they approve.`
+        `New subscription card for ${p.name} at ${p.monthlyPrice} ${billedIn}/month` +
+          `${card ? ` on ${card.name}` : ''} shown for approval. Nothing is added until they approve.`
+      );
+    }
+
+    case 'propose_edit_subscription': {
+      const p = args as z.infer<(typeof toolArgs)['propose_edit_subscription']>;
+      const found = resolveByName(await loadSubs(), p.subscription);
+      if ('error' in found) return failed(found.error);
+
+      const card = p.paidWithCard ? resolveByName(await loadCards(), p.paidWithCard) : null;
+      if (card && 'error' in card) return failed(card.error);
+
+      if (p.monthlyPrice == null && p.renewsOnDay == null && p.billedIn == null && !card) {
+        return failed(`Nothing to change on ${found.name}. Ask them what they want to update.`);
+      }
+
+      // A price with no new currency stays in the one it is already billed in —
+      // "Netflix went up to 12.99" about a USD subscription means 12.99 USD.
+      const billedIn = p.billedIn ?? (found.currency as Currency);
+
+      proposals.push({
+        action: 'sub_edit',
+        subId: found.id,
+        subName: found.name,
+        ...(p.monthlyPrice != null ? { amountMinor: displayToMinor(p.monthlyPrice, billedIn) } : {}),
+        ...(p.renewsOnDay != null ? { dayOfMonth: p.renewsOnDay } : {}),
+        ...(p.billedIn != null || p.monthlyPrice != null ? { subCurrency: billedIn } : {}),
+        ...(card ? { cardId: card.id, cardName: card.name } : {}),
+      });
+      return ok(
+        `Change card for ${found.name} shown for approval. Nothing changes until they approve.`
       );
     }
   }
@@ -588,8 +720,22 @@ function replayOf(
           name: String(card.subName ?? ''),
           monthlyPrice: amount,
           renewsOnDay: Number(card.dayOfMonth ?? 1),
+          ...(card.subCurrency ? { billedIn: String(card.subCurrency) } : {}),
+          ...(card.cardName ? { paidWithCard: String(card.cardName) } : {}),
         },
-        ack: `New subscription card for ${card.subName} at ${amount} ${currency}/month shown for approval.`,
+        ack: `New subscription card for ${card.subName} at ${amount} ${card.subCurrency ?? currency}/month shown for approval.`,
+      };
+    case 'sub_edit':
+      return {
+        name: 'propose_edit_subscription',
+        input: {
+          subscription: String(card.subName ?? ''),
+          ...(card.amountMinor != null ? { monthlyPrice: amount } : {}),
+          ...(card.dayOfMonth != null ? { renewsOnDay: Number(card.dayOfMonth) } : {}),
+          ...(card.subCurrency ? { billedIn: String(card.subCurrency) } : {}),
+          ...(card.cardName ? { paidWithCard: String(card.cardName) } : {}),
+        },
+        ack: `Change card for ${card.subName} shown for approval.`,
       };
     default:
       return {
@@ -655,7 +801,11 @@ export function buildHistory(rows: MessageRow[], currency: Currency): Anthropic.
       const results: Anthropic.ToolResultBlockParam[] = [];
       for (const card of group) {
         const id = `toolu_hist${++toolSeq}`;
-        const amount = Math.abs(minorToDisplay(Number(card.amountMinor ?? 0), currency));
+        // A subscription card's amount is stored in the currency the service
+        // bills in, so it has to be read back through that currency's
+        // minor-unit rule — 999 is $9.99, not ₲999.
+        const cardCurrency = isCurrency(card.subCurrency) ? card.subCurrency : currency;
+        const amount = Math.abs(minorToDisplay(Number(card.amountMinor ?? 0), cardCurrency));
         // Rows written before card payments and subscriptions existed carry no
         // action at all, and were all expenses.
         const action = String(card.action ?? 'expense');

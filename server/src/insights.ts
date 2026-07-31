@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { type Currency, decimalsFor, minorToDisplay } from './currency.ts';
 import { query, transaction } from './db.ts';
 import { env } from './env.ts';
+import { listSubscriptionsByPrice } from './subscriptions.ts';
 import { getSummary } from './summary.ts';
 
 /**
@@ -266,11 +267,9 @@ async function buildSnapshot(userId: string, currency: Currency) {
         LIMIT 8`,
       [userId]
     ),
-    query<{ name: string; priceMinor: number; dayOfMonth: number; off: boolean }>(
-      `SELECT name, price_minor AS "priceMinor", day_of_month AS "dayOfMonth", cancelled AS "off"
-         FROM subscriptions WHERE user_id = $1 ORDER BY price_minor DESC`,
-      [userId]
-    ),
+    // Not a raw query: price_minor is in the subscription's own currency, and
+    // every figure handed to the model has to already be in the user's.
+    listSubscriptionsByPrice(userId, currency),
     query<{ name: string; balanceMinor: number; limitMinor: number; apr: number }>(
       `SELECT name, balance_minor AS "balanceMinor", credit_limit_minor AS "limitMinor", apr
          FROM credit_cards WHERE user_id = $1 ORDER BY balance_minor DESC`,
@@ -376,10 +375,12 @@ async function buildSnapshot(userId: string, currency: Currency) {
         note: t.note,
       })),
       activeSubscriptionCount: active.length,
-      activeSubscriptionMonthlyTotal: money(active.reduce((sum, s) => sum + s.priceMinor, 0)),
+      activeSubscriptionMonthlyTotal: money(active.reduce((sum, s) => sum + (s.priceBaseMinor ?? 0), 0)),
       subscriptions: subscriptions.map(s => ({
         name: s.name,
-        monthlyPrice: money(s.priceMinor),
+        // priceBaseMinor, never priceMinor: the latter is in the currency the
+        // service actually bills in, which is often not the user's.
+        monthlyPrice: s.priceBaseMinor == null ? null : money(s.priceBaseMinor),
         renewsOnDay: s.dayOfMonth,
         cancelled: s.off,
       })),

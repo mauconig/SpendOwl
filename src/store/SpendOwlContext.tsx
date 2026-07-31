@@ -34,7 +34,14 @@ import {
   useUpdateTransaction,
   useSettings,
 } from '../api/hooks';
-import { eurToMinor, minorToEur, type ApiInsight, type ApiSummary, type ApiTransaction } from '../api/types';
+import {
+  eurToMinor,
+  minorToEur,
+  type ApiDiscountCategory,
+  type ApiInsight,
+  type ApiSummary,
+  type ApiTransaction,
+} from '../api/types';
 import { CatKey, Currency, displayToMinor } from '../theme';
 import { ordinalDay, shortDate } from '../utils/date';
 import {
@@ -158,6 +165,27 @@ interface SpendOwlStore {
   closeSubs: () => void;
   toggleSubMute: (id: string) => void;
   toggleSubOff: (id: string) => void;
+  // Editing one subscription's terms. Mirrors `cardSheet` above, minus the add
+  // mode — subscriptions are still only created through the chat coach.
+  subSheet: { id: string } | null;
+  openEditSub: (id: string) => void;
+  closeSubSheet: () => void;
+  updateSubscriptionDetails: (input: {
+    id: string;
+    name?: string;
+    /** As typed, in `currency` — not minor units. */
+    price?: number;
+    currency?: Currency;
+    dayOfMonth?: number;
+    cardId?: string | null;
+  }) => void;
+
+  // today's card discounts, grouped by category on Home. Only the selected
+  // category lives here — the offers themselves come from useDiscounts(), which
+  // is cached, so the sheet reads them directly rather than duplicating them.
+  todayOffersCat: ApiDiscountCategory | null;
+  openTodayOffers: (c: ApiDiscountCategory) => void;
+  closeTodayOffers: () => void;
 
   // vault / invoice detail
   vaultItems: VaultItem[];
@@ -198,7 +226,9 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const [affordOpen, setAffordOpen] = useState(false);
   const [affordSel, setAffordSel] = useState(1);
   const [subsOpen, setSubsOpen] = useState(false);
+  const [subSheet, setSubSheet] = useState<{ id: string } | null>(null);
   const [invOpen, setInvOpen] = useState<string | null>(null);
+  const [todayOffersCat, setTodayOffersCat] = useState<ApiDiscountCategory | null>(null);
   // 'scanning' is a transient animation, never persisted — it lives here until
   // the (currently fake) scan resolves into a real card message.
   const [pendingScans, setPendingScans] = useState<string[]>([]);
@@ -308,11 +338,18 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
         id: s.id,
         name: s.name,
         color: s.color,
-        price: minorToEur(s.priceMinor),
+        // Two prices, deliberately: what the service bills (in its own
+        // currency, fixed) and what that comes to in the user's (converted
+        // server-side at today's rate, so it moves month to month).
+        price: s.priceBaseMinor == null ? null : minorToEur(s.priceBaseMinor),
+        nativePrice: minorToEur(s.priceMinor),
+        currency: s.currency,
         day: ordinalDay(s.dayOfMonth),
         dayOfMonth: s.dayOfMonth,
         muted: s.muted,
         off: s.off,
+        cardId: s.cardId,
+        cardName: s.cardName,
       })),
     [subsQuery.data]
   );
@@ -374,6 +411,27 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
                   subName: p.subName ?? 'New subscription',
                   amountEur,
                   dayOfMonth: p.dayOfMonth ?? 1,
+                  // Rows written before subscriptions had a currency of their
+                  // own were all in the user's, which is what baseCur is.
+                  subCurrency: p.subCurrency ?? baseCur,
+                  cardId: p.cardId,
+                  cardName: p.cardName,
+                };
+
+              case 'sub_edit':
+                return {
+                  id: m.id,
+                  type: 'card',
+                  action: 'sub_edit',
+                  subId: p.subId ?? '',
+                  subName: p.subName ?? 'that subscription',
+                  // Absent fields mean "leave this alone", so they must stay
+                  // undefined rather than defaulting to something.
+                  amountEur: p.amountMinor == null ? undefined : amountEur,
+                  dayOfMonth: p.dayOfMonth,
+                  subCurrency: p.subCurrency,
+                  cardId: p.cardId,
+                  cardName: p.cardName,
                 };
               default:
                 return {
@@ -456,8 +514,25 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
         case 'sub_add':
           addSubscription.mutate({
             name: message.subName,
+            // eurToMinor, not displayToMinor(_, baseCur): the amount came back
+            // through minorToEur on the way in, so this is undoing that same
+            // /100 — and it is in subCurrency, which the server stores as-is.
             priceMinor: eurToMinor(message.amountEur),
             dayOfMonth: message.dayOfMonth,
+            currency: message.subCurrency,
+            cardId: message.cardId,
+          });
+          return;
+
+        case 'sub_edit':
+          updateSubscription.mutate({
+            id: message.subId,
+            // Every field is optional and omitted when the coach did not
+            // propose changing it, so the PATCH's COALESCE leaves it alone.
+            priceMinor: message.amountEur == null ? undefined : eurToMinor(message.amountEur),
+            dayOfMonth: message.dayOfMonth,
+            currency: message.subCurrency,
+            cardId: message.cardId,
           });
           return;
 
@@ -618,6 +693,24 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     [subs, updateSubscription]
   );
 
+  const updateSubscriptionDetails = useCallback(
+    (input: { id: string; name?: string; price?: number; currency?: Currency; dayOfMonth?: number; cardId?: string | null }) => {
+      // The price is converted with the *subscription's* currency, not the
+      // account's: someone typing 9.99 against a USD subscription means 999
+      // cents, and running that through a guaraní account's rule would store 10.
+      const priceCurrency = input.currency ?? subs.find(s => s.id === input.id)?.currency ?? baseCur;
+      updateSubscription.mutate({
+        id: input.id,
+        name: input.name,
+        priceMinor: input.price != null ? displayToMinor(input.price, priceCurrency) : undefined,
+        currency: input.currency,
+        dayOfMonth: input.dayOfMonth,
+        cardId: input.cardId,
+      });
+    },
+    [updateSubscription, subs, baseCur]
+  );
+
   const addCreditCard = useCallback(
     (input: { name: string; balance: number; limit: number; apr: number; color?: string }) => {
       addCard.mutate({
@@ -727,6 +820,14 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     closeSubs: () => setSubsOpen(false),
     toggleSubMute,
     toggleSubOff,
+    subSheet,
+    openEditSub: (id: string) => setSubSheet({ id }),
+    closeSubSheet: () => setSubSheet(null),
+    updateSubscriptionDetails,
+
+    todayOffersCat,
+    openTodayOffers: (c: ApiDiscountCategory) => setTodayOffersCat(c),
+    closeTodayOffers: () => setTodayOffersCat(null),
 
     vaultItems,
     invOpen,

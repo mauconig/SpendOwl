@@ -1,4 +1,4 @@
-import type { CatKey } from '../theme';
+import type { CatKey, Currency } from '../theme';
 
 // What's left of the old mockData.ts. The fixtures moved to the server's
 // per-user seed (server/src/seed.ts); everything here is genuine client-side
@@ -18,7 +18,7 @@ export type Msg =
   | { id: string; type: 'thinking' }
   | { id: string; type: 'transcribing' }
   | { id: string; type: 'error'; text: string }
-  // One card message per thing the coach can propose. All four are drafts —
+  // One card message per thing the coach can propose. All five are drafts —
   // nothing is written until "Approve" is tapped, so the shape carries whatever
   // the approval will need (a resolved card or subscription id, a renewal day).
   | {
@@ -34,7 +34,33 @@ export type Msg =
     }
   | { id: string; type: 'card'; action: 'card_payment'; cardId: string; cardName: string; amountEur: number }
   | { id: string; type: 'card'; action: 'sub_cancel'; subId: string; subName: string; amountEur: number }
-  | { id: string; type: 'card'; action: 'sub_add'; subName: string; amountEur: number; dayOfMonth: number };
+  // amountEur here is in `subCurrency`, not the user's — a subscription is
+  // billed in whatever currency the service charges in, and the app converts
+  // it fresh every month rather than storing one frozen number.
+  | {
+      id: string;
+      type: 'card';
+      action: 'sub_add';
+      subName: string;
+      amountEur: number;
+      dayOfMonth: number;
+      subCurrency: Currency;
+      cardId?: string;
+      cardName?: string;
+    }
+  // Only the fields being changed are present; approving PATCHes exactly those.
+  | {
+      id: string;
+      type: 'card';
+      action: 'sub_edit';
+      subId: string;
+      subName: string;
+      amountEur?: number;
+      dayOfMonth?: number;
+      subCurrency?: Currency;
+      cardId?: string;
+      cardName?: string;
+    };
 
 /**
  * Facturas (the receipt vault) are parked. The feature is built and the code is
@@ -102,12 +128,22 @@ export type Subscription = {
   id: string;
   name: string;
   color: string;
-  price: number;
+  /**
+   * In the user's base currency, converted server-side — this is the one to
+   * total and compare. Null when no exchange rate was available.
+   */
+  price: number | null;
+  /** What the service actually bills, in `currency`. Never converted. */
+  nativePrice: number;
+  currency: Currency;
   /** Ordinal for display, e.g. '3rd'. */
   day: string;
   dayOfMonth: number;
   muted: boolean;
   off: boolean;
+  /** The card the monthly renewal is charged to, if any. */
+  cardId: string | null;
+  cardName: string | null;
 };
 
 export type VaultItem = {

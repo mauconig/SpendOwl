@@ -4,9 +4,11 @@ import { BottomNav } from './components/BottomNav';
 import { AddCardSheet } from './modals/AddCardSheet';
 import { AffordModal } from './modals/AffordModal';
 import { CardPayoffModal } from './modals/CardPayoffModal';
+import { EditSubSheet } from './modals/EditSubSheet';
 import { InvoiceDetail } from './modals/InvoiceDetail';
 import { SubscriptionsSheet } from './modals/SubscriptionsSheet';
 import { TransactionDetail } from './modals/TransactionDetail';
+import { TodayOffersSheet } from './modals/TodayOffersSheet';
 import { TransactionsSheet } from './modals/TransactionsSheet';
 import { ChatScreen } from './screens/ChatScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
@@ -90,11 +92,16 @@ export function RootScreen() {
 
       <AffordModal />
       <SubscriptionsSheet />
+      {/* Stacked on SubscriptionsSheet, which is itself a modal — the same
+          depth problem TransactionDetail documents. Rendered as a sibling
+          works here because only one is interactive at a time. */}
+      <EditSubSheet />
       <TransactionsSheet />
       <TransactionDetail source="dash" />
       <InvoiceDetail />
       <AddCardSheet />
       <CardPayoffModal />
+      <TodayOffersSheet />
     </View>
   );
 }

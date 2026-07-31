@@ -10,7 +10,7 @@ import { Toggle } from '../components/Toggle';
 import { Wave } from '../components/Wave';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { Icon, IconName } from '../icons';
-import { CATS, CatKey, GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
+import { CATS, CatKey, type Currency, GRAD, GRAD_LOCATIONS, colors, decimalsFor, fonts, formatMoney, moneyFont } from '../theme';
 import { FACTURAS_ENABLED, Msg } from '../store/constants';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { ordinalDay } from '../utils/date';
@@ -28,6 +28,7 @@ const CARD_CHROME: Record<CardMsg['action'], { icon: IconName; tint: string; lab
   card_payment: { icon: 'card', tint: '#78ADEE', label: 'Card payment', done: 'Payment recorded' },
   sub_cancel: { icon: 'close', tint: colors.rose, label: 'Cancel subscription', done: 'Cancelled' },
   sub_add: { icon: 'plus', tint: '#C9B8F5', label: 'New subscription', done: 'Added' },
+  sub_edit: { icon: 'gear', tint: '#C9B8F5', label: 'Update subscription', done: 'Updated' },
 };
 
 function CardMessage({ m }: { m: CardMsg }) {
@@ -73,9 +74,14 @@ function CardMessage({ m }: { m: CardMsg }) {
           <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: '#FFFFFF' }}>{cardTitle(m)}</Text>
           <Text style={{ fontSize: 12, color: colors.textDim45, marginTop: 2 }}>{cardSubtitle(m)}</Text>
         </View>
-        <Text style={{ fontSize: 27, fontFamily: moneyFont(baseCur, 'bold'), letterSpacing: -0.5, color: '#FFFFFF' }}>
-          {formatMoney(m.amountEur, baseCur, 2)}
-        </Text>
+        {/* A subscription's amount is in the currency the service bills in,
+            which is often not the user's — showing 9.99 with a ₲ in front of
+            it would be wrong by three orders of magnitude. */}
+        {m.amountEur != null && (
+          <Text style={{ fontSize: 27, fontFamily: moneyFont(cardCurrency(m, baseCur), 'bold'), letterSpacing: -0.5, color: '#FFFFFF' }}>
+            {formatMoney(m.amountEur, cardCurrency(m, baseCur), decimalsFor(cardCurrency(m, baseCur)))}
+          </Text>
+        )}
       </View>
 
       {m.action === 'expense' && (
@@ -142,12 +148,18 @@ function CardMessage({ m }: { m: CardMsg }) {
   );
 }
 
+/** Subscriptions carry their own billing currency; everything else is the user's. */
+function cardCurrency(m: CardMsg, baseCur: Currency): Currency {
+  return (m.action === 'sub_add' || m.action === 'sub_edit') && m.subCurrency ? m.subCurrency : baseCur;
+}
+
 function cardTitle(m: CardMsg): string {
   switch (m.action) {
     case 'card_payment':
       return m.cardName;
     case 'sub_cancel':
     case 'sub_add':
+    case 'sub_edit':
       return m.subName;
     default:
       return m.merchant;
@@ -161,7 +173,24 @@ function cardSubtitle(m: CardMsg): string {
     case 'sub_cancel':
       return 'Stops counting towards your monthly total';
     case 'sub_add':
-      return `Every month, from the ${ordinalDay(m.dayOfMonth)}`;
+      return [
+        `Charges every month, from the ${ordinalDay(m.dayOfMonth)}`,
+        m.cardName ? `on ${m.cardName}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    case 'sub_edit':
+      // Only what is actually changing, so approving is an informed choice
+      // rather than a blank cheque against fields the coach did not mention.
+      return (
+        [
+          m.dayOfMonth != null ? `Renews the ${ordinalDay(m.dayOfMonth)}` : null,
+          m.subCurrency ? `Billed in ${m.subCurrency}` : null,
+          m.cardName ? `On ${m.cardName}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || 'Updates this subscription'
+      );
     default:
       // Charging a card is two writes, and the card is the half that is easy to
       // miss, so it is said on the draft rather than discovered afterwards.
@@ -177,6 +206,8 @@ function approveLabel(m: CardMsg): string {
       return 'Approve & cancel';
     case 'sub_add':
       return 'Approve & add';
+    case 'sub_edit':
+      return 'Approve & update';
     default:
       return 'Approve & log';
   }

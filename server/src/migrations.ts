@@ -208,6 +208,67 @@ const migrations: Migration[] = [
       CREATE UNIQUE INDEX bank_discounts_bank_external_merchant_idx ON bank_discounts (bank, external_id, merchant);
     `,
   },
+  {
+    version: 7,
+    name: 'fx_rates',
+    sql: /* sql */ `
+      -- Daily FX snapshot, so a rate is fetched from the network at most once
+      -- per day and every conversion after that is a local read.
+      --
+      -- DOUBLE PRECISION, not NUMERIC: node-postgres hands NUMERIC back as a
+      -- string, and these values go straight into float arithmetic — the same
+      -- trap already documented on credit_cards.apr.
+      CREATE TABLE fx_rates (
+        as_of DATE NOT NULL,
+        base  TEXT NOT NULL,
+        quote TEXT NOT NULL,
+        rate  DOUBLE PRECISION NOT NULL CHECK (rate > 0),
+        PRIMARY KEY (as_of, base, quote)
+      );
+    `,
+  },
+  {
+    version: 8,
+    name: 'subscriptions_charge_real_transactions',
+    sql: /* sql */ `
+      -- A subscription stops being a number and becomes a template: it holds
+      -- the price in the currency it is actually billed in, and each month
+      -- stamps out a real transaction converted at that month's rate.
+      ALTER TABLE subscriptions
+        ADD COLUMN currency     TEXT NOT NULL DEFAULT 'EUR',
+        ADD COLUMN card_id      UUID REFERENCES credit_cards(id) ON DELETE SET NULL,
+        ADD COLUMN charge_start DATE NOT NULL DEFAULT CURRENT_DATE;
+
+      -- Existing rows keep meaning exactly what they meant before this
+      -- migration: a plain amount in the user's own base currency.
+      UPDATE subscriptions s
+         SET currency = u.base_currency
+        FROM users u
+       WHERE u.id = s.user_id;
+
+      -- charge_start defaults to today, so no historical charge is ever
+      -- invented for a subscription that already existed. Backfilling would
+      -- put amounts into the spend chart that never actually happened.
+
+      -- Where a transaction came from, and how it got to this amount. Keeping
+      -- the original alongside the converted figure is what makes a charge
+      -- auditable — and what survives the user switching base currency later.
+      ALTER TABLE transactions
+        ADD COLUMN subscription_id   UUID REFERENCES subscriptions(id) ON DELETE SET NULL,
+        ADD COLUMN charge_period     TEXT,
+        ADD COLUMN original_minor    INTEGER,
+        ADD COLUMN original_currency TEXT,
+        ADD COLUMN fx_rate           DOUBLE PRECISION;
+
+      -- The idempotency key for the whole feature. materializeDueCharges runs
+      -- on every read, so this index — not application logic — is what
+      -- guarantees a subscription can never charge twice for the same month.
+      -- Partial, because ordinary transactions have no subscription_id.
+      CREATE UNIQUE INDEX transactions_sub_period_idx
+        ON transactions (subscription_id, charge_period)
+        WHERE subscription_id IS NOT NULL;
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {

@@ -1,14 +1,18 @@
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Icon } from '../icons';
 import { ModalShell } from '../components/ModalShell';
 import { Toggle } from '../components/Toggle';
-import { colors, fonts, formatMoney, moneyFont } from '../theme';
+import { colors, decimalsFor, fonts, formatMoney, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
 export function SubscriptionsSheet() {
   const store = useSpendOwl();
   const active = store.subs.filter(s => !s.off);
-  const total = active.reduce((a, s) => a + s.price, 0);
+  // Converted prices only. A USD subscription's native 9.99 cannot be added to
+  // a guaraní one's 50000, and `price` is null when no rate was available —
+  // leaving it out of the total is the honest answer, not counting it as zero.
+  const total = active.reduce((a, s) => a + (s.price ?? 0), 0);
   const baseCur = store.baseCur;
 
   return (
@@ -68,30 +72,46 @@ export function SubscriptionsSheet() {
                   {s.name}
                 </Text>
                 <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 1 }}>
-                  {s.off ? 'Cancelled — removed from forecast' : `Renews the ${s.day}`}
+                  {s.off ? 'Cancelled — no longer charges' : `Charges the ${s.day}`}
+                  {s.cardName && !s.off ? ` · ${s.cardName}` : ''}
                 </Text>
               </View>
-              <Text
-                style={{
-                  fontSize: 13,
-                  fontFamily: moneyFont(baseCur, 'bold'),
-                  color: s.off ? 'rgba(233,237,242,.35)' : colors.text,
-                  textDecorationLine: s.off ? 'line-through' : 'none',
-                }}
-              >
-                {formatMoney(s.price, baseCur, 2)}/mo
-              </Text>
+              <View style={{ alignItems: 'flex-end' }}>
+                {/* The native price leads when the two differ: that is the
+                    figure that is actually fixed. What it comes to in the
+                    user's own currency moves with the rate every month. */}
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontFamily: moneyFont(s.currency, 'bold'),
+                    color: s.off ? 'rgba(233,237,242,.35)' : colors.text,
+                    textDecorationLine: s.off ? 'line-through' : 'none',
+                  }}
+                >
+                  {formatMoney(s.nativePrice, s.currency, decimalsFor(s.currency))}/mo
+                </Text>
+                {s.currency !== baseCur && (
+                  <Text style={{ fontSize: 10.5, fontFamily: moneyFont(baseCur, 'mono'), color: colors.textDim45, marginTop: 1 }}>
+                    {s.price == null ? 'rate unavailable' : `≈ ${formatMoney(s.price, baseCur, decimalsFor(baseCur))}`}
+                  </Text>
+                )}
+              </View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 9, borderTopWidth: 1, borderTopColor: colors.cardBorder }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Toggle on={s.muted} onToggle={() => store.toggleSubMute(s.id)} />
                 <Text style={{ fontSize: 12, color: colors.textDim60 }}>Mute alerts</Text>
               </View>
-              <Pressable onPress={() => store.toggleSubOff(s.id)}>
-                <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: s.off ? colors.mint : colors.text, paddingVertical: 4, paddingHorizontal: 6 }}>
-                  {s.off ? 'Undo' : 'Log cancelled'}
-                </Text>
-              </Pressable>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Pressable onPress={() => store.openEditSub(s.id)} hitSlop={6} style={{ padding: 4 }}>
+                  <Icon name="gear" size={14} color={colors.textDim50} />
+                </Pressable>
+                <Pressable onPress={() => store.toggleSubOff(s.id)}>
+                  <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: s.off ? colors.mint : colors.text, paddingVertical: 4, paddingHorizontal: 6 }}>
+                    {s.off ? 'Undo' : 'Log cancelled'}
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           </View>
         ))}
