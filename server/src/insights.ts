@@ -346,6 +346,9 @@ async function buildSnapshot(userId: string, currency: Currency) {
       daysLeft: summary.daysLeft,
       budget: money(summary.budgetMinor),
       spent: money(summary.spentMinor),
+      // Card spending is in `spent` but has not left the account; safeToSpend
+      // is income minus this figure, not minus `spent`.
+      leftTheAccount: money(summary.accountOutMinor),
       income: money(summary.incomeMinor),
       safeToSpend: money(summary.safeToSpendMinor),
       safeToSpendPerRemainingDay: money(Math.round(summary.safeToSpendMinor / daysLeft)),

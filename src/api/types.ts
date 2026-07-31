@@ -37,7 +37,14 @@ export type ApiTrendPoint = { day: string; cumulativeMinor: number };
 export type ApiSummary = {
   month: string;
   budgetMinor: number;
+  /** Everything spent this month, whatever paid for it. For the donut. */
   spentMinor: number;
+  /**
+   * What has left the account: spending not put on a card, plus card payments.
+   * Anything about how much is left uses this, never spentMinor — a card
+   * purchase has not been paid for yet.
+   */
+  accountOutMinor: number;
   incomeMinor: number;
   safeToSpendMinor: number;
   overBudget: boolean;

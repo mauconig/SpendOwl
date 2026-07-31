@@ -19,6 +19,7 @@ export type Summary = {
   month: string;
   budgetMinor: number;
   spentMinor: number;
+  accountOutMinor: number;
   incomeMinor: number;
   safeToSpendMinor: number;
   overBudget: boolean;
@@ -35,12 +36,21 @@ export type Summary = {
 export async function getSummary(userId: string): Promise<Summary | null> {
   const totals = await queryOne<{
     spentMinor: number;
+    accountOutMinor: number;
     incomeMinor: number;
     dayOfMonth: number;
     daysInMonth: number;
     month: string;
   }>(
     `SELECT COALESCE(SUM(-t.amount_minor) FILTER (WHERE t.amount_minor < 0), 0)::bigint AS "spentMinor",
+            -- Money that actually left the account, which is not the same as
+            -- money spent. Buying on a credit card spends without touching the
+            -- account: it raises what the card is owed, and the account is only
+            -- debited later, when the card is paid. Those two events are
+            -- card_id IS NOT NULL and card_id IS NULL respectively, so
+            -- excluding carded rows here counts each once, at the right moment.
+            COALESCE(SUM(-t.amount_minor) FILTER (WHERE t.amount_minor < 0 AND t.card_id IS NULL), 0)::bigint
+              AS "accountOutMinor",
             COALESCE(SUM( t.amount_minor) FILTER (WHERE t.amount_minor > 0), 0)::bigint AS "incomeMinor",
             EXTRACT(DAY FROM CURRENT_DATE)::int                                         AS "dayOfMonth",
             EXTRACT(DAY FROM (date_trunc('month', CURRENT_DATE)
@@ -90,7 +100,7 @@ export async function getSummary(userId: string): Promise<Summary | null> {
     [userId]
   );
 
-  const { spentMinor, incomeMinor, dayOfMonth, daysInMonth, month } = totals;
+  const { spentMinor, accountOutMinor, incomeMinor, dayOfMonth, daysInMonth, month } = totals;
 
   // What you earned this month is the baseline, not a stored budget figure.
   //
@@ -102,21 +112,28 @@ export async function getSummary(userId: string): Promise<Summary | null> {
   // real or zero; zero is honest, an invented 240.000 is not.
   const budgetMinor = incomeMinor;
 
-  // Pace compares actual spend against a flat run-rate across the month.
-  // Positive delta means under pace.
+  // Pace compares what has left the account against a flat run-rate across the
+  // month. Positive delta means under pace.
   const expectedByNowMinor = Math.round((budgetMinor * dayOfMonth) / daysInMonth);
-  const paceDeltaMinor = expectedByNowMinor - spentMinor;
+  const paceDeltaMinor = expectedByNowMinor - accountOutMinor;
 
   return {
     month,
     budgetMinor,
+    // Everything spent this month, whatever paid for it — the question the
+    // category donut answers.
     spentMinor,
+    // What is gone from the account. Everything about "how much is left"
+    // hangs off this one, never off spentMinor: a card purchase is spending
+    // that has not been paid for yet, and counting it here would take it off
+    // the account twice, once at the till and again on the statement.
+    accountOutMinor,
     incomeMinor,
-    safeToSpendMinor: incomeMinor - spentMinor,
+    safeToSpendMinor: incomeMinor - accountOutMinor,
     // With no income logged there is nothing to be over, so a first coffee on a
     // fresh account must not light up the over-budget warning.
-    overBudget: incomeMinor > 0 && spentMinor > incomeMinor,
-    percentOfBudget: budgetMinor > 0 ? (spentMinor / budgetMinor) * 100 : 0,
+    overBudget: incomeMinor > 0 && accountOutMinor > incomeMinor,
+    percentOfBudget: budgetMinor > 0 ? (accountOutMinor / budgetMinor) * 100 : 0,
     daysLeft: daysInMonth - dayOfMonth,
     daysInMonth,
     paceDeltaMinor,

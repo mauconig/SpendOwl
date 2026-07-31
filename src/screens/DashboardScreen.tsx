@@ -87,12 +87,15 @@ export function DashboardScreen() {
   const subsTotal = subsActive.reduce((a, s) => a + (s.price ?? 0), 0);
 
   const budget = minorToEur(summary?.budgetMinor ?? 0);
-  const spent = minorToEur(summary?.spentMinor ?? 0);
+  // Every "how much is left" figure on this screen is about the account, so it
+  // reads accountOut, not spent. Spending sitting on a card has not left the
+  // account yet and must not be subtracted from it twice.
+  const accountOut = minorToEur(summary?.accountOutMinor ?? 0);
   const safeToSpend = minorToEur(summary?.safeToSpendMinor ?? 0);
   const paceDelta = minorToEur(summary?.paceDeltaMinor ?? 0);
   const percentOfBudget = summary?.percentOfBudget ?? 0;
   const daysLeft = summary?.daysLeft ?? 0;
-  const hero = heroSplit(overBudget ? spent - budget : safeToSpend, baseCur);
+  const hero = heroSplit(overBudget ? accountOut - budget : safeToSpend, baseCur);
   const monthKey = summary?.month ?? '';
   const monthName = monthLong(monthKey);
 
@@ -118,7 +121,7 @@ export function DashboardScreen() {
           <Icon name={overBudget ? 'trendDown' : 'trendUp'} size={16} color={overBudget ? colors.rose : colors.mint} />
           <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: overBudget ? colors.rose : colors.mint }}>
             {overBudget
-              ? `${formatMoney(spent - budget, baseCur, 2)} over budget (${(percentOfBudget - 100).toFixed(0)}%)`
+              ? `${formatMoney(accountOut - budget, baseCur, 2)} over budget (${(percentOfBudget - 100).toFixed(0)}%)`
               : `${formatMoney(Math.abs(paceDelta), baseCur, 0)} ${paceDelta >= 0 ? 'under' : 'over'} pace (${Math.abs(summary?.pacePercent ?? 0).toFixed(1)}%)`}
           </Text>
         </View>
@@ -160,7 +163,7 @@ export function DashboardScreen() {
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.amber }}>Budget exceeded</Text>
             <Text style={{ fontSize: 12, color: colors.textDim55, marginTop: 2, lineHeight: 17 }}>
-              You’re {formatMoney(spent - budget, baseCur, 2)} past {monthName}’s budget. I can draft a catch-up plan for
+              You’re {formatMoney(accountOut - budget, baseCur, 2)} past {monthName}’s budget. I can draft a catch-up plan for
               the last two weeks.
             </Text>
           </View>

@@ -559,6 +559,10 @@ async function runTool(
         currency,
         month: summary.month,
         spent: money(summary.spentMinor),
+        // Spending on a card has not left the account yet. safeToSpend is
+        // income minus this, not minus `spent`, so quoting `spent` as the
+        // reason a balance is what it is would not add up.
+        leftTheAccount: money(summary.accountOutMinor),
         income: money(summary.incomeMinor),
         budget: money(summary.budgetMinor),
         safeToSpend: money(summary.safeToSpendMinor),
