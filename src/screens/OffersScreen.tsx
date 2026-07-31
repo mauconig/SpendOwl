@@ -8,10 +8,13 @@ import { CATEGORY_LABELS, CATEGORY_ORDER, offerBadge } from '../utils/discounts'
 
 const ALL = 'all';
 
-// Each bank's own brand accent — GNB's confirmed from beneficios.css
-// (`.beneficios { background-color: #7AB83F; }`), not a guess.
+// Each bank's own brand accent, taken from their own stylesheets rather than
+// guessed: GNB's green from beneficios.css (`.beneficios { background-color:
+// #7AB83F; }`), Sudameris' red from the rule that draws every heading underline
+// on their benefits pages (`border-bottom: solid 7px #d90613`).
 const BANK_COLORS: Record<string, string> = {
   GNB: '#7AB83F',
+  Sudameris: '#D90613',
 };
 
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {

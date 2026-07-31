@@ -127,9 +127,16 @@ export async function findDiscount(
   let cappedByMonthlyLimit = false;
 
   if (best.monthlyCapMinor != null) {
-    // The cap is on the rebate, per month, per promo — "tope mensual Gs.
-    // 1.000.000" in the bank's own wording. So what matters is how much of it
-    // this month's earlier purchases already consumed.
+    // The cap is on eligible *spend*, not on the rebate. Both banks word it
+    // "Tope de compra mensual", and GNB's Petrosur PDF spells the consequence
+    // out: "Tope de compra mensual de Gs. 1.000.000 ... equivalente a un
+    // reintegro máximo mensual en el extracto de Gs. 200.000". Reading it as a
+    // rebate cap would hand out five times the discount that exists.
+    //
+    // Capping spend at C is exactly equivalent to capping the total rebate at
+    // C x percent, which is the cheaper thing to check: discount_minor is
+    // already summed per promo per month.
+    const maxDiscountMinor = Math.round((best.monthlyCapMinor * best.percent) / 100);
     const used = await queryOne<{ total: number }>(
       `SELECT COALESCE(SUM(discount_minor), 0)::int AS total
          FROM transactions
@@ -140,7 +147,7 @@ export async function findDiscount(
           AND occurred_at <= (date_trunc('month', $4::date) + INTERVAL '1 month - 1 day')::date`,
       [userId, bank, best.merchant, localDate(on)]
     );
-    const remaining = Math.max(best.monthlyCapMinor - (used?.total ?? 0), 0);
+    const remaining = Math.max(maxDiscountMinor - (used?.total ?? 0), 0);
     if (discountMinor > remaining) {
       discountMinor = remaining;
       cappedByMonthlyLimit = true;

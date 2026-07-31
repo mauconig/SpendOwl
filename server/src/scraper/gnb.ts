@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { PDFParse } from 'pdf-parse';
+import { fetchText, tryBasesText, type BankScraper, type RawPromo } from './common.ts';
 
 /**
  * Fetching only — no interpretation. Selectors are tied to GNB's current
@@ -12,31 +12,10 @@ import { PDFParse } from 'pdf-parse';
 
 const BASE_URL = 'https://www.beneficiosbancognb.com.py';
 
-// Identifies this as a low-volume, monthly, personal-finance-app crawl of
-// GNB's own public promo pages (not adversarial traffic) if anyone looks.
-const USER_AGENT = 'SpendOwlPersonalScraper/1.0 (+monthly personal read of public bank promo pages)';
-
-export type RawPromo = {
-  externalId: string;
-  merchant: string;
-  sourceUrl: string;
-  basesUrl: string | null;
-  summaryText: string;
-  basesText: string | null;
-};
-
-async function fetchText(url: string): Promise<string> {
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
-  if (!res.ok) throw new Error(`GET ${url} -> ${res.status}`);
-  return res.text();
-}
-
-export function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+export type { RawPromo };
 
 /** All current promo ids, from the category index page. */
-export async function listPromoIds(): Promise<string[]> {
+async function listPromoIds(): Promise<string[]> {
   const html = await fetchText(`${BASE_URL}/beneficios/categorias/`);
   const $ = cheerio.load(html);
   const ids = new Set<string>();
@@ -48,22 +27,8 @@ export async function listPromoIds(): Promise<string[]> {
   return [...ids];
 }
 
-/** The PDF is the authoritative source for tier percentages and terms. */
-export async function fetchBasesText(pdfUrl: string): Promise<string> {
-  const res = await fetch(pdfUrl, { headers: { 'User-Agent': USER_AGENT } });
-  if (!res.ok) throw new Error(`GET ${pdfUrl} -> ${res.status}`);
-  const buffer = Buffer.from(await res.arrayBuffer());
-  const parser = new PDFParse({ data: buffer });
-  try {
-    const result = await parser.getText();
-    return result.text;
-  } finally {
-    await parser.destroy();
-  }
-}
-
 /** One promo's detail page, plus its Bases y Condiciones PDF text if it has one. */
-export async function fetchPromo(id: string): Promise<RawPromo> {
+async function fetchPromo(id: string): Promise<RawPromo> {
   const sourceUrl = `${BASE_URL}/beneficios/${id}/`;
   const html = await fetchText(sourceUrl);
   const $ = cheerio.load(html);
@@ -74,7 +39,9 @@ export async function fetchPromo(id: string): Promise<RawPromo> {
   const basesHref = $('a.beneficio.button.link').first().attr('href') ?? null;
   const basesUrl = basesHref ? (basesHref.startsWith('http') ? basesHref : `${BASE_URL}${basesHref}`) : null;
 
-  const basesText = basesUrl ? await fetchBasesText(basesUrl) : null;
+  const basesText = basesUrl ? await tryBasesText(basesUrl) : null;
 
   return { externalId: id, merchant, sourceUrl, basesUrl, summaryText, basesText };
 }
+
+export const gnb: BankScraper = { bank: 'GNB', listPromoIds, fetchPromo };

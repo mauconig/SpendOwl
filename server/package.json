@@ -10,8 +10,9 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:reset": "docker compose down -v && docker compose up -d",
-    "scrape:gnb": "node --env-file-if-exists=../.env.local src/scraper/scrape.ts",
-    "import:gnb": "node --env-file-if-exists=../.env.local src/scraper/import.ts"
+    "scrape:gnb": "node --env-file-if-exists=../.env.local src/scraper/scrape.ts gnb",
+    "scrape:sudameris": "node --env-file-if-exists=../.env.local src/scraper/scrape.ts sudameris",
+    "import": "node --env-file-if-exists=../.env.local src/scraper/import.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

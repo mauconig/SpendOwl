@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { env } from '../env.ts';
-import type { RawPromo } from './gnb.ts';
+import type { RawPromo } from './common.ts';
 
 /**
  * Turns raw scraped text into structured discount rows, mirroring the
@@ -35,7 +35,17 @@ const MAX_TOKENS = 4096;
 // in its batch of tokens.
 const MAX_TOKENS_MULTI_MERCHANT = 12000;
 
-const COMERCIOS_ADHERIDOS_RE = /comercios\s+adherido/i;
+/**
+ * Does this promo's PDF list the businesses it actually covers?
+ *
+ * Two wordings, both seen live. GNB titles a numbered section "Comercios
+ * Adheridos"; Sudameris' zone promos use a bare "COMERCIOS" heading over a
+ * table whose header row reads "Comercio Días Beneficio ...". Matching only the
+ * first missed the zone promos entirely, and they are the ones that most need
+ * expanding — a whole city's worth of merchants collapsed into one useless row
+ * named "ZONA CENTRAL – ASUNCIÓN Y GRAN ASUNCIÓN".
+ */
+const COMERCIOS_ADHERIDOS_RE = /comercios\s+adherido|^\s*comercios\s*$|comercio\s+d[ií]as\s+beneficio/im;
 
 export const DISCOUNT_CATEGORIES = [
   'groceries',
@@ -76,6 +86,7 @@ const discountSchema = z.object({
   installments: z.number().int().min(0).max(60).nullish(),
   eligibleDays: z.string().trim().max(120).nullish(),
   monthlyCapAmount: z.number().nonnegative().nullish(),
+  monthlyCapKind: z.enum(['spend', 'rebate']).nullish(),
   validFrom: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -85,16 +96,46 @@ const discountSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .nullish(),
   description: z.string().trim().min(1).max(320),
-  // Present only for umbrella promos — see the class comment above. Kept as
-  // a plain string array rather than asking the model to repeat every other
-  // field once per business: a numbered list is cheap and reliable, 100+
-  // full discount objects is neither.
-  // Real data broke both original limits: some entries carry a full list of
-  // shopping-mall branches in parentheses (e.g. "BELLINI PASTA (Paseo
-  // Carmelitas, Shopping del Sol, ...)"), and at least one promo listed more
-  // than 150 affiliated businesses. Both are now generous enough that a
-  // legitimate long promo doesn't lose its entire discount to one item.
-  affiliatedMerchants: z.array(z.string().trim().min(1).max(300)).max(400).nullish(),
+  /**
+   * Present only for umbrella promos — see the class comment above.
+   *
+   * Every field except `merchant` is optional and falls back to the parent
+   * promo's. That covers both shapes seen in real data:
+   *
+   *  · GNB's "La Ruta Gastronómica" — a plain numbered list of 112 restaurants
+   *    that all share the promo's single rate, so only `merchant` is filled.
+   *  · Sudameris' "ZONA SUR – ENCARNACIÓN" — a *table* where each of 81
+   *    businesses has its own days, rate, cap and validity ("LA BARRA |
+   *    Miércoles | 25% de reintegro | Gs. 1.000.000"). Inheriting the parent's
+   *    terms here produced 81 rows claiming a flat 20% on every day of the
+   *    week, which is simply not what the PDF says.
+   *
+   * Limits are generous because real data broke the original ones: entries
+   * carry parenthesised branch lists ("BELLINI PASTA (Paseo Carmelitas,
+   * Shopping del Sol, ...)"), and one promo listed more than 150 businesses.
+   */
+  affiliatedMerchants: z
+    .array(
+      z.object({
+        merchant: z.string().trim().min(1).max(300),
+        category: z.enum(DISCOUNT_CATEGORIES).nullish(),
+        percent: z.number().min(0).max(100).nullish(),
+        installments: z.number().int().min(0).max(60).nullish(),
+        eligibleDays: z.string().trim().max(120).nullish(),
+        monthlyCapAmount: z.number().nonnegative().nullish(),
+        monthlyCapKind: z.enum(['spend', 'rebate']).nullish(),
+        validFrom: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .nullish(),
+        validUntil: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .nullish(),
+      })
+    )
+    .max(400)
+    .nullish(),
 });
 
 // Loose at the top level (just "an array of somethings") — each item is
@@ -130,15 +171,34 @@ const emitTool: Anthropic.Tool = {
             percent: { type: 'number', description: 'The LOWER tier percentage only. See system prompt rule.' },
             installments: { type: 'number', description: 'Interest-free installment count, if offered.' },
             eligibleDays: { type: 'string', description: 'e.g. "viernes". Omit if the promo applies every day.' },
-            monthlyCapAmount: { type: 'number', description: 'The monthly purchase/discount cap amount in guaranies, if stated (e.g. 1000000 for "Gs. 1.000.000"). Omit if none.' },
+            monthlyCapAmount: { type: 'number', description: 'The monthly cap amount in guaranies exactly as written (e.g. 1000000 for "Gs. 1.000.000"). Omit if none.' },
+            monthlyCapKind: { type: 'string', enum: ['spend', 'rebate'], description: 'What monthlyCapAmount limits: "spend" for a "tope de compra" (the purchase total that earns the discount), "rebate" for a cap on the reintegro itself. Omit when there is no cap.' },
             validFrom: { type: 'string', description: 'ISO date (YYYY-MM-DD), if a start date is given.' },
             validUntil: { type: 'string', description: 'ISO date (YYYY-MM-DD), if an end date is given.' },
             description: { type: 'string', description: 'One short plain-language sentence summarizing the offer, under 200 characters.' },
             affiliatedMerchants: {
               type: 'array',
-              items: { type: 'string' },
               description:
-                'Only for umbrella promos: if the Bases y Condiciones text has a numbered section listing affiliated businesses (titled "Comercios Adheridos", "Comercios adheridos", or similar), put each one\'s name here. Strip "(aplica desde ...)" date qualifiers and skip non-numbered city/section sub-headers, but keep meaningful branch/location text that is part of a numbered entry\'s own name. Omit entirely for a normal single-merchant promo.',
+                'Only for umbrella promos: when the Bases y Condiciones lists the businesses the discount actually applies to — a numbered "Comercios Adheridos" section, or a "COMERCIOS" table with columns like Comercio / Días / Beneficio / Tope de compra / Vigencia — put one entry here per business. Omit entirely for a normal single-merchant promo.',
+              items: {
+                type: 'object',
+                properties: {
+                  merchant: {
+                    type: 'string',
+                    description:
+                      'The business name. Strip "(aplica desde ...)" date qualifiers and skip city/section sub-headers that are not businesses, but keep branch/location text that is part of the entry\'s own name.',
+                  },
+                  category: { type: 'string', enum: [...DISCOUNT_CATEGORIES], description: 'This business\'s own category. A zone-wide promo has no single category, so judge each business by what it sells.' },
+                  percent: { type: 'number', description: 'This business\'s own rate, when the table gives one. Omit if the promo states a single rate for everyone.' },
+                  installments: { type: 'number', description: 'This business\'s own interest-free installment count, if listed.' },
+                  eligibleDays: { type: 'string', description: 'This business\'s own days, e.g. "miércoles y jueves". Omit if not listed per business.' },
+                  monthlyCapAmount: { type: 'number', description: 'This business\'s own cap in guaranies, if listed.' },
+                  monthlyCapKind: { type: 'string', enum: ['spend', 'rebate'], description: 'What that cap limits. Same rule as the promo-level field.' },
+                  validFrom: { type: 'string', description: 'ISO date, if this business has its own start date.' },
+                  validUntil: { type: 'string', description: 'ISO date, if this business has its own end date.' },
+                },
+                required: ['merchant'],
+              },
             },
           },
           required: ['externalId', 'merchant', 'category', 'description'],
@@ -149,7 +209,7 @@ const emitTool: Anthropic.Tool = {
   },
 };
 
-const SYSTEM_PROMPT = `You extract structured card-discount data from Banco GNB Paraguay's promo pages for a
+const systemPrompt = (bank: string) => `You extract structured card-discount data from ${bank} Paraguay's promo pages for a
 personal finance app. You are given several promos, each with its merchant name, a short
 on-page summary, and (usually) the full text of its "Bases y Condiciones" PDF — the
 authoritative legal terms. Prefer the Bases y Condiciones text over the summary when they
@@ -162,23 +222,41 @@ standard/base cards (named things like Clasica, Oro, Classic, Gold). Whenever yo
 tiers like this, output ONLY the lower number as "percent" — never the premium one, and
 never an average. If only one rate is mentioned for all cards, use that one.
 
-UMBRELLA PROMOS. Some promos are not a single merchant at all — they are a named campaign
-("La Ruta Gastronómica", "La Ruta del Café") whose Bases y Condiciones has a numbered
-section titled something like "5. Comercios Adheridos" listing every affiliated business
-the discount actually applies to (e.g. "La Ruta Gastronómica" lists 112 restaurants
-including KFC, Subway, Mostaza; "La Ruta del Café" lists 23 cafés, grouped under
-non-numbered city sub-headers like "Asunción" / "Encarnación" that are not businesses
-themselves). When you see a section like this, put every listed business's name in
-affiliatedMerchants — strip "(aplica desde ...)" qualifiers, skip the city sub-headers,
-but do keep meaningful location text that is genuinely part of a numbered entry's name.
-Still fill in merchant/category/percent/etc. as usual for the promo itself. A normal
-single-merchant promo has no such section — leave affiliatedMerchants empty for those.
+UMBRELLA PROMOS. Some promos are not a single merchant at all — they are a campaign or a
+geographic zone, and the Bases y Condiciones lists the businesses the discount actually
+applies to. Put one affiliatedMerchants entry per business. Two shapes appear:
+
+  · A plain numbered list, where everyone shares the promo's single rate — e.g. "5.
+    Comercios Adheridos" under "La Ruta Gastronómica" (112 restaurants: KFC, Subway,
+    Mostaza), or "La Ruta del Café" (23 cafés grouped under non-numbered city sub-headers
+    like "Asunción" that are not businesses themselves). Here fill in only "merchant" and
+    "category" — the terms come from the promo itself.
+
+  · A TABLE, with columns like "Comercio | Días | Beneficio | Tope de compra mensual |
+    Vigencia" — e.g. "ZONA SUR – ENCARNACIÓN" or "ZONA CENTRAL". Every row is a different
+    deal and you must copy each one's own values: "LA BARRA | Miércoles | 25% de reintegro
+    | Gs. 1.000.000" is 25% on Wednesdays with a Gs. 1.000.000 cap, not whatever the promo
+    header said. Filling these from the promo instead of the row is the single worst thing
+    you can do here — it invents a rate the bank never offered.
+
+For a table row's Beneficio, apply the tier rule and then add what stacks: "20% de
+reintegro + 5% elite" is 20 (the +5 is a premium-card bonus, excluded); "30% de descuento
+en caja + 10% de reintegro" is 40, because a base cardholder gets both. Leave a field
+empty when that row does not state it, rather than guessing from a neighbouring row.
+
+Still fill in merchant/category/percent/etc. for the promo itself as usual. A normal
+single-merchant promo has no such list — leave affiliatedMerchants empty for those.
 
 CATEGORY. Always pick the closest of the nine fixed categories listed in the tool schema —
 never invent your own label, never leave it blank. When in doubt, use "other".
 
-Only report a monthly cap when the text states one explicitly (e.g. "Tope de compra
-mensual: Gs. 1.000.000" -> monthlyCapAmount: 1000000). Dates in the source are Spanish
+MONTHLY CAPS. Report one only when the text states it explicitly, and say which kind it
+is. These banks almost always cap the *purchase total* that earns the discount ("Tope de
+compra mensual de Gs. 1.000.000" -> monthlyCapAmount: 1000000, monthlyCapKind: "spend").
+Some instead cap the reintegro itself ("reintegro maximo mensual de Gs. 200.000" ->
+monthlyCapAmount: 200000, monthlyCapKind: "rebate"). Where a promo states both, report the
+spend one — they are two ways of saying the same limit. Copy the number as written; do not
+convert between the two yourself. Dates in the source are Spanish
 ("Del 24 de julio al 25 de diciembre del 2026") — convert them to ISO YYYY-MM-DD. Every
 figure you report must come from the text you were given; never estimate or invent one.
 
@@ -208,13 +286,46 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
       return await fn();
     } catch (error) {
       if (attempt >= attempts) throw error;
-      console.error(`[scraper:gnb] batch attempt ${attempt} failed, retrying:`, error);
+      console.error(`[scraper] batch attempt ${attempt} failed, retrying:`, error);
       await new Promise(resolve => setTimeout(resolve, attempt * 1000));
     }
   }
 }
 
-/** Mechanical, not model-driven: cheaper and more reliable than asking the model to repeat every field per business. */
+/**
+ * monthly_cap_minor always means "the most spend that earns this discount in a
+ * month", whatever form the promo stated it in.
+ *
+ * The two forms are equivalent — GNB's Petrosur terms spell the conversion out
+ * themselves ("Tope de compra mensual de Gs. 1.000.000 ... equivalente a un
+ * reintegro máximo mensual en el extracto de Gs. 200.000") — so normalising
+ * here means cardDiscounts.ts has exactly one rule to apply. The arithmetic is
+ * done in code rather than asked of the model, for the same reason every other
+ * figure is: a model doing sums in its head is where wrong numbers come from.
+ */
+type CapSource = { monthlyCapAmount?: number | null; monthlyCapKind?: 'spend' | 'rebate' | null };
+
+function spendCapOf(d: CapSource, percent: number | null): number | null {
+  const cap = d.monthlyCapAmount ?? null;
+  if (cap == null) return null;
+  if (d.monthlyCapKind !== 'rebate') return cap;
+  // A rebate cap only converts if we know the rate it was a rebate at.
+  if (!percent) return null;
+  return Math.round((cap * 100) / percent);
+}
+
+/**
+ * One row per business the promo actually covers.
+ *
+ * Each affiliated business overrides the promo's terms field by field and
+ * inherits whatever it does not state. That is what lets one mechanism serve
+ * both shapes: a plain "Comercios Adheridos" list states nothing per business
+ * and inherits everything, while a zone table states its own days, rate, cap
+ * and validity per row and inherits nothing but the description.
+ *
+ * Still mechanical rather than model-driven — the model reports each row's
+ * fields once; it is never asked to restate the parent's for all 81 of them.
+ */
 function expand(d: z.infer<typeof discountSchema>): ExtractedDiscount[] {
   const base = {
     externalId: d.externalId,
@@ -222,19 +333,35 @@ function expand(d: z.infer<typeof discountSchema>): ExtractedDiscount[] {
     percent: d.percent ?? null,
     installments: d.installments ?? null,
     eligibleDays: d.eligibleDays ?? null,
-    monthlyCapMinor: d.monthlyCapAmount ?? null,
+    monthlyCapMinor: spendCapOf(d, d.percent ?? null),
     validFrom: d.validFrom ?? null,
     validUntil: d.validUntil ?? null,
     description: d.description,
   };
 
-  if (d.affiliatedMerchants && d.affiliatedMerchants.length > 0) {
-    return d.affiliatedMerchants.map(merchant => ({ ...base, merchant }));
+  if (!d.affiliatedMerchants || d.affiliatedMerchants.length === 0) {
+    return [{ ...base, merchant: d.merchant }];
   }
-  return [{ ...base, merchant: d.merchant }];
+
+  return d.affiliatedMerchants.map(a => {
+    const percent = a.percent ?? base.percent;
+    return {
+      ...base,
+      merchant: a.merchant,
+      category: a.category ?? base.category,
+      percent,
+      installments: a.installments ?? base.installments,
+      eligibleDays: a.eligibleDays ?? base.eligibleDays,
+      // The cap is resolved against *this row's* rate, since a rebate-form cap
+      // converts differently for a merchant on 25% than one on 20%.
+      monthlyCapMinor: a.monthlyCapAmount != null ? spendCapOf(a, percent) : base.monthlyCapMinor,
+      validFrom: a.validFrom ?? base.validFrom,
+      validUntil: a.validUntil ?? base.validUntil,
+    };
+  });
 }
 
-async function extractBatch(promos: RawPromo[], maxTokens: number): Promise<ExtractedDiscount[]> {
+async function extractBatch(bank: string, promos: RawPromo[], maxTokens: number): Promise<ExtractedDiscount[]> {
   if (!env.llmApiKey) return [];
 
   const anthropic = new Anthropic({ apiKey: env.llmApiKey, baseURL: env.llmBaseUrl });
@@ -242,7 +369,7 @@ async function extractBatch(promos: RawPromo[], maxTokens: number): Promise<Extr
     anthropic.messages.create({
       model: env.llmModel,
       max_tokens: maxTokens,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt(bank),
       tools: [emitTool],
       tool_choice: { type: 'tool', name: 'emit_discounts' },
       thinking: { type: 'disabled' },
@@ -270,7 +397,7 @@ async function extractBatch(promos: RawPromo[], maxTokens: number): Promise<Extr
     const parsed = discountSchema.safeParse(item);
     if (!parsed.success) {
       console.error(
-        `[scraper:gnb] skipping malformed discount: ${parsed.error.issues.map(i => `${i.path.join('.')} ${i.message}`).join('; ')}`
+        `[scraper] skipping malformed discount: ${parsed.error.issues.map(i => `${i.path.join('.')} ${i.message}`).join('; ')}`
       );
       continue;
     }
@@ -301,22 +428,37 @@ export type ExtractResult = {
  * of resolvedIds, so the rest of the run's work isn't lost and nothing gets
  * deleted out from under a transient failure.
  */
-export async function extractDiscounts(promos: RawPromo[]): Promise<ExtractResult> {
+export async function extractDiscounts(bank: string, promos: RawPromo[]): Promise<ExtractResult> {
   const discounts: ExtractedDiscount[] = [];
   const resolvedIds = new Set<string>();
 
   const multiMerchant = promos.filter(p => p.basesText && COMERCIOS_ADHERIDOS_RE.test(p.basesText));
   const normal = promos.filter(p => !multiMerchant.includes(p));
 
-  const runBatch = async (batch: RawPromo[], maxTokens: number) => {
+  /**
+   * On failure, halve the batch and retry each half rather than dropping all
+   * of it.
+   *
+   * The usual cause is the response running past max_tokens — the tool call
+   * comes back truncated, with `discounts` missing entirely — and that is a
+   * property of how much text this particular group of promos needed, not of
+   * any one promo being bad. A Sudameris run lost 15 promos to a single such
+   * batch. Splitting turns that into a couple of extra calls, and only a promo
+   * that fails *alone* is actually skipped.
+   */
+  const runBatch = async (batch: RawPromo[], maxTokens: number): Promise<void> => {
     try {
-      discounts.push(...(await extractBatch(batch, maxTokens)));
+      discounts.push(...(await extractBatch(bank, batch, maxTokens)));
       for (const promo of batch) resolvedIds.add(promo.externalId);
     } catch (error) {
-      console.error(
-        `[scraper:gnb] batch (${batch.map(p => p.externalId).join(',')}) failed after retries, skipping:`,
-        error
-      );
+      if (batch.length > 1) {
+        const mid = Math.ceil(batch.length / 2);
+        console.warn(`[scraper] batch of ${batch.length} failed, splitting and retrying:`, (error as Error).message);
+        await runBatch(batch.slice(0, mid), maxTokens);
+        await runBatch(batch.slice(mid), maxTokens);
+        return;
+      }
+      console.error(`[scraper] promo ${batch[0]?.externalId} failed after retries, skipping:`, error);
     }
   };
 
