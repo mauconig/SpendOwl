@@ -193,6 +193,59 @@ The box also hosts an unrelated `maubot` stack (a neo4j container plus
 `maubot.service`). SpendOwl uses its own container, volume, ports and systemd
 unit, and does not touch it.
 
+## Shipping an Android build
+
+Builds run on [EAS](https://docs.expo.dev/build/introduction/), not locally —
+a local build would need the Android SDK and JDK 17, neither of which this
+project otherwise requires. `eas.json` holds two profiles:
+
+```sh
+npx eas-cli build --platform android --profile preview      # APK, sideloadable
+npx eas-cli build --platform android --profile production   # AAB, for Play
+```
+
+`preview` produces an **APK** you can download and install straight onto a
+phone; it is how you check the standalone build before it goes anywhere.
+`production` produces an **AAB**, which Play requires and which cannot be
+installed directly. `autoIncrement` bumps `android.versionCode` in `app.json`
+on every production build, because Play rejects a re-used version code.
+
+Always run `npx expo-doctor` before a build. Expo Go bundles many native
+modules whether or not you declared them, so a missing peer dependency is
+invisible in development and crashes only in a standalone build — which is
+exactly what it caught here (`expo-audio` needs `expo-asset`).
+
+### Why the env vars are duplicated in `eas.json`
+
+`.env.local` is gitignored, and EAS uploads the project **through git**. The
+file therefore never reaches the build server, and without it
+`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` is undefined and `App.tsx` throws on the
+first frame, while `EXPO_PUBLIC_API_URL` falls back to `localhost:8787` —
+which on a phone means the phone itself. A build that boots to a crash or to
+"Can't load your data" is the default outcome if you skip this.
+
+So both are declared in each build profile's `env` block. Only these two
+belong there:
+
+- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` is *publishable* — Clerk designs it to be
+  public and it is already readable in any shipped bundle.
+- `EXPO_PUBLIC_API_URL` is just a hostname.
+
+**Never add `CLERK_SECRET_KEY`, `LLM_API_KEY` or `STT_API_KEY` here.** They are
+server-side secrets, `eas.json` is committed, and anything with an
+`EXPO_PUBLIC_` prefix is inlined into the bundle for anyone to read. The server
+reads those from `/opt/spendowl/api.env` on the VPS.
+
+### Before a real public release
+
+The app still points at the Clerk **development** instance (`pk_test_`), which
+caps at 100 users and signs in through Clerk's shared Google/Apple OAuth
+credentials. A production instance needs its own keys, its own OAuth apps, and
+the `spendowl://` redirect allowed for the standalone scheme — the redirect
+differs from the `exp://` one Expo Go uses, so SSO is worth re-testing on the
+APK specifically. Swap `pk_live_` into `eas.json` and `sk_live_` into the VPS
+env at the same time; the two halves must match instances.
+
 ## Troubleshooting
 
 - **"Port 8081 is being used by another process"** — either stop whatever's
