@@ -36,14 +36,12 @@ export async function getSummary(userId: string): Promise<Summary | null> {
   const totals = await queryOne<{
     spentMinor: number;
     incomeMinor: number;
-    budgetMinor: number;
     dayOfMonth: number;
     daysInMonth: number;
     month: string;
   }>(
     `SELECT COALESCE(SUM(-t.amount_minor) FILTER (WHERE t.amount_minor < 0), 0)::bigint AS "spentMinor",
             COALESCE(SUM( t.amount_minor) FILTER (WHERE t.amount_minor > 0), 0)::bigint AS "incomeMinor",
-            u.monthly_budget_minor                                                      AS "budgetMinor",
             EXTRACT(DAY FROM CURRENT_DATE)::int                                         AS "dayOfMonth",
             EXTRACT(DAY FROM (date_trunc('month', CURRENT_DATE)
                               + INTERVAL '1 month - 1 day'))::int                       AS "daysInMonth",
@@ -54,7 +52,7 @@ export async function getSummary(userId: string): Promise<Summary | null> {
         AND t.occurred_at >= date_trunc('month', CURRENT_DATE)::date
         AND t.occurred_at <= CURRENT_DATE
       WHERE u.id = $1
-      GROUP BY u.monthly_budget_minor`,
+      GROUP BY u.id`,
     [userId]
   );
 
@@ -92,10 +90,20 @@ export async function getSummary(userId: string): Promise<Summary | null> {
     [userId]
   );
 
-  const { spentMinor, incomeMinor, budgetMinor, dayOfMonth, daysInMonth, month } = totals;
+  const { spentMinor, incomeMinor, dayOfMonth, daysInMonth, month } = totals;
 
-  // Pace compares actual spend against a flat run-rate of the budget across the
-  // month. Positive delta means under pace.
+  // What you earned this month is the baseline, not a stored budget figure.
+  //
+  // `users.monthly_budget_minor` is no longer read here. Nothing in the app
+  // ever set it — there is no control for it on any screen — so every account
+  // carried the column default, and the Dashboard announced a "safe to spend"
+  // derived from a number the user had never seen, let alone chosen. Income is
+  // summed from the user's own income transactions, so the figure is either
+  // real or zero; zero is honest, an invented 240.000 is not.
+  const budgetMinor = incomeMinor;
+
+  // Pace compares actual spend against a flat run-rate across the month.
+  // Positive delta means under pace.
   const expectedByNowMinor = Math.round((budgetMinor * dayOfMonth) / daysInMonth);
   const paceDeltaMinor = expectedByNowMinor - spentMinor;
 
@@ -104,8 +112,10 @@ export async function getSummary(userId: string): Promise<Summary | null> {
     budgetMinor,
     spentMinor,
     incomeMinor,
-    safeToSpendMinor: budgetMinor - spentMinor,
-    overBudget: spentMinor > budgetMinor,
+    safeToSpendMinor: incomeMinor - spentMinor,
+    // With no income logged there is nothing to be over, so a first coffee on a
+    // fresh account must not light up the over-budget warning.
+    overBudget: incomeMinor > 0 && spentMinor > incomeMinor,
     percentOfBudget: budgetMinor > 0 ? (spentMinor / budgetMinor) * 100 : 0,
     daysLeft: daysInMonth - dayOfMonth,
     daysInMonth,
