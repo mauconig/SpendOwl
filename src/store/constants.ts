@@ -69,7 +69,22 @@ export const AFFORD_OPTS = [
 // (.docs/BACKEND.md §2). Everything else on the Dashboard is now real.
 export const SAVINGS_TODAY = 2140;
 
-export const CARD_COLORS = ['#F0A878', '#78ADEE', '#C9B8F5', '#4ADE80'];
+// A curated palette, not a free color wheel — consistent with how every other
+// color in this app is chosen by the app, never freely typed (see the
+// icon-color note in HomeScreen.tsx). The first 4 match the app's other named
+// accent colors (theme.ts CATS); the rest round out a 10-swatch picker.
+export const CARD_COLORS = [
+  '#F0A878', // peach
+  '#78ADEE', // blue
+  '#C9B8F5', // lavender
+  '#4ADE80', // mint
+  '#F87171', // rose
+  '#FACC15', // amber
+  '#E4E4E7', // silver
+  '#5EEAD4', // teal
+  '#A78BFA', // violet
+  '#FB923C', // orange
+];
 
 // View models: the API speaks integer cents, the UI speaks EUR. Mapping happens
 // once in SpendOwlContext so screens keep the shapes they already render.

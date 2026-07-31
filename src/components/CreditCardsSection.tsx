@@ -37,6 +37,12 @@ export function CreditCardsSection() {
                       {c.apr}% APR
                     </Text>
                   </View>
+                  <Pressable
+                    onPress={() => store.openEditCard(c.id)}
+                    style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: colors.iconBg, alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Icon name="gear" size={11} color={colors.textDim60} />
+                  </Pressable>
                   <Pressable onPress={() => store.removeCreditCard(c.id)} style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: colors.iconBg, alignItems: 'center', justifyContent: 'center' }}>
                     <Icon name="close" size={11} color={colors.textDim60} />
                   </Pressable>

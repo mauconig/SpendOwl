@@ -1,9 +1,11 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
+import { ColorSwatchPicker } from '../components/ColorSwatchPicker';
 import { ModalShell } from '../components/ModalShell';
 import { GRAD, GRAD_LOCATIONS, colors, fonts } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
+import { CARD_COLORS } from '../store/constants';
 import { formatThousands, parseThousands } from '../utils/moneyInput';
 
 function Field({ label, value, onChangeText, placeholder, keyboardType, maxLength }: {
@@ -30,24 +32,43 @@ function Field({ label, value, onChangeText, placeholder, keyboardType, maxLengt
   );
 }
 
+/**
+ * One sheet, two modes, driven by store.cardSheet — there was no edit flow at
+ * all before this, so it's built as this form's second mode rather than a
+ * separate screen. `editingCard` is looked up fresh on every open so the form
+ * always starts from whatever's actually on the card, not stale local state.
+ */
 export function AddCardSheet() {
   const store = useSpendOwl();
+  const sheet = store.cardSheet;
+  const editingCard = sheet?.mode === 'edit' ? store.creditCards.find(c => c.id === sheet.id) : undefined;
+
   const [name, setName] = useState('');
   const [balanceDigits, setBalanceDigits] = useState('');
   const [limitDigits, setLimitDigits] = useState('');
   const [apr, setApr] = useState('');
+  const [color, setColor] = useState<string>(CARD_COLORS[0]!);
 
-  const reset = () => {
-    setName('');
-    setBalanceDigits('');
-    setLimitDigits('');
-    setApr('');
-  };
+  useEffect(() => {
+    if (!sheet) return;
+    if (sheet.mode === 'edit' && editingCard) {
+      setName(editingCard.name);
+      setBalanceDigits(String(Math.round(editingCard.balance)));
+      setLimitDigits(String(Math.round(editingCard.limit)));
+      setApr(String(editingCard.apr));
+      setColor(editingCard.color);
+    } else {
+      setName('');
+      setBalanceDigits('');
+      setLimitDigits('');
+      setApr('');
+      // Preview the color a new card would default to if never touched here.
+      setColor(CARD_COLORS[store.creditCards.length % CARD_COLORS.length]!);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheet]);
 
-  const close = () => {
-    store.closeAddCard();
-    reset();
-  };
+  const close = () => store.closeCardSheet();
 
   const balance = parseThousands(balanceDigits);
   const limit = parseThousands(limitDigits);
@@ -55,13 +76,17 @@ export function AddCardSheet() {
 
   const submit = () => {
     if (!canSubmit) return;
-    store.addCreditCard({ name: name.trim(), balance, limit, apr: Number(apr) });
+    if (sheet?.mode === 'edit') {
+      store.updateCreditCard({ id: sheet.id, name: name.trim(), balance, limit, apr: Number(apr), color });
+    } else {
+      store.addCreditCard({ name: name.trim(), balance, limit, apr: Number(apr), color });
+    }
     close();
   };
 
   return (
     <ModalShell
-      visible={store.addCardOpen}
+      visible={sheet !== null}
       onClose={close}
       contentStyle={{
         backgroundColor: colors.bottomSheet,
@@ -76,7 +101,9 @@ export function AddCardSheet() {
       }}
     >
       <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,.2)', alignSelf: 'center' }} />
-      <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>Add a card</Text>
+      <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>
+        {sheet?.mode === 'edit' ? 'Edit card' : 'Add a card'}
+      </Text>
 
       <Field label="Card name" value={name} onChangeText={setName} placeholder="Visa Platinum" />
       <Field
@@ -95,6 +122,11 @@ export function AddCardSheet() {
       />
       <Field label="APR / interest rate (%)" value={apr} onChangeText={setApr} placeholder="24.99" keyboardType="decimal-pad" />
 
+      <View style={{ gap: 6 }}>
+        <Text style={{ fontSize: 12, color: colors.textDim50 }}>Colour</Text>
+        <ColorSwatchPicker value={color} onChange={setColor} />
+      </View>
+
       <Pressable onPress={submit} disabled={!canSubmit} style={{ opacity: canSubmit ? 1 : 0.4 }}>
         <LinearGradient
           colors={GRAD}
@@ -103,7 +135,9 @@ export function AddCardSheet() {
           end={{ x: 1, y: -0.1 }}
           style={{ borderRadius: 999, paddingVertical: 13, alignItems: 'center', marginTop: 2 }}
         >
-          <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 14 }}>Add card</Text>
+          <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 14 }}>
+            {sheet?.mode === 'edit' ? 'Save changes' : 'Add card'}
+          </Text>
         </LinearGradient>
       </Pressable>
     </ModalShell>

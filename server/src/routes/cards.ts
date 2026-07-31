@@ -14,6 +14,8 @@ const createSchema = z.object({
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
 });
 
+const updateSchema = createSchema.partial();
+
 const payoffSchema = z.object({ amountMinor: z.int().positive() });
 
 const SELECT = `
@@ -47,6 +49,39 @@ export const cardsRoute = new Hono<AppEnv>()
       [c.get('userId'), body.name, body.last4 ?? null, body.balanceMinor, body.limitMinor, body.apr, body.color]
     );
     return c.json(row, 201);
+  })
+
+  .patch('/:id', async c => {
+    const parsed = updateSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const body = parsed.data;
+
+    // COALESCE keeps every omitted field at its current value, mirroring
+    // transactions.ts's own partial-update pattern exactly.
+    const row = await queryOne(
+      `UPDATE credit_cards
+          SET name               = COALESCE($3, name),
+              last4              = COALESCE($4, last4),
+              balance_minor      = COALESCE($5, balance_minor),
+              credit_limit_minor = COALESCE($6, credit_limit_minor),
+              apr                = COALESCE($7, apr),
+              color              = COALESCE($8, color)
+        WHERE id = $1 AND user_id = $2
+        RETURNING id, name, last4, balance_minor AS "balanceMinor",
+                  credit_limit_minor AS "limitMinor", apr, color`,
+      [
+        c.req.param('id'),
+        c.get('userId'),
+        body.name ?? null,
+        body.last4 ?? null,
+        body.balanceMinor ?? null,
+        body.limitMinor ?? null,
+        body.apr ?? null,
+        body.color ?? null,
+      ]
+    );
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    return c.json(row);
   })
 
   // Paying a card down is a balance decrement, floored at zero so an
