@@ -56,7 +56,8 @@ export const CATS = {
   shopping: { name: 'Shopping', color: '#C9B8F5' },
   transport: { name: 'Transport', color: '#E4E4E7' },
   income: { name: 'Income', color: '#4ADE80' },
-  debt: { name: 'Card interest', color: '#F87171' },
+  // Card payments land here too, not just interest — see DashboardScreen.
+  debt: { name: 'Debt & interest', color: '#F87171' },
 } as const;
 
 export type CatKey = keyof typeof CATS;

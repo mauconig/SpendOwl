@@ -76,6 +76,27 @@ export const CATEGORY_COLORS: Record<ApiDiscountCategory, string> = {
 };
 
 /**
+ * Each bank's own colour, so its name reads the same wherever it appears — the
+ * filter chips, the offer rows and the Today sheet. Shared rather than local to
+ * OffersScreen because the Today sheet drew its bank tags dim grey, which made
+ * one bank look like two different things depending on where you saw it.
+ *
+ * GNB's green and Sudameris' red are taken from their own stylesheets rather
+ * than guessed: `.beneficios { background-color: #7AB83F; }` and the
+ * `border-bottom: solid 7px #d90613` that underlines every heading on their
+ * benefits pages. Universitaria's is picked to sit apart from those two — it is
+ * not sourced from their site, so treat it as ours, not theirs.
+ *
+ * A bank with no entry falls back to the caller's dim colour, so a fourth bank
+ * simply shows up uncoloured instead of breaking.
+ */
+export const BANK_COLORS: Record<string, string> = {
+  GNB: '#7AB83F',
+  Sudameris: '#D90613',
+  Universitaria: '#4C8DD9',
+};
+
+/**
  * What to show in an offer's top-right slot.
  *
  * A "cuotas sin intereses" promo carries no discount, and the scraper records

@@ -42,13 +42,18 @@ export function DashboardScreen() {
 
   // Card interest stays a client-side derivation from the live card balances —
   // it isn't a transaction, so the server's category totals don't include it.
-  const debtAmount = cardInterestMonthly(store.creditCards);
-  const hasDebt = debtAmount > 0;
-  const legendKeys: CatKey[] = hasDebt ? [...CAT_KEYS, 'debt'] : CAT_KEYS;
-
+  // Card payments are transactions, though, and land in the same slice, so the
+  // two are added rather than one replacing the other: showing only interest
+  // here while spend counted the payment would leave the donut short of the
+  // month's total by exactly the amount paid.
+  const cardInterest = cardInterestMonthly(store.creditCards);
   const spentByCat = new Map<CatKey, number>(
     (summary?.categories ?? []).map(c => [c.key, minorToEur(c.spentMinor)])
   );
+  const debtAmount = cardInterest + (spentByCat.get('debt') ?? 0);
+  const hasDebt = debtAmount > 0;
+  const legendKeys: CatKey[] = hasDebt ? [...CAT_KEYS, 'debt'] : CAT_KEYS;
+
   const amountFor = (k: CatKey) => (k === 'debt' ? debtAmount : (spentByCat.get(k) ?? 0));
   const donutSlices = legendKeys.map(key => ({ key, amount: amountFor(key) }));
   const donutTotal = donutSlices.reduce((sum, s) => sum + s.amount, 0);

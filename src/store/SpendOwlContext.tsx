@@ -551,7 +551,19 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
           return;
 
         case 'card_payment':
-          if (message.cardId) payoffCard.mutate({ id: message.cardId, amountMinor: eurToMinor(message.amountEur) });
+          if (message.cardId) {
+            payoffCard.mutate({ id: message.cardId, amountMinor: eurToMinor(message.amountEur) });
+            // Two writes, like an expense on a card. The payoff moves the
+            // balance, but that alone leaves the money invisible: it never
+            // reaches the transactions table, so it is not in spend and not
+            // taken off safe-to-spend, and paying a card looked free.
+            addTransaction.mutate({
+              merchant: message.cardName,
+              category: 'debt',
+              amountMinor: -eurToMinor(message.amountEur),
+              note: 'Card payment',
+            });
+          }
           return;
 
         case 'sub_cancel':

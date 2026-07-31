@@ -4,7 +4,7 @@ import { useDiscounts } from '../api/hooks';
 import { ModalShell } from '../components/ModalShell';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { colors, fonts, formatPYG } from '../theme';
-import { CATEGORY_COLORS, CATEGORY_LABELS, offerBadge, todaysOfferGroups } from '../utils/discounts';
+import { BANK_COLORS, CATEGORY_COLORS, CATEGORY_LABELS, offerBadge, todaysOfferGroups } from '../utils/discounts';
 
 /**
  * The detail behind one of Home's "today" cards. Home shows the headline —
@@ -84,7 +84,9 @@ export function TodayOffersSheet() {
               <Text style={{ fontSize: 12, lineHeight: 17, color: colors.textDim60 }}>{d.description}</Text>
 
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                <Text style={{ fontSize: 10.5, fontFamily: fonts.mono, color: colors.textDim45 }}>{d.bank}</Text>
+                <Text style={{ fontSize: 10.5, fontFamily: fonts.mono, color: BANK_COLORS[d.bank] ?? colors.textDim45 }}>
+                  {d.bank}
+                </Text>
                 {d.eligibleDays && (
                   <Text style={{ fontSize: 10.5, fontFamily: fonts.mono, color: colors.textDim45 }}>{d.eligibleDays}</Text>
                 )}
