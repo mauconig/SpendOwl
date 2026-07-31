@@ -17,6 +17,7 @@ const createSchema = z.object({
   occurredAt: z.iso.date().optional(),
   note: z.string().trim().max(280).nullish(),
   taxDeductible: z.boolean().optional(),
+  cardId: z.uuid().optional(),
 });
 
 const updateSchema = createSchema.partial();
@@ -28,9 +29,21 @@ const SELECT = `
          amount_minor    AS "amountMinor",
          occurred_at     AS "occurredAt",
          note,
-         tax_deductible  AS "taxDeductible"
+         tax_deductible  AS "taxDeductible",
+         card_id         AS "cardId"
   FROM transactions
 `;
+
+/**
+ * cardId only ever comes from a client's own already-loaded card list (or the
+ * coach's server-side resolveByName in chat.ts), but this is a general REST
+ * endpoint — verify it before writing rather than trusting the caller, the
+ * same way chat.ts already scopes card lookups to the requesting user.
+ */
+async function ownsCard(userId: string, cardId: string): Promise<boolean> {
+  const row = await queryOne('SELECT id FROM credit_cards WHERE id = $1 AND user_id = $2', [cardId, userId]);
+  return row !== null;
+}
 
 export const transactionsRoute = new Hono<AppEnv>()
 
@@ -45,20 +58,26 @@ export const transactionsRoute = new Hono<AppEnv>()
     const parsed = createSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
     const body = parsed.data;
+    const userId = c.get('userId');
+
+    if (body.cardId && !(await ownsCard(userId, body.cardId))) {
+      return c.json({ error: 'Unknown card' }, 400);
+    }
 
     const row = await queryOne(
-      `INSERT INTO transactions (user_id, merchant, category, amount_minor, occurred_at, note, tax_deductible)
-       VALUES ($1, $2, $3, $4, COALESCE($5::date, CURRENT_DATE), $6, COALESCE($7, FALSE))
+      `INSERT INTO transactions (user_id, merchant, category, amount_minor, occurred_at, note, tax_deductible, card_id)
+       VALUES ($1, $2, $3, $4, COALESCE($5::date, CURRENT_DATE), $6, COALESCE($7, FALSE), $8)
        RETURNING id, merchant, category, amount_minor AS "amountMinor", occurred_at AS "occurredAt",
-                 note, tax_deductible AS "taxDeductible"`,
+                 note, tax_deductible AS "taxDeductible", card_id AS "cardId"`,
       [
-        c.get('userId'),
+        userId,
         body.merchant,
         body.category,
         body.amountMinor,
         body.occurredAt ?? null,
         body.note ?? null,
         body.taxDeductible ?? null,
+        body.cardId ?? null,
       ]
     );
     return c.json(row, 201);
@@ -68,6 +87,11 @@ export const transactionsRoute = new Hono<AppEnv>()
     const parsed = updateSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
     const body = parsed.data;
+    const userId = c.get('userId');
+
+    if (body.cardId && !(await ownsCard(userId, body.cardId))) {
+      return c.json({ error: 'Unknown card' }, 400);
+    }
 
     // COALESCE keeps every omitted field at its current value, so a partial
     // patch never blanks a column.
@@ -78,19 +102,21 @@ export const transactionsRoute = new Hono<AppEnv>()
               amount_minor   = COALESCE($5, amount_minor),
               occurred_at    = COALESCE($6::date, occurred_at),
               note           = COALESCE($7, note),
-              tax_deductible = COALESCE($8, tax_deductible)
+              tax_deductible = COALESCE($8, tax_deductible),
+              card_id        = COALESCE($9, card_id)
         WHERE id = $1 AND user_id = $2
         RETURNING id, merchant, category, amount_minor AS "amountMinor", occurred_at AS "occurredAt",
-                  note, tax_deductible AS "taxDeductible"`,
+                  note, tax_deductible AS "taxDeductible", card_id AS "cardId"`,
       [
         c.req.param('id'),
-        c.get('userId'),
+        userId,
         body.merchant ?? null,
         body.category ?? null,
         body.amountMinor ?? null,
         body.occurredAt ?? null,
         body.note ?? null,
         body.taxDeductible ?? null,
+        body.cardId ?? null,
       ]
     );
     if (!row) return c.json({ error: 'Not found' }, 404);

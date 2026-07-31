@@ -115,6 +115,7 @@ export function useAddTransaction() {
       amountMinor: number;
       note?: string | null;
       taxDeductible?: boolean;
+      cardId?: string;
     }) => api.post<ApiTransaction>('/api/transactions', input),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.transactions });
@@ -183,6 +184,26 @@ export function useAddCreditCard() {
       apr: number;
       color: string;
     }) => api.post<ApiCreditCard>('/api/credit-cards', input),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.cards }),
+  });
+}
+
+export function useUpdateCreditCard() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...patch
+    }: {
+      id: string;
+      name?: string;
+      last4?: string;
+      balanceMinor?: number;
+      limitMinor?: number;
+      apr?: number;
+      color?: string;
+    }) => api.patch<ApiCreditCard>(`/api/credit-cards/${id}`, patch),
     onSuccess: () => void client.invalidateQueries({ queryKey: keys.cards }),
   });
 }

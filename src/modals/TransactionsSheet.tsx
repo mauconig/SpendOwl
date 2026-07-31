@@ -213,8 +213,10 @@ export function TransactionsSheet() {
 }
 
 function TxRow({ tx, baseCur }: { tx: ApiTransaction; baseCur: Currency }) {
+  const store = useSpendOwl();
   const cat = CATS[tx.category];
   const inc = tx.amountMinor > 0;
+  const card = tx.cardId ? store.creditCards.find(c => c.id === tx.cardId) : undefined;
 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 9 }}>
@@ -233,11 +235,20 @@ function TxRow({ tx, baseCur }: { tx: ApiTransaction; baseCur: Currency }) {
             {tx.note}
           </Text>
         ) : null}
-        {tx.taxDeductible ? (
-          <View style={{ alignSelf: 'flex-start', marginTop: 5, borderRadius: 999, paddingVertical: 2, paddingHorizontal: 8, backgroundColor: 'rgba(74,222,128,.12)', borderWidth: 1, borderColor: 'rgba(74,222,128,.3)' }}>
-            <Text style={{ fontSize: 10, fontFamily: fonts.medium, color: colors.mint }}>Tax deductible</Text>
+        {(tx.taxDeductible || card) && (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
+            {card ? (
+              <View style={{ borderRadius: 999, paddingVertical: 2, paddingHorizontal: 8, backgroundColor: card.color + '1F', borderWidth: 1, borderColor: card.color + '4D' }}>
+                <Text style={{ fontSize: 10, fontFamily: fonts.medium, color: card.color }}>{card.name}</Text>
+              </View>
+            ) : null}
+            {tx.taxDeductible ? (
+              <View style={{ borderRadius: 999, paddingVertical: 2, paddingHorizontal: 8, backgroundColor: 'rgba(74,222,128,.12)', borderWidth: 1, borderColor: 'rgba(74,222,128,.3)' }}>
+                <Text style={{ fontSize: 10, fontFamily: fonts.medium, color: colors.mint }}>Tax deductible</Text>
+              </View>
+            ) : null}
           </View>
-        ) : null}
+        )}
       </View>
       <Text style={{ fontSize: 13.5, fontFamily: moneyFont(baseCur, 'bold'), color: inc ? colors.mint : colors.text }}>
         {(inc ? '+' : '−') + formatMoney(Math.abs(minorToEur(tx.amountMinor)), baseCur, 2)}

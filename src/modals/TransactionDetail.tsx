@@ -200,6 +200,32 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
           </View>
         </Field>
 
+        {tx?.cardId ? (
+          (() => {
+            const card = store.creditCards.find(c => c.id === tx.cardId);
+            if (!card) return null;
+            // Read-only: nothing today lets you reassign which card a logged
+            // transaction was paid with, only see it.
+            return (
+              <Field label="PAID WITH">
+                <View
+                  style={{
+                    alignSelf: 'flex-start',
+                    borderRadius: 999,
+                    paddingVertical: 6,
+                    paddingHorizontal: 12,
+                    backgroundColor: card.color + '1F',
+                    borderWidth: 1,
+                    borderColor: card.color + '4D',
+                  }}
+                >
+                  <Text style={{ fontSize: 12.5, fontFamily: fonts.medium, color: card.color }}>{card.name}</Text>
+                </View>
+              </Field>
+            );
+          })()
+        ) : null}
+
         <Field label="DATE">
           <Pressable
             onPress={() => setPickingDate(v => !v)}

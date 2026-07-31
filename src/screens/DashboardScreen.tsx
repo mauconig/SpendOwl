@@ -58,6 +58,7 @@ export function DashboardScreen() {
     .map(t => {
       const cat = CATS[t.category];
       const inc = t.amountMinor > 0;
+      const card = t.cardId ? store.creditCards.find(c => c.id === t.cardId) : undefined;
       return {
         id: t.id,
         merchant: t.merchant,
@@ -66,6 +67,8 @@ export function DashboardScreen() {
         amt: (inc ? '+' : '−') + formatMoney(Math.abs(minorToEur(t.amountMinor)), baseCur, 2),
         inc,
         color: cat.color,
+        cardName: card?.name ?? null,
+        cardColor: card?.color ?? null,
       };
     });
 
@@ -254,6 +257,22 @@ export function DashboardScreen() {
                   {t.merchant}
                 </Text>
                 <Text style={{ fontSize: 11, color: colors.textDim45, marginTop: 1 }}>{t.meta}</Text>
+                {t.cardName ? (
+                  <View
+                    style={{
+                      alignSelf: 'flex-start',
+                      marginTop: 4,
+                      borderRadius: 999,
+                      paddingVertical: 1.5,
+                      paddingHorizontal: 7,
+                      backgroundColor: t.cardColor + '1F',
+                      borderWidth: 1,
+                      borderColor: t.cardColor + '4D',
+                    }}
+                  >
+                    <Text style={{ fontSize: 9.5, fontFamily: fonts.medium, color: t.cardColor! }}>{t.cardName}</Text>
+                  </View>
+                ) : null}
               </View>
               <Text style={{ fontSize: 13.5, fontFamily: moneyFont(baseCur, 'bold'), color: t.inc ? colors.mint : colors.text }}>{t.amt}</Text>
             </Pressable>

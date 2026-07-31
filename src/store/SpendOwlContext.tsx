@@ -28,6 +28,7 @@ import {
   useSubscriptions,
   useSummary,
   useTransactions,
+  useUpdateCreditCard,
   useUpdateSettings,
   useUpdateSubscription,
   useUpdateTransaction,
@@ -121,10 +122,23 @@ interface SpendOwlStore {
 
   // credit cards
   creditCards: CreditCard[];
-  addCardOpen: boolean;
+  // One sheet, two modes: `{ mode: 'add' }` mirrors the old addCardOpen
+  // boolean, `{ mode: 'edit', id }` opens the same form pre-filled — there
+  // was no edit flow at all before this, so it's built as the add form's
+  // second mode rather than a separate screen.
+  cardSheet: { mode: 'add' } | { mode: 'edit'; id: string } | null;
   openAddCard: () => void;
-  closeAddCard: () => void;
-  addCreditCard: (input: { name: string; balance: number; limit: number; apr: number }) => void;
+  openEditCard: (id: string) => void;
+  closeCardSheet: () => void;
+  addCreditCard: (input: { name: string; balance: number; limit: number; apr: number; color?: string }) => void;
+  updateCreditCard: (input: {
+    id: string;
+    name?: string;
+    balance?: number;
+    limit?: number;
+    apr?: number;
+    color?: string;
+  }) => void;
   removeCreditCard: (id: string) => void;
   payoffCardId: string | null;
   openPayoff: (id: string) => void;
@@ -179,7 +193,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const [selCat, setSelCat] = useState<CatKey | null>(null);
   const [txOpen, setTxOpen] = useState(false);
   const [editTx, setEditTx] = useState<{ id: string; from: 'dash' | 'sheet' } | null>(null);
-  const [addCardOpen, setAddCardOpen] = useState(false);
+  const [cardSheet, setCardSheet] = useState<{ mode: 'add' } | { mode: 'edit'; id: string } | null>(null);
   const [payoffCardId, setPayoffCardId] = useState<string | null>(null);
   const [affordOpen, setAffordOpen] = useState(false);
   const [affordSel, setAffordSel] = useState(1);
@@ -203,6 +217,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const updateTransactionMutation = useUpdateTransaction();
   const deleteTransactionMutation = useDeleteTransaction();
   const addCard = useAddCreditCard();
+  const updateCard = useUpdateCreditCard();
   const removeCard = useRemoveCreditCard();
   const chargeCard = useChargeCreditCard();
   const payoffCard = usePayoffCreditCard();
@@ -453,6 +468,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
             amountMinor: -eurToMinor(message.amountEur),
             note: message.note,
             taxDeductible: cards[id]?.tax ?? false,
+            cardId: message.cardId,
           });
           if (message.cardId) {
             chargeCard.mutate({ id: message.cardId, amountMinor: eurToMinor(message.amountEur) });
@@ -603,7 +619,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addCreditCard = useCallback(
-    (input: { name: string; balance: number; limit: number; apr: number }) => {
+    (input: { name: string; balance: number; limit: number; apr: number; color?: string }) => {
       addCard.mutate({
         name: input.name,
         // displayToMinor, not eurToMinor: these come from a text field, and
@@ -615,10 +631,26 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
         balanceMinor: displayToMinor(input.balance, baseCur),
         limitMinor: displayToMinor(input.limit, baseCur),
         apr: input.apr,
-        color: CARD_COLORS[creditCards.length % CARD_COLORS.length]!,
+        // Falls back to the old rotation so a card added without ever
+        // touching the picker still gets today's default behaviour.
+        color: input.color ?? CARD_COLORS[creditCards.length % CARD_COLORS.length]!,
       });
     },
     [addCard, creditCards.length, baseCur]
+  );
+
+  const updateCreditCard = useCallback(
+    (input: { id: string; name?: string; balance?: number; limit?: number; apr?: number; color?: string }) => {
+      updateCard.mutate({
+        id: input.id,
+        name: input.name,
+        balanceMinor: input.balance != null ? displayToMinor(input.balance, baseCur) : undefined,
+        limitMinor: input.limit != null ? displayToMinor(input.limit, baseCur) : undefined,
+        apr: input.apr,
+        color: input.color,
+      });
+    },
+    [updateCard, baseCur]
   );
 
   const summary = summaryQuery.data ?? null;
@@ -672,10 +704,12 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     deleteTransaction: (id: string) => deleteTransactionMutation.mutate(id),
 
     creditCards,
-    addCardOpen,
-    openAddCard: () => setAddCardOpen(true),
-    closeAddCard: () => setAddCardOpen(false),
+    cardSheet,
+    openAddCard: () => setCardSheet({ mode: 'add' }),
+    openEditCard: (id: string) => setCardSheet({ mode: 'edit', id }),
+    closeCardSheet: () => setCardSheet(null),
     addCreditCard,
+    updateCreditCard,
     removeCreditCard: (id: string) => removeCard.mutate(id),
     payoffCardId,
     openPayoff: (id: string) => setPayoffCardId(id),

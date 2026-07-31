@@ -184,6 +184,16 @@ const migrations: Migration[] = [
       CREATE UNIQUE INDEX bank_discounts_bank_external_idx ON bank_discounts (bank, external_id);
     `,
   },
+  {
+    version: 5,
+    name: 'transaction_card_link',
+    sql: /* sql */ `
+      -- Which card (if any) a transaction was paid with. SET NULL rather than
+      -- CASCADE, mirroring the receipts.transaction_id precedent above:
+      -- deleting a card should drop the tag, never the transaction history.
+      ALTER TABLE transactions ADD COLUMN card_id UUID REFERENCES credit_cards(id) ON DELETE SET NULL;
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {

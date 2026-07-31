@@ -12,6 +12,8 @@ export type ApiTransaction = {
   occurredAt: string;
   note: string | null;
   taxDeductible: boolean;
+  /** Which card this was paid with, if any. Null for cash/unlinked spend. */
+  cardId: string | null;
 };
 
 export type ApiCategoryTotal = { key: CatKey; spentMinor: number };
