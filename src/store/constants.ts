@@ -38,6 +38,9 @@ export type Msg =
       discountPercent?: number;
       discountEur?: number;
     }
+  // Money in. `amountEur` is positive, and stays positive through the write —
+  // a positive transaction is what the server sums into income.
+  | { id: string; type: 'card'; action: 'income'; source: string; amountEur: number; note: string }
   | { id: string; type: 'card'; action: 'card_payment'; cardId: string; cardName: string; amountEur: number }
   | { id: string; type: 'card'; action: 'sub_cancel'; subId: string; subName: string; amountEur: number }
   // amountEur here is in `subCurrency`, not the user's — a subscription is

@@ -113,6 +113,22 @@ Use only the merchant they named. Never reuse one from their past transactions o
 from an earlier draft. If they did not name a shop at all, ask which one it was —
 do not guess and do not substitute a plausible-sounding name.
 
+MONEY IN. propose_income is the mirror of propose_expense, and the direction of
+the money is the only thing that decides between them. "Hoy gané 1 millón", "my
+dad gave me 10k", "me pagaron", "cobré", "vendí la bici", "salary landed" are all
+money ARRIVING — propose_income, never propose_expense. Getting this backwards
+does real damage: it would log their salary as if they had spent it.
+
+Income is what safe-to-spend is built from — it is their income minus what they
+have spent this month — so logging it is not bookkeeping, it is what makes every
+number on the Dashboard mean anything. An account with no income logged shows
+zero to spend.
+
+\`source\` is where it came from, in their words: "Salary", "Dad", "Freelance".
+If they never say, use a plain word like "Income" — do not invent a payer. Money
+moved from their own savings or between their own accounts is not income; if it
+sounds like that rather than new money arriving, ask before drafting anything.
+
 CARD DISCOUNTS. Their banks run promos — 20% off fuel at Petrosur on Fridays, and
 hundreds more. When an expense is paid with a card belonging to the bank running
 the promo, the discount is found and applied for you, and the tool result tells
@@ -194,6 +210,11 @@ const toolArgs = {
     amount: z.number().positive().finite(),
     note: z.string().trim().max(280).optional(),
     paidWithCard: z.string().trim().min(1).max(80).optional(),
+  }),
+  propose_income: z.object({
+    source: z.string().trim().min(1).max(120),
+    amount: z.number().positive().finite(),
+    note: z.string().trim().max(280).optional(),
   }),
   propose_card_payment: z.object({
     card: z.string().trim().min(1).max(80),
@@ -284,6 +305,37 @@ export function buildTools(currency: Currency): Anthropic.Tool[] {
           },
         },
         required: ['merchant', 'category', 'amount'],
+      },
+    },
+    {
+      name: 'propose_income',
+      description:
+        'Draft money COMING IN for the user to review and approve. Use it whenever they mention ' +
+        'money they received — earned, paid, gifted, sold something, got their salary. This does ' +
+        'NOT record anything: it shows them a card with an "Approve & log" button. It is the ' +
+        'mirror of propose_expense, and the two must never be confused: an expense is money ' +
+        'leaving, this is money arriving.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          source: {
+            type: 'string',
+            description:
+              'Where the money came from, in their own words — "Salary", "Dad", "Freelance", ' +
+              '"Sold my bike". If they did not say, use a plain word like "Income" rather than ' +
+              'inventing a payer.',
+          },
+          amount: {
+            type: 'number',
+            description:
+              `A positive amount in ${currency}` +
+              (decimalsFor(currency) === 0
+                ? ', as a whole number. "1 million" is 1000000 and "10k" is 10000.'
+                : ', e.g. 250.00.'),
+          },
+          note: { type: 'string', description: 'Optional short context, e.g. "birthday money".' },
+        },
+        required: ['source', 'amount'],
       },
     },
     {
@@ -401,6 +453,10 @@ type Proposal =
       discountPercent?: number;
       discountMinor?: number;
     }
+  // Money in. amountMinor is positive here and stays positive all the way to
+  // the transactions table, where a positive row is what summary.ts sums into
+  // income — and therefore into safe-to-spend.
+  | { action: 'income'; source: string; amountMinor: number; note: string }
   | { action: 'card_payment'; cardId: string; cardName: string; amountMinor: number }
   | { action: 'sub_cancel'; subId: string; subName: string; amountMinor: number }
   | {
@@ -635,6 +691,22 @@ async function runTool(
       );
     }
 
+    case 'propose_income': {
+      const p = args as z.infer<(typeof toolArgs)['propose_income']>;
+
+      proposals.push({
+        action: 'income',
+        source: p.source,
+        amountMinor: displayToMinor(p.amount, currency),
+        note: p.note ?? '',
+      });
+      return ok(
+        `Income card for ${p.amount} ${currency} from ${p.source} shown to the user for approval. ` +
+          `It is not recorded until they tap "Approve & log". Tell them it is drafted and awaiting ` +
+          `their approval, and do not repeat the amount or the source — the card already shows both.`
+      );
+    }
+
     case 'propose_card_payment': {
       const p = args as z.infer<(typeof toolArgs)['propose_card_payment']>;
       const found = resolveByName(await loadCards(), p.card);
@@ -757,6 +829,12 @@ function replayOf(
   currency: Currency
 ): { name: string; input: Record<string, unknown>; ack: string } {
   switch (action) {
+    case 'income':
+      return {
+        name: 'propose_income',
+        input: { source: String(card.source ?? 'Income'), amount, note: String(card.note ?? '') },
+        ack: `Income card for ${amount} ${currency} from ${card.source} shown for approval.`,
+      };
     case 'card_payment':
       return {
         name: 'propose_card_payment',

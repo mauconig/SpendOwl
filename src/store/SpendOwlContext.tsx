@@ -385,6 +385,15 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
             // A missing action means a row written before card payments and
             // subscriptions existed, all of which were expenses.
             switch (p.action) {
+              case 'income':
+                return {
+                  id: m.id,
+                  type: 'card',
+                  action: 'income',
+                  source: p.source ?? 'Income',
+                  amountEur,
+                  note: p.note ?? '',
+                };
               case 'card_payment':
                 return {
                   id: m.id,
@@ -506,6 +515,18 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
       if (message?.type !== 'card') return;
 
       switch (message.action) {
+        case 'income':
+          addTransaction.mutate({
+            merchant: message.source,
+            category: 'income',
+            // Positive, unlike the expense case below which negates. This is
+            // the whole difference between the two, and it is what makes the
+            // row count towards income rather than against it.
+            amountMinor: eurToMinor(message.amountEur),
+            note: message.note,
+          });
+          return;
+
         case 'card_payment':
           if (message.cardId) payoffCard.mutate({ id: message.cardId, amountMinor: eurToMinor(message.amountEur) });
           return;

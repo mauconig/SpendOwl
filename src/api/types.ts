@@ -102,7 +102,7 @@ export type ApiMessageKind = 'ai' | 'user' | 'voice' | 'receipt' | 'card';
  * and subscriptions existed, which were all plain expenses — so a missing
  * action reads as 'expense' everywhere.
  */
-export type ApiCardAction = 'expense' | 'card_payment' | 'sub_cancel' | 'sub_add' | 'sub_edit';
+export type ApiCardAction = 'expense' | 'income' | 'card_payment' | 'sub_cancel' | 'sub_add' | 'sub_edit';
 
 export type ApiMessage = {
   id: string;
@@ -116,6 +116,8 @@ export type ApiMessage = {
     /** Always positive here; the sign is applied when the write happens. */
     amountMinor?: number;
     note?: string;
+    /** Where income came from — "Salary", "Dad". Only on `income`. */
+    source?: string;
     /** Set when an expense was charged to a card, and on card_payment. */
     cardId?: string;
     cardName?: string;

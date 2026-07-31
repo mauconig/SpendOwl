@@ -25,6 +25,7 @@ type CardMsg = Extract<Msg, { type: 'card' }>;
  */
 const CARD_CHROME: Record<CardMsg['action'], { icon: IconName; tint: string; label: string; done: string }> = {
   expense: { icon: 'card', tint: colors.mint, label: 'Expense', done: 'Logged' },
+  income: { icon: 'plus', tint: colors.mint, label: 'Income', done: 'Logged' },
   card_payment: { icon: 'card', tint: '#78ADEE', label: 'Card payment', done: 'Payment recorded' },
   sub_cancel: { icon: 'close', tint: colors.rose, label: 'Cancel subscription', done: 'Cancelled' },
   sub_add: { icon: 'plus', tint: '#C9B8F5', label: 'New subscription', done: 'Added' },
@@ -79,7 +80,18 @@ function CardMessage({ m }: { m: CardMsg }) {
             it would be wrong by three orders of magnitude. */}
         {m.amountEur != null && (
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontSize: 27, fontFamily: moneyFont(cardCurrency(m, baseCur), 'bold'), letterSpacing: -0.5, color: '#FFFFFF' }}>
+            {/* Income is the one card where money moves the other way, so it
+                is signed and tinted — the direction should be readable without
+                reading the label. */}
+            <Text
+              style={{
+                fontSize: 27,
+                fontFamily: moneyFont(cardCurrency(m, baseCur), 'bold'),
+                letterSpacing: -0.5,
+                color: m.action === 'income' ? colors.mint : '#FFFFFF',
+              }}
+            >
+              {m.action === 'income' ? '+' : ''}
               {formatMoney(m.amountEur, cardCurrency(m, baseCur), decimalsFor(cardCurrency(m, baseCur)))}
             </Text>
             {/* The amount above is already net, so the struck-through original
@@ -193,6 +205,8 @@ function cardCurrency(m: CardMsg, baseCur: Currency): Currency {
 
 function cardTitle(m: CardMsg): string {
   switch (m.action) {
+    case 'income':
+      return m.source;
     case 'card_payment':
       return m.cardName;
     case 'sub_cancel':
@@ -206,6 +220,10 @@ function cardTitle(m: CardMsg): string {
 
 function cardSubtitle(m: CardMsg): string {
   switch (m.action) {
+    case 'income':
+      // Says what it does rather than what it is: income is what safe-to-spend
+      // is computed from, so this is the number that unlocks the Dashboard.
+      return [m.note, 'Money in — raises what you can safely spend'].filter(Boolean).join(' · ');
     case 'card_payment':
       return 'Towards this card — lowers what you owe';
     case 'sub_cancel':
