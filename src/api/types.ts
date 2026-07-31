@@ -102,7 +102,11 @@ export type ApiMessageKind = 'ai' | 'user' | 'voice' | 'receipt' | 'card';
  * and subscriptions existed, which were all plain expenses — so a missing
  * action reads as 'expense' everywhere.
  */
-export type ApiCardAction = 'expense' | 'income' | 'card_payment' | 'sub_cancel' | 'sub_add' | 'sub_edit';
+export const CARD_ACTIONS = ['expense', 'income', 'card_payment', 'sub_cancel', 'sub_add', 'sub_edit'] as const;
+
+// Derived from the list rather than written twice, so a new action cannot be
+// added to the type while the runtime check that guards old builds forgets it.
+export type ApiCardAction = (typeof CARD_ACTIONS)[number];
 
 export type ApiMessage = {
   id: string;

@@ -35,6 +35,7 @@ import {
   useSettings,
 } from '../api/hooks';
 import {
+  CARD_ACTIONS,
   eurToMinor,
   minorToEur,
   type ApiDiscountCategory,
@@ -56,6 +57,9 @@ import {
 } from './constants';
 
 export const GLOW = true;
+
+/** Card actions this build can render. See serverMessages for why it matters. */
+const KNOWN_CARD_ACTIONS = new Set<string>(CARD_ACTIONS);
 
 export type { Currency };
 type CardState = { tax: boolean; ok: boolean };
@@ -382,8 +386,27 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
           case 'card': {
             const p = m.payload;
             const amountEur = Math.abs(minorToEur(p.amountMinor ?? 0));
-            // A missing action means a row written before card payments and
-            // subscriptions existed, all of which were expenses.
+
+            // An action this build does not know about must never be guessed
+            // at. The server can start proposing something new at any time —
+            // income did exactly that — and this app keeps running on phones
+            // that shipped before it. Falling through to the expense branch
+            // turned an income card into "3.600.000 on food and drink", one
+            // tap away from writing a transaction with the wrong sign, the
+            // wrong category and a merchant of "Unknown".
+            //
+            // Note this tests for an action that is present but unrecognised.
+            // A *missing* action is the legacy case — rows written before card
+            // payments and subscriptions existed, all of which were expenses —
+            // and still means expense.
+            if (p.action !== undefined && !KNOWN_CARD_ACTIONS.has(p.action)) {
+              return {
+                id: m.id,
+                type: 'ai',
+                text: 'This one needs a newer version of the app to show. Update SpendOwl to see it.',
+              };
+            }
+
             switch (p.action) {
               case 'income':
                 return {
