@@ -107,7 +107,11 @@ interface SpendOwlStore {
   // dashboard
   summary: ApiSummary | null;
   transactions: ApiTransaction[];
-  overBudget: boolean;
+  /** Balance below zero. Was `overBudget`, which a calendar roll could trigger. */
+  overdrawn: boolean;
+  /** What was in the account before the app started watching, in minor units. */
+  openingBalanceMinor: number;
+  setOpeningBalance: (minor: number) => void;
   selCat: CatKey | null;
   setSelCat: (c: CatKey | null) => void;
   txOpen: boolean;
@@ -856,7 +860,9 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
 
     summary,
     transactions: transactionsQuery.data ?? [],
-    overBudget: summary?.overBudget ?? false,
+    overdrawn: summary?.overdrawn ?? false,
+    openingBalanceMinor: settings?.openingBalanceMinor ?? 0,
+    setOpeningBalance: (minor: number) => updateSettings.mutate({ openingBalanceMinor: minor }),
     selCat,
     setSelCat,
     txOpen,

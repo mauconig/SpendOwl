@@ -6,6 +6,7 @@ import { query, queryOne } from '../db.ts';
 const SELECT = `
   SELECT base_currency        AS "baseCurrency",
          monthly_budget_minor AS "monthlyBudgetMinor",
+         opening_balance_minor AS "openingBalanceMinor",
          language,
          notif,
          bio
@@ -15,6 +16,8 @@ const SELECT = `
 const updateSchema = z.object({
   baseCurrency: z.enum(['EUR', 'USD', 'PYG']).optional(),
   monthlyBudgetMinor: z.int().positive().optional(),
+  // Signed: someone can start overdrawn, so this is not .positive().
+  openingBalanceMinor: z.int().optional(),
   language: z.enum(['en', 'es']).optional(),
   notif: z.boolean().optional(),
   bio: z.boolean().optional(),
@@ -36,17 +39,21 @@ export const settingsRoute = new Hono<AppEnv>()
     const row = await queryOne(
       `UPDATE users
           SET base_currency        = COALESCE($2, base_currency),
-              monthly_budget_minor = COALESCE($3, monthly_budget_minor),
-              language             = COALESCE($4, language),
-              notif                = COALESCE($5, notif),
-              bio                  = COALESCE($6, bio)
+              monthly_budget_minor  = COALESCE($3, monthly_budget_minor),
+              opening_balance_minor = COALESCE($4, opening_balance_minor),
+              language              = COALESCE($5, language),
+              notif                 = COALESCE($6, notif),
+              bio                   = COALESCE($7, bio)
         WHERE id = $1
         RETURNING base_currency AS "baseCurrency", monthly_budget_minor AS "monthlyBudgetMinor",
-                  language, notif, bio`,
+                  opening_balance_minor AS "openingBalanceMinor", language, notif, bio`,
       [
         c.get('userId'),
         body.baseCurrency ?? null,
         body.monthlyBudgetMinor ?? null,
+        // `?? null` and not `|| null`: 0 is a legitimate opening balance and
+        // must reach COALESCE as 0, not be swallowed into "leave unchanged".
+        body.openingBalanceMinor ?? null,
         body.language ?? null,
         body.notif ?? null,
         body.bio ?? null,

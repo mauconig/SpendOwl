@@ -310,6 +310,25 @@ const migrations: Migration[] = [
         ADD COLUMN language TEXT NOT NULL DEFAULT 'es' CHECK (language IN ('en', 'es'));
     `,
   },
+  {
+    version: 11,
+    name: 'user_opening_balance',
+    sql: /* sql */ `
+      -- What was in the account before the app started watching it.
+      --
+      -- Safe-to-spend is a running balance rather than a monthly figure, and a
+      -- running balance can only count what it has seen. Without this the hero
+      -- understates the real account by whatever was already there on day one,
+      -- and the only way for someone to correct it would be to invent an income
+      -- transaction — which would then also appear in their income totals and
+      -- in the month's reporting, where it does not belong.
+      --
+      -- Signed on purpose: no CHECK (>= 0), because someone can genuinely start
+      -- overdrawn and an app that refuses to represent that is lying to them.
+      ALTER TABLE users
+        ADD COLUMN opening_balance_minor INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {

@@ -37,24 +37,22 @@ export type ApiTrendPoint = { day: string; cumulativeMinor: number };
 
 export type ApiSummary = {
   month: string;
-  budgetMinor: number;
+  /**
+   * What is in the account, all-time. The only figure here with no date window
+   * on it: a balance is not a monthly quantity, and computing it over one is
+   * what made the Dashboard reset to zero every 1st.
+   */
+  balanceMinor: number;
+  /** Balance below zero. Replaces the old budget-derived `overBudget`. */
+  overdrawn: boolean;
   /** Everything spent this month, whatever paid for it. For the donut. */
   spentMinor: number;
-  /**
-   * What has left the account: spending not put on a card, plus card payments.
-   * Anything about how much is left uses this, never spentMinor — a card
-   * purchase has not been paid for yet.
-   */
+  /** What left the account this month: uncarded spending plus card payments. */
   accountOutMinor: number;
+  /** Income received this month. Reporting only — the balance is all-time. */
   incomeMinor: number;
-  safeToSpendMinor: number;
-  overBudget: boolean;
-  percentOfBudget: number;
   daysLeft: number;
   daysInMonth: number;
-  /** Positive means under pace for the month so far. */
-  paceDeltaMinor: number;
-  pacePercent: number;
   categories: ApiCategoryTotal[];
   trend: ApiTrendPoint[];
 };
@@ -240,6 +238,8 @@ export type ApiDiscount = {
 export type ApiSettings = {
   baseCurrency: Currency;
   monthlyBudgetMinor: number;
+  /** What was in the account before the app started watching. Signed. */
+  openingBalanceMinor: number;
   /** Which language the app renders in, and the insights are written in. */
   language: Language;
   notif: boolean;

@@ -27,24 +27,30 @@ function smooth(pts: [number, number][]) {
 
 /**
  * `series` is the running cumulative spend for each elapsed day of the month,
- * from GET /api/summary — it used to be the hardcoded TREND_CUR array. The
- * dashed line is the flat budget run-rate for comparison.
+ * from GET /api/summary — it used to be the hardcoded TREND_CUR array.
+ *
+ * `reference` draws a flat dashed run-rate to compare against — this month's
+ * income. It is optional and skipped when zero or absent, which is a real case
+ * rather than an edge one: someone paid on the 30th starts a month with no
+ * income in it yet, and a dashed line pinned to the floor would read as a
+ * budget of nothing rather than as "no comparison available".
  */
 export function TrendChart({
   series,
   daysInMonth,
-  budget,
+  reference = 0,
   monthLabel,
 }: {
   series: number[];
   daysInMonth: number;
-  budget: number;
+  reference?: number;
   monthLabel: string;
 }) {
   if (series.length === 0) return <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} />;
 
-  // Headroom above whichever is taller: the budget line or actual spend.
-  const maxY = Math.max(budget, ...series) * 1.12 || 1;
+  const hasReference = reference > 0;
+  // Headroom above whichever is taller: the reference line or actual spend.
+  const maxY = Math.max(hasReference ? reference : 0, ...series) * 1.12 || 1;
   const lastIndex = Math.max(daysInMonth - 1, 1);
   const X = (i: number) => L + ((W - L - R) * i) / lastIndex;
   const Y = (v: number) => T + (H - T - B) * (1 - v / maxY);
@@ -68,13 +74,15 @@ export function TrendChart({
         </LinearGradient>
       </Defs>
       <Line x1={L} y1={H - B} x2={W - R} y2={H - B} stroke="rgba(255,255,255,.08)" />
-      <Path
-        d={`M${X(0)},${Y(0)}L${X(lastIndex)},${Y(budget)}`}
-        stroke="rgba(245,245,247,.3)"
-        strokeWidth={1.5}
-        strokeDasharray="4 5"
-        fill="none"
-      />
+      {hasReference && (
+        <Path
+          d={`M${X(0)},${Y(0)}L${X(lastIndex)},${Y(reference)}`}
+          stroke="rgba(245,245,247,.3)"
+          strokeWidth={1.5}
+          strokeDasharray="4 5"
+          fill="none"
+        />
+      )}
       <Path d={area} fill="url(#soArea)" />
       <Path d={d} stroke="url(#soLine)" strokeWidth={2.5} fill="none" strokeLinecap="round" />
       <Circle cx={last[0]} cy={last[1]} r={4} fill="#FFFFFF" />

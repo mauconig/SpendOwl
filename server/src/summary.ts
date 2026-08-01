@@ -17,17 +17,21 @@ import { query, queryOne } from './db.ts';
  */
 export type Summary = {
   month: string;
-  budgetMinor: number;
+  /**
+   * What is in the account, all-time. The one figure here with no date window
+   * on it — see the query below for why that is the whole point.
+   */
+  balanceMinor: number;
+  /** Balance is negative. Replaces the old "over budget", which was calendar noise. */
+  overdrawn: boolean;
+  /** Everything spent this month, whatever paid for it. Feeds the donut. */
   spentMinor: number;
+  /** What left the account this month: uncarded spending plus card payments. */
   accountOutMinor: number;
+  /** Income received this month. Reporting only — the balance does not use it. */
   incomeMinor: number;
-  safeToSpendMinor: number;
-  overBudget: boolean;
-  percentOfBudget: number;
   daysLeft: number;
   daysInMonth: number;
-  paceDeltaMinor: number;
-  pacePercent: number;
   categories: { key: string; spentMinor: number }[];
   trend: { day: string; cumulativeMinor: number }[];
 };
@@ -68,6 +72,39 @@ export async function getSummary(userId: string): Promise<Summary | null> {
 
   if (!totals) return null;
 
+  /**
+   * The balance, and the one query here with no date filter — which is the
+   * entire point of it.
+   *
+   * Everything above is bounded to the current calendar month, and safe-to-spend
+   * used to be `income - accountOut` inside that window. On the 1st both terms
+   * are zero, so it answered zero however much money existed: someone paid on
+   * the 30th watched their account empty itself overnight. A balance is not a
+   * monthly quantity, so it is not computed over a month.
+   *
+   * `card_id IS NULL` carries the same meaning as in the monthly figures above:
+   * a card purchase is spending that has not been paid for yet, so it leaves
+   * the balance alone until the card payment does.
+   */
+  const account = await queryOne<{
+    openingBalanceMinor: number;
+    allIncomeMinor: number;
+    allAccountOutMinor: number;
+  }>(
+    `SELECT u.opening_balance_minor AS "openingBalanceMinor",
+            COALESCE(SUM( t.amount_minor) FILTER (WHERE t.amount_minor > 0), 0)::bigint AS "allIncomeMinor",
+            COALESCE(SUM(-t.amount_minor) FILTER (WHERE t.amount_minor < 0
+                                                    AND t.card_id IS NULL), 0)::bigint AS "allAccountOutMinor"
+       FROM users u
+       LEFT JOIN transactions t ON t.user_id = u.id
+      WHERE u.id = $1
+      GROUP BY u.id, u.opening_balance_minor`,
+    [userId]
+  );
+
+  const balanceMinor =
+    (account?.openingBalanceMinor ?? 0) + (account?.allIncomeMinor ?? 0) - (account?.allAccountOutMinor ?? 0);
+
   const categories = await query<{ key: string; spentMinor: number }>(
     `SELECT category AS key, SUM(-amount_minor)::bigint AS "spentMinor"
        FROM transactions
@@ -102,42 +139,25 @@ export async function getSummary(userId: string): Promise<Summary | null> {
 
   const { spentMinor, accountOutMinor, incomeMinor, dayOfMonth, daysInMonth, month } = totals;
 
-  // What you earned this month is the baseline, not a stored budget figure.
-  //
-  // `users.monthly_budget_minor` is no longer read here. Nothing in the app
-  // ever set it — there is no control for it on any screen — so every account
-  // carried the column default, and the Dashboard announced a "safe to spend"
-  // derived from a number the user had never seen, let alone chosen. Income is
-  // summed from the user's own income transactions, so the figure is either
-  // real or zero; zero is honest, an invented 240.000 is not.
-  const budgetMinor = incomeMinor;
-
-  // Pace compares what has left the account against a flat run-rate across the
-  // month. Positive delta means under pace.
-  const expectedByNowMinor = Math.round((budgetMinor * dayOfMonth) / daysInMonth);
-  const paceDeltaMinor = expectedByNowMinor - accountOutMinor;
+  // There is no budget figure any more, and with it go the progress bar and the
+  // pace line. Both were computed from *this month's income treated as a
+  // budget* — the same quantity that reset on the 1st — so on that date they
+  // read 100% used and infinitely over pace. Keeping them would have left a
+  // smaller copy of the bug this change exists to remove.
 
   return {
     month,
-    budgetMinor,
+    balanceMinor,
+    overdrawn: balanceMinor < 0,
     // Everything spent this month, whatever paid for it — the question the
     // category donut answers.
     spentMinor,
-    // What is gone from the account. Everything about "how much is left"
-    // hangs off this one, never off spentMinor: a card purchase is spending
-    // that has not been paid for yet, and counting it here would take it off
-    // the account twice, once at the till and again on the statement.
+    // What left the account this month. Reporting only: the balance above is
+    // all-time, so this is the month's slice of the same movement.
     accountOutMinor,
     incomeMinor,
-    safeToSpendMinor: incomeMinor - accountOutMinor,
-    // With no income logged there is nothing to be over, so a first coffee on a
-    // fresh account must not light up the over-budget warning.
-    overBudget: incomeMinor > 0 && accountOutMinor > incomeMinor,
-    percentOfBudget: budgetMinor > 0 ? (accountOutMinor / budgetMinor) * 100 : 0,
     daysLeft: daysInMonth - dayOfMonth,
     daysInMonth,
-    paceDeltaMinor,
-    pacePercent: expectedByNowMinor > 0 ? (paceDeltaMinor / expectedByNowMinor) * 100 : 0,
     categories,
     trend,
   };

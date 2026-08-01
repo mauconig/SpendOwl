@@ -37,7 +37,7 @@ function heroSplit(amount: number, cur: Currency): { main: string; frac: string 
 
 export function DashboardScreen() {
   const store = useSpendOwl();
-  const { selCat, setSelCat, overBudget, baseCur } = store;
+  const { selCat, setSelCat, overdrawn, baseCur } = store;
 
   const summary = store.summary;
 
@@ -87,16 +87,15 @@ export function DashboardScreen() {
   // as free. Never sum `nativePrice` — those are in different currencies.
   const subsTotal = subsActive.reduce((a, s) => a + (s.price ?? 0), 0);
 
-  const budget = minorToEur(summary?.budgetMinor ?? 0);
-  // Every "how much is left" figure on this screen is about the account, so it
-  // reads accountOut, not spent. Spending sitting on a card has not left the
-  // account yet and must not be subtracted from it twice.
-  const accountOut = minorToEur(summary?.accountOutMinor ?? 0);
-  const safeToSpend = minorToEur(summary?.safeToSpendMinor ?? 0);
-  const paceDelta = minorToEur(summary?.paceDeltaMinor ?? 0);
-  const percentOfBudget = summary?.percentOfBudget ?? 0;
+  // The balance carries across months and is the only figure the hero shows.
+  // It reads accountOut-style movement, not `spent`: money sitting on a card
+  // has not left the account and must not be subtracted from it twice.
+  const balance = minorToEur(summary?.balanceMinor ?? 0);
+  // These two describe the calendar month the donut below covers, nothing more.
+  const monthIn = minorToEur(summary?.incomeMinor ?? 0);
+  const monthOut = minorToEur(summary?.accountOutMinor ?? 0);
   const daysLeft = summary?.daysLeft ?? 0;
-  const hero = heroSplit(overBudget ? accountOut - budget : safeToSpend, baseCur);
+  const hero = heroSplit(Math.abs(balance), baseCur);
   const monthKey = summary?.month ?? '';
   const monthName = monthLong(monthKey);
 
@@ -104,12 +103,12 @@ export function DashboardScreen() {
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 64, gap: 14 }}>
       <View style={{ backgroundColor: colors.card, borderRadius: 24, padding: 20, paddingBottom: 18 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 13, color: colors.textDim50 }}>
-            {t('Safe to Spend')} · {monthName}
-          </Text>
+          {/* No month appended: the balance carries across months, and
+              labelling it "· July" is what made the reset look intentional. */}
+          <Text style={{ fontSize: 13, color: colors.textDim50 }}>{t('Safe to Spend')}</Text>
           <Icon name="arrowNE" size={18} color={colors.textDim40} />
         </View>
-        {!overBudget ? (
+        {!overdrawn ? (
           <Text style={{ fontSize: 44, fontFamily: moneyFont(baseCur, 'bold'), marginTop: 6, letterSpacing: -1.5, color: '#FFFFFF' }}>
             {hero.main}
             {hero.frac && <Text style={{ fontSize: 26, fontFamily: moneyFont(baseCur, 'medium'), color: colors.textDim40 }}>{hero.frac}</Text>}
@@ -120,44 +119,38 @@ export function DashboardScreen() {
             {hero.frac && <Text style={{ fontSize: 26, fontFamily: moneyFont(baseCur, 'medium'), color: 'rgba(248,113,113,.6)' }}>{hero.frac}</Text>}
           </Text>
         )}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
-          <Icon name={overBudget ? 'trendDown' : 'trendUp'} size={16} color={overBudget ? colors.rose : colors.mint} />
-          <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: overBudget ? colors.rose : colors.mint }}>
-            {overBudget
-              ? tf('{amount} over budget ({pct}%)', {
-                  amount: formatMoney(accountOut - budget, baseCur, 2),
-                  pct: (percentOfBudget - 100).toFixed(0),
-                })
-              : tf(paceDelta >= 0 ? '{amount} under pace ({pct}%)' : '{amount} over pace ({pct}%)', {
-                  amount: formatMoney(Math.abs(paceDelta), baseCur, 0),
-                  pct: Math.abs(summary?.pacePercent ?? 0).toFixed(1),
-                })}
-          </Text>
-        </View>
-        <View style={{ marginTop: 14, height: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
-          <View
-            style={{
-              height: '100%',
-              width: `${Math.min(Math.max(percentOfBudget, 0), 100)}%`,
-              borderRadius: 999,
-              backgroundColor: overBudget ? colors.rose : undefined,
-            }}
-          >
-            {!overBudget && (
-              <LinearGradient colors={GRAD} locations={GRAD_LOCATIONS} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1 }} />
-            )}
+
+        {/* This month's movement, which is the span the donut below covers.
+            It replaces the old progress bar and pace line: both divided by
+            "this month's income treated as a budget", the very figure that
+            reset on the 1st, so on that date they read 100% used and
+            infinitely over pace. In and out are stated plainly instead — no
+            denominator, nothing to reset. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <Icon name="trendUp" size={14} color={colors.mint} />
+            <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: colors.mint }}>
+              {formatMoney(monthIn, baseCur, 0)}
+            </Text>
           </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <Icon name="trendDown" size={14} color={colors.textDim55} />
+            <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: colors.textDim55 }}>
+              {formatMoney(monthOut, baseCur, 0)}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 11.5, color: colors.textDim45 }}>{monthName}</Text>
         </View>
+
         <Text style={{ marginTop: 8, fontSize: 11.5, color: colors.textDim45 }}>
-          {tf(daysLeft === 1 ? '{pct}% of {total} · {n} day left' : '{pct}% of {total} · {n} days left', {
-            pct: percentOfBudget.toFixed(0),
-            total: formatMoney(budget, baseCur, 0),
+          {tf(daysLeft === 1 ? '{n} day left in {month}' : '{n} days left in {month}', {
             n: daysLeft,
+            month: monthName,
           })}
         </Text>
       </View>
 
-      {overBudget && (
+      {overdrawn && (
         <View
           style={{
             flexDirection: 'row',
@@ -173,11 +166,10 @@ export function DashboardScreen() {
         >
           <Icon name="warn" size={20} color={colors.amber} />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.amber }}>{t('Budget exceeded')}</Text>
+            <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.amber }}>{t('Account overdrawn')}</Text>
             <Text style={{ fontSize: 12, color: colors.textDim55, marginTop: 2, lineHeight: 17 }}>
-              {tf('You’re {amount} past {month}’s budget. I can draft a catch-up plan for the last two weeks.', {
-                amount: formatMoney(accountOut - budget, baseCur, 2),
-                month: monthName,
+              {tf('You’re {amount} below zero. Log any income you have not recorded, or ask me for a plan.', {
+                amount: formatMoney(Math.abs(balance), baseCur, 2),
               })}
             </Text>
           </View>
@@ -322,7 +314,7 @@ export function DashboardScreen() {
           <TrendChart
             series={(summary?.trend ?? []).map(point => minorToEur(point.cumulativeMinor))}
             daysInMonth={summary?.daysInMonth ?? 30}
-            budget={budget}
+            reference={monthIn}
             monthLabel={monthShort(monthKey)}
           />
         </View>
@@ -331,10 +323,14 @@ export function DashboardScreen() {
             <View style={{ width: 14, height: 3, borderRadius: 2, backgroundColor: '#78ADEE' }} />
             <Text style={{ fontSize: 11, color: colors.textDim60 }}>{t('This month')}</Text>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={{ width: 14, height: 0, borderTopWidth: 2, borderStyle: 'dashed', borderTopColor: 'rgba(245,245,247,.35)' }} />
-            <Text style={{ fontSize: 11, color: colors.textDim60 }}>{t('Budget pace')}</Text>
-          </View>
+          {/* Only when the line is actually drawn — TrendChart skips it with no
+              income this month, and a legend for an absent line is a puzzle. */}
+          {monthIn > 0 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ width: 14, height: 0, borderTopWidth: 2, borderStyle: 'dashed', borderTopColor: 'rgba(245,245,247,.35)' }} />
+              <Text style={{ fontSize: 11, color: colors.textDim60 }}>{t('Income this month')}</Text>
+            </View>
+          )}
         </View>
       </View>
 

@@ -214,23 +214,27 @@ function buildFallbackInsights(store: ReturnType<typeof useSpendOwl>): Insight[]
   const insights: Insight[] = [];
 
   const spent = minorToEur(summary?.spentMinor ?? 0);
-  const safeToSpend = minorToEur(summary?.safeToSpendMinor ?? 0);
-  const paceDelta = minorToEur(summary?.paceDeltaMinor ?? 0);
+  const balance = minorToEur(summary?.balanceMinor ?? 0);
+  const monthIn = minorToEur(summary?.incomeMinor ?? 0);
+  const monthOut = minorToEur(summary?.accountOutMinor ?? 0);
   const monthName = monthLong(summary?.month ?? '');
 
   if (summary) {
-    const underPace = paceDelta >= 0;
+    // States the balance and this month's movement rather than a pace against
+    // a budget — there is no budget any more, and the balance is not a monthly
+    // figure to be paced against in the first place.
+    const healthy = !summary.overdrawn;
     insights.push({
-      title: underPace ? t("You're pacing well") : t('Spending above pace'),
-      body: tf(
-        underPace
-          ? '{amount} under your budget pace this month. Safe to spend: {safe}.'
-          : '{amount} over your budget pace this month. Safe to spend: {safe}.',
-        { amount: formatMoney(Math.abs(paceDelta), baseCur, 0), safe: formatMoney(safeToSpend, baseCur, 0) }
-      ),
+      title: healthy ? t('Your balance') : t('Account overdrawn'),
+      body: tf(healthy ? '{balance} in your account. {inn} in and {out} out in {month}.' : '{balance} below zero. {inn} in and {out} out in {month}.', {
+        balance: formatMoney(Math.abs(balance), baseCur, 0),
+        inn: formatMoney(monthIn, baseCur, 0),
+        out: formatMoney(monthOut, baseCur, 0),
+        month: monthName,
+      }),
       cta: t('Ask the coach'),
-      icon: underPace ? 'trendUp' : 'trendDown',
-      iconColor: underPace ? colors.mint : colors.rose,
+      icon: healthy ? 'trendUp' : 'trendDown',
+      iconColor: healthy ? colors.mint : colors.rose,
       onTap: () => store.setNav('chat'),
     });
 

@@ -18,8 +18,18 @@ export const ES: Record<string, string> = {
 
   // ---- Dashboard ----
   'Safe to Spend': 'Disponible',
-  'Budget pace': 'Ritmo de gasto',
-  'Budget exceeded': 'Presupuesto excedido',
+  'Income this month': 'Ingresos del mes',
+  'Account overdrawn': 'Cuenta en negativo',
+  'Your balance': 'Tu saldo',
+  'Starting balance': 'Saldo inicial',
+  '{balance} in your account. {inn} in and {out} out in {month}.':
+    '{balance} en tu cuenta. {inn} entró y {out} salió en {month}.',
+  '{balance} below zero. {inn} in and {out} out in {month}.':
+    '{balance} bajo cero. {inn} entró y {out} salió en {month}.',
+  'You’re {amount} below zero. Log any income you have not recorded, or ask me for a plan.':
+    'Estás {amount} bajo cero. Registrá los ingresos que te falten, o pedime un plan.',
+  '{n} day left in {month}': 'queda {n} día de {month}',
+  '{n} days left in {month}': 'quedan {n} días de {month}',
   'Where it’s going': 'En qué se va',
   'Spending trajectory': 'Trayectoria del gasto',
   Transactions: 'Movimientos',

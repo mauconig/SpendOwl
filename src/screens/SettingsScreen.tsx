@@ -1,10 +1,11 @@
 import { useClerk, useUser } from '@clerk/expo';
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Toggle } from '../components/Toggle';
 import { t } from '../i18n';
-import { colors, fonts } from '../theme';
+import { colors, fonts, displayToMinor, minorToDisplay } from '../theme';
+import { formatAmountInput, parseAmountInput } from '../utils/moneyInput';
 import { useSpendOwl } from '../store/SpendOwlContext';
 
 function Row({ label, right }: { label: string; right: React.ReactNode }) {
@@ -33,6 +34,55 @@ function CurPill({ label, active, onPress }: { label: string; active: boolean; o
     >
       <Text style={{ fontFamily: fonts.bold, fontSize: 10.5, color: active ? '#0A0A0B' : colors.textDim45 }}>{label}</Text>
     </Pressable>
+  );
+}
+
+/**
+ * What was in the account before the app started watching it.
+ *
+ * Committed on blur rather than per keystroke: this writes to the server and
+ * moves the Dashboard hero, and doing that on every digit would have the
+ * balance leaping about while someone is halfway through typing a number.
+ *
+ * Local state is seeded from the stored value and re-seeded whenever that or
+ * the currency changes, so switching currency reformats the field instead of
+ * leaving guaraní digits sitting in a euro input.
+ */
+function OpeningBalanceField() {
+  const store = useSpendOwl();
+  const { baseCur, openingBalanceMinor, setOpeningBalance } = store;
+  const [text, setText] = useState('');
+
+  useEffect(() => {
+    setText(openingBalanceMinor === 0 ? '' : formatAmountInput(String(minorToDisplay(openingBalanceMinor, baseCur)), baseCur));
+  }, [openingBalanceMinor, baseCur]);
+
+  const commit = () => {
+    const minor = displayToMinor(parseAmountInput(text, baseCur), baseCur);
+    if (minor !== openingBalanceMinor) setOpeningBalance(minor);
+  };
+
+  return (
+    <TextInput
+      value={text}
+      onChangeText={v => setText(formatAmountInput(v, baseCur))}
+      onBlur={commit}
+      onSubmitEditing={commit}
+      placeholder="0"
+      placeholderTextColor="rgba(245,245,247,.3)"
+      keyboardType="number-pad"
+      returnKeyType="done"
+      style={{
+        minWidth: 110,
+        textAlign: 'right',
+        color: colors.text,
+        fontSize: 13,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 10,
+        backgroundColor: colors.iconBg,
+      }}
+    />
   );
 }
 
@@ -89,6 +139,10 @@ export function SettingsScreen() {
             </View>
           }
         />
+        <Divider />
+        {/* Sits under the currency because it is entered in it, and the field
+            reformats when that changes. */}
+        <Row label={t('Starting balance')} right={<OpeningBalanceField />} />
         <Divider />
         <Row
           label={t('Language')}

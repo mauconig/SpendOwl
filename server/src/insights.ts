@@ -354,17 +354,17 @@ async function buildSnapshot(userId: string, currency: Currency) {
       today: appDate(),
       month: summary.month,
       daysLeft: summary.daysLeft,
-      budget: money(summary.budgetMinor),
-      spent: money(summary.spentMinor),
-      // Card spending is in `spent` but has not left the account; safeToSpend
-      // is income minus this figure, not minus `spent`.
-      leftTheAccount: money(summary.accountOutMinor),
-      income: money(summary.incomeMinor),
-      safeToSpend: money(summary.safeToSpendMinor),
-      safeToSpendPerRemainingDay: money(Math.round(summary.safeToSpendMinor / daysLeft)),
-      overBudget: summary.overBudget,
-      percentOfBudget: Math.round(summary.percentOfBudget),
-      aheadOfPaceBy: money(summary.paceDeltaMinor),
+      // The account balance, all-time. Deliberately not a monthly figure and
+      // not divided by the days left in the month: more income will arrive
+      // before those days are out, so a per-remaining-day allowance derived
+      // from it would be wrong on the way in and wrong on the way out.
+      accountBalance: money(summary.balanceMinor),
+      overdrawn: summary.overdrawn,
+      // The three below describe this calendar month only, which is the span
+      // categoriesThisMonth and topMerchantsThisMonth also cover.
+      spentThisMonth: money(summary.spentMinor),
+      leftTheAccountThisMonth: money(summary.accountOutMinor),
+      incomeThisMonth: money(summary.incomeMinor),
       categoriesThisMonth: summary.categories.map(c => ({
         category: c.key,
         spent: money(c.spentMinor),

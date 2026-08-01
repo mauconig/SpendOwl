@@ -120,10 +120,11 @@ dad gave me 10k", "me pagaron", "cobré", "vendí la bici", "salary landed" are 
 money ARRIVING — propose_income, never propose_expense. Getting this backwards
 does real damage: it would log their salary as if they had spent it.
 
-Income is what safe-to-spend is built from — it is their income minus what they
-have spent this month — so logging it is not bookkeeping, it is what makes every
+Income is what the account balance is built from — the balance is everything
+that has come in minus everything that has left the account, carried forward
+with no monthly reset — so logging it is not bookkeeping, it is what makes every
 number on the Dashboard mean anything. An account with no income logged shows
-zero to spend.
+nothing to spend.
 
 \`source\` is where it came from, in their words: "Salary", "Dad", "Freelance".
 If they never say, use a plain word like "Income" — do not invent a payer. Money
@@ -247,9 +248,10 @@ export function buildTools(currency: Currency): Anthropic.Tool[] {
     {
       name: 'get_budget_summary',
       description:
-        `This month's budget picture, with every amount in ${currency}: spent, income, monthly ` +
-        'budget, safe-to-spend, whether they are over budget, how far ahead or behind the flat ' +
-        'daily pace they are, days left in the month, and spend per category. Call this for any ' +
+        `Their money picture, with every amount in ${currency}. accountBalance is what is in ` +
+        'the account right now — all-time, carried across months, and the answer to "how much ' +
+        'do I have". The figures named ThisMonth cover the current calendar month only and are ' +
+        'never a balance. Also spend per category and days left in the month. Call this for any ' +
         'question about how much is left, how they are tracking, or where their money is going.',
       input_schema: { type: 'object', properties: {} },
     },
@@ -559,18 +561,16 @@ async function runTool(
       return ok(JSON.stringify({
         currency,
         month: summary.month,
-        spent: money(summary.spentMinor),
-        // Spending on a card has not left the account yet. safeToSpend is
-        // income minus this, not minus `spent`, so quoting `spent` as the
-        // reason a balance is what it is would not add up.
-        leftTheAccount: money(summary.accountOutMinor),
-        income: money(summary.incomeMinor),
-        budget: money(summary.budgetMinor),
-        safeToSpend: money(summary.safeToSpendMinor),
-        overBudget: summary.overBudget,
-        percentOfBudget: Math.round(summary.percentOfBudget),
+        // What is in the account right now, all-time and carrying over between
+        // months. This is the answer to "how much do I have"; the three
+        // month-scoped figures below are not, and quoting one of them as a
+        // balance is the mistake this naming exists to prevent.
+        accountBalance: money(summary.balanceMinor),
+        overdrawn: summary.overdrawn,
+        spentThisMonth: money(summary.spentMinor),
+        leftTheAccountThisMonth: money(summary.accountOutMinor),
+        incomeThisMonth: money(summary.incomeMinor),
         daysLeft: summary.daysLeft,
-        aheadOfPaceBy: money(summary.paceDeltaMinor),
         categories: summary.categories.map(c => ({ category: c.key, spent: money(c.spentMinor) })),
       }));
     }
