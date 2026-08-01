@@ -5,6 +5,7 @@ import type { ApiDiscount, ApiDiscountCategory } from '../api/types';
 import { Icon } from '../icons';
 import { colors, fonts, formatPYG } from '../theme';
 import { BANK_COLORS, CATEGORY_LABELS, CATEGORY_ORDER, offerBadge } from '../utils/discounts';
+import { t, tf } from '../i18n';
 
 const ALL = 'all';
 
@@ -75,7 +76,7 @@ const DiscountCard = React.memo(function DiscountCard({ d }: { d: ApiDiscount })
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
         <Text style={{ fontSize: 10.5, fontFamily: fonts.mono, color: BANK_COLORS[d.bank] ?? colors.textDim45 }}>{d.bank}</Text>
         {d.category && (
-          <Text style={{ fontSize: 10.5, color: colors.textDim45, fontFamily: fonts.mono }}>{CATEGORY_LABELS[d.category]}</Text>
+          <Text style={{ fontSize: 10.5, color: colors.textDim45, fontFamily: fonts.mono }}>{t(CATEGORY_LABELS[d.category])}</Text>
         )}
         {d.eligibleDays && (
           <Text style={{ fontSize: 10.5, color: colors.textDim45, fontFamily: fonts.mono }}>{d.eligibleDays}</Text>
@@ -160,9 +161,9 @@ export function OffersScreen() {
   // the keyboard on each keystroke.
   const header = (
     <View>
-      <Text style={{ fontSize: 22, fontFamily: fonts.bold, color: colors.text }}>Offers</Text>
+      <Text style={{ fontSize: 22, fontFamily: fonts.bold, color: colors.text }}>{t('Offers')}</Text>
       <Text style={{ fontSize: 12, color: colors.textDim50, marginTop: 3, marginBottom: 14, fontFamily: fonts.mono }}>
-        {isLoading ? 'LOADING…' : `${filtered.length} ACTIVE`}
+        {isLoading ? t('LOADING…') : tf('{n} ACTIVE', { n: filtered.length })}
       </Text>
 
       <View
@@ -179,7 +180,7 @@ export function OffersScreen() {
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Search a shop or restaurant"
+          placeholder={t('Search a shop or restaurant')}
           placeholderTextColor="rgba(245,245,247,.3)"
           style={{ flex: 1, paddingVertical: 12, color: colors.text, fontSize: 14.5 }}
         />
@@ -200,7 +201,7 @@ export function OffersScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: 8, paddingRight: 16, marginBottom: 10 }}
         >
-          <Chip label="All banks" active={selBank === ALL} onPress={() => setSelBank(ALL)} />
+          <Chip label={t('All banks')} active={selBank === ALL} onPress={() => setSelBank(ALL)} />
           {banks.map(bank => (
             <Chip
               key={bank}
@@ -220,11 +221,11 @@ export function OffersScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: 8, paddingRight: 16, marginBottom: 16 }}
         >
-          <Chip label="All categories" active={selCategory === ALL} onPress={() => setSelCategory(ALL)} />
+          <Chip label={t('All categories')} active={selCategory === ALL} onPress={() => setSelCategory(ALL)} />
           {categories.map(cat => (
             <Chip
               key={cat}
-              label={CATEGORY_LABELS[cat]}
+              label={t(CATEGORY_LABELS[cat])}
               active={selCategory === cat}
               onPress={() => setSelCategory(selCategory === cat ? ALL : cat)}
             />
@@ -251,19 +252,19 @@ export function OffersScreen() {
         <Icon name="card" size={34} color={colors.textDim45} />
       </View>
       <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>
-        {discounts.length === 0 ? 'No offers right now' : 'No offers match this filter'}
+        {discounts.length === 0 ? t('No offers right now') : t('No offers match this filter')}
       </Text>
       <Text style={{ fontSize: 13, lineHeight: 20, color: colors.textDim55, textAlign: 'center' }}>
         {/* Name the filters actually narrowing things, so the way out is the
             thing the sentence points at rather than a guess. */}
         {discounts.length === 0
-          ? "Card discounts from your banks will show up here once they're synced."
+          ? t("Card discounts from your banks will show up here once they're synced.")
           : query
             ? `No match for "${search.trim()}"${selBank === ALL ? '' : ` at ${selBank}`}. Try a different spelling${
                 selBank === ALL ? '' : ', or All banks'
               }.`
             : selBank === ALL
-              ? 'Try a different category.'
+              ? t('Try a different category.')
               : `${selBank} has nothing in this category. Try another, or All banks.`}
       </Text>
     </View>

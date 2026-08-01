@@ -1,3 +1,4 @@
+import type { Language } from '../i18n';
 import type { CatKey, Currency } from '../theme';
 
 // Wire shapes returned by the API. Money is always integer minor units (EUR
@@ -239,6 +240,8 @@ export type ApiDiscount = {
 export type ApiSettings = {
   baseCurrency: Currency;
   monthlyBudgetMinor: number;
+  /** Which language the app renders in, and the insights are written in. */
+  language: Language;
   notif: boolean;
   bio: boolean;
 };

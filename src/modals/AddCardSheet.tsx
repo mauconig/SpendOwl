@@ -7,6 +7,7 @@ import { GRAD, GRAD_LOCATIONS, colors, fonts } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { CARD_COLORS } from '../store/constants';
 import { formatThousands, parseThousands } from '../utils/moneyInput';
+import { t } from '../i18n';
 
 function Field({ label, value, onChangeText, placeholder, keyboardType, maxLength }: {
   label: string;
@@ -102,28 +103,28 @@ export function AddCardSheet() {
     >
       <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,.2)', alignSelf: 'center' }} />
       <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>
-        {sheet?.mode === 'edit' ? 'Edit card' : 'Add a card'}
+        {sheet?.mode === 'edit' ? t('Edit card') : t('Add a card')}
       </Text>
 
-      <Field label="Card name" value={name} onChangeText={setName} placeholder="Visa Platinum" />
+      <Field label={t('Card name')} value={name} onChangeText={setName} placeholder="Visa Platinum" />
       <Field
-        label="Balance owed"
+        label={t('Balance owed')}
         value={formatThousands(balanceDigits)}
         onChangeText={v => setBalanceDigits(v.replace(/\D/g, ''))}
         placeholder="0"
         keyboardType="number-pad"
       />
       <Field
-        label="Credit limit"
+        label={t('Credit limit')}
         value={formatThousands(limitDigits)}
         onChangeText={v => setLimitDigits(v.replace(/\D/g, ''))}
         placeholder="0"
         keyboardType="number-pad"
       />
-      <Field label="APR / interest rate (%)" value={apr} onChangeText={setApr} placeholder="24.99" keyboardType="decimal-pad" />
+      <Field label={t('APR / interest rate (%)')} value={apr} onChangeText={setApr} placeholder="24.99" keyboardType="decimal-pad" />
 
       <View style={{ gap: 6 }}>
-        <Text style={{ fontSize: 12, color: colors.textDim50 }}>Colour</Text>
+        <Text style={{ fontSize: 12, color: colors.textDim50 }}>{t('Colour')}</Text>
         <ColorSwatchPicker value={color} onChange={setColor} />
       </View>
 
@@ -136,7 +137,7 @@ export function AddCardSheet() {
           style={{ borderRadius: 999, paddingVertical: 13, alignItems: 'center', marginTop: 2 }}
         >
           <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 14 }}>
-            {sheet?.mode === 'edit' ? 'Save changes' : 'Add card'}
+            {sheet?.mode === 'edit' ? t('Save changes') : t('Add card')}
           </Text>
         </LinearGradient>
       </Pressable>

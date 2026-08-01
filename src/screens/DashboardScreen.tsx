@@ -7,6 +7,7 @@ import { TrendChart } from '../components/TrendChart';
 import { Icon } from '../icons';
 import { CATS, CatKey, Currency, GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, formatPYG, moneyFont } from '../theme';
 import { minorToEur } from '../api/types';
+import { catName, t, tf } from '../i18n';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { monthLong, monthShort, relativeDayLabel } from '../utils/date';
 import { cardInterestMonthly } from '../utils/payoff';
@@ -68,7 +69,7 @@ export function DashboardScreen() {
         id: t.id,
         merchant: t.merchant,
         letter: t.merchant[0],
-        meta: `${relativeDayLabel(t.occurredAt)} · ${cat.name}`,
+        meta: `${relativeDayLabel(t.occurredAt)} · ${catName(cat.name)}`,
         amt: (inc ? '+' : '−') + formatMoney(Math.abs(minorToEur(t.amountMinor)), baseCur, 2),
         inc,
         color: cat.color,
@@ -103,7 +104,9 @@ export function DashboardScreen() {
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 64, gap: 14 }}>
       <View style={{ backgroundColor: colors.card, borderRadius: 24, padding: 20, paddingBottom: 18 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 13, color: colors.textDim50 }}>Safe to Spend · July</Text>
+          <Text style={{ fontSize: 13, color: colors.textDim50 }}>
+            {t('Safe to Spend')} · {monthName}
+          </Text>
           <Icon name="arrowNE" size={18} color={colors.textDim40} />
         </View>
         {!overBudget ? (
@@ -121,8 +124,14 @@ export function DashboardScreen() {
           <Icon name={overBudget ? 'trendDown' : 'trendUp'} size={16} color={overBudget ? colors.rose : colors.mint} />
           <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: overBudget ? colors.rose : colors.mint }}>
             {overBudget
-              ? `${formatMoney(accountOut - budget, baseCur, 2)} over budget (${(percentOfBudget - 100).toFixed(0)}%)`
-              : `${formatMoney(Math.abs(paceDelta), baseCur, 0)} ${paceDelta >= 0 ? 'under' : 'over'} pace (${Math.abs(summary?.pacePercent ?? 0).toFixed(1)}%)`}
+              ? tf('{amount} over budget ({pct}%)', {
+                  amount: formatMoney(accountOut - budget, baseCur, 2),
+                  pct: (percentOfBudget - 100).toFixed(0),
+                })
+              : tf(paceDelta >= 0 ? '{amount} under pace ({pct}%)' : '{amount} over pace ({pct}%)', {
+                  amount: formatMoney(Math.abs(paceDelta), baseCur, 0),
+                  pct: Math.abs(summary?.pacePercent ?? 0).toFixed(1),
+                })}
           </Text>
         </View>
         <View style={{ marginTop: 14, height: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
@@ -140,8 +149,11 @@ export function DashboardScreen() {
           </View>
         </View>
         <Text style={{ marginTop: 8, fontSize: 11.5, color: colors.textDim45 }}>
-          {percentOfBudget.toFixed(0)}% of {formatMoney(budget, baseCur, 0)} · {daysLeft} day
-          {daysLeft === 1 ? '' : 's'} left
+          {tf(daysLeft === 1 ? '{pct}% of {total} · {n} day left' : '{pct}% of {total} · {n} days left', {
+            pct: percentOfBudget.toFixed(0),
+            total: formatMoney(budget, baseCur, 0),
+            n: daysLeft,
+          })}
         </Text>
       </View>
 
@@ -161,10 +173,12 @@ export function DashboardScreen() {
         >
           <Icon name="warn" size={20} color={colors.amber} />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.amber }}>Budget exceeded</Text>
+            <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.amber }}>{t('Budget exceeded')}</Text>
             <Text style={{ fontSize: 12, color: colors.textDim55, marginTop: 2, lineHeight: 17 }}>
-              You’re {formatMoney(accountOut - budget, baseCur, 2)} past {monthName}’s budget. I can draft a catch-up plan for
-              the last two weeks.
+              {tf('You’re {amount} past {month}’s budget. I can draft a catch-up plan for the last two weeks.', {
+                amount: formatMoney(accountOut - budget, baseCur, 2),
+                month: monthName,
+              })}
             </Text>
           </View>
         </View>
@@ -172,14 +186,14 @@ export function DashboardScreen() {
 
       <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>Where it’s going</Text>
-          <Text style={{ fontSize: 11, color: colors.textDim40 }}>tap a slice</Text>
+          <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>{t('Where it’s going')}</Text>
+          <Text style={{ fontSize: 11, color: colors.textDim40 }}>{t('tap a slice')}</Text>
         </View>
         <View style={{ alignItems: 'center', paddingVertical: 10 }}>
           <Donut slices={donutSlices} selCat={selCat} onSelect={setSelCat} />
           <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{ fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1.5, color: colors.textDim50 }}>
-              {selCat ? CATS[selCat].name.toUpperCase() : `SPENT · ${monthName.toUpperCase()}`}
+              {selCat ? catName(CATS[selCat].name).toUpperCase() : `${t('SPENT')} · ${monthName.toUpperCase()}`}
             </Text>
             {(() => {
               const donutValue = formatMoney(selCat ? amountFor(selCat) : donutTotal, baseCur, 0);
@@ -229,18 +243,18 @@ export function DashboardScreen() {
 
       <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>Transactions</Text>
+          <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>{t('Transactions')}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {selCat && (
               <Pressable
                 onPress={() => setSelCat(null)}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#F2F2F4', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 11 }}
               >
-                <Text style={{ fontSize: 11.5, fontFamily: fonts.medium, color: '#0A0A0B' }}>{CATS[selCat].name} ✕</Text>
+                <Text style={{ fontSize: 11.5, fontFamily: fonts.medium, color: '#0A0A0B' }}>{catName(CATS[selCat].name)} ✕</Text>
               </Pressable>
             )}
             <Pressable onPress={store.openTx} hitSlop={8}>
-              <Text style={{ fontSize: 12, color: colors.textDim40 }}>See all</Text>
+              <Text style={{ fontSize: 12, color: colors.textDim40 }}>{t('See all')}</Text>
             </Pressable>
           </View>
         </View>
@@ -303,7 +317,7 @@ export function DashboardScreen() {
       </View>
 
       <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16 }}>
-        <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>Spending trajectory</Text>
+        <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>{t('Spending trajectory')}</Text>
         <View style={{ marginTop: 12 }}>
           <TrendChart
             series={(summary?.trend ?? []).map(point => minorToEur(point.cumulativeMinor))}
@@ -315,11 +329,11 @@ export function DashboardScreen() {
         <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <View style={{ width: 14, height: 3, borderRadius: 2, backgroundColor: '#78ADEE' }} />
-            <Text style={{ fontSize: 11, color: colors.textDim60 }}>This month</Text>
+            <Text style={{ fontSize: 11, color: colors.textDim60 }}>{t('This month')}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <View style={{ width: 14, height: 0, borderTopWidth: 2, borderStyle: 'dashed', borderTopColor: 'rgba(245,245,247,.35)' }} />
-            <Text style={{ fontSize: 11, color: colors.textDim60 }}>Budget pace</Text>
+            <Text style={{ fontSize: 11, color: colors.textDim60 }}>{t('Budget pace')}</Text>
           </View>
         </View>
       </View>
@@ -338,8 +352,8 @@ export function DashboardScreen() {
             <Icon name="spark" size={18} color="#FFFFFF" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: '#0A0A0B' }}>Can I afford this?</Text>
-            <Text style={{ fontSize: 11.5, color: 'rgba(10,10,11,.6)', marginTop: 1 }}>Simulate a purchase against your savings</Text>
+            <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: '#0A0A0B' }}>{t('Can I afford this?')}</Text>
+            <Text style={{ fontSize: 11.5, color: 'rgba(10,10,11,.6)', marginTop: 1 }}>{t('Simulate a purchase against your savings')}</Text>
           </View>
           <Icon name="arrowNE" size={20} color="rgba(10,10,11,.7)" />
         </LinearGradient>
@@ -370,9 +384,12 @@ export function DashboardScreen() {
           ))}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.text }}>Subscriptions</Text>
+          <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.text }}>{t('Subscriptions')}</Text>
           <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 1, fontFamily: moneyFont(baseCur, 'regular') }}>
-            {subsActive.length} active · {formatMoney(subsTotal, baseCur, 2)}/mo
+            {tf('{n} active · {total}/mo', {
+              n: subsActive.length,
+              total: formatMoney(subsTotal, baseCur, 2),
+            })}
           </Text>
         </View>
         <Icon name="chev" size={20} color={colors.textDim40} />

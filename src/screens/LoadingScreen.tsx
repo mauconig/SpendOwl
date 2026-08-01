@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, Text, View } from 'react-native';
 import { API_BASE_URL } from '../api/client';
 import { colors, fonts } from '../theme';
+import { t } from '../i18n';
 
 /**
  * The app used to render instantly from in-memory fixtures. Now that the first
@@ -101,7 +102,7 @@ export function LoadingScreen() {
 export function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 12 }}>
-      <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>Can’t load your data</Text>
+      <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>{t('Can’t load your data')}</Text>
       <Text style={{ fontSize: 13, color: colors.textDim55, textAlign: 'center', lineHeight: 19 }}>{message}</Text>
       <Text style={{ fontSize: 11, fontFamily: fonts.mono, color: colors.textDim30, textAlign: 'center' }}>
         {API_BASE_URL}
@@ -110,7 +111,7 @@ export function ErrorScreen({ message, onRetry }: { message: string; onRetry: ()
         onPress={onRetry}
         style={{ backgroundColor: '#F2F2F4', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 28, marginTop: 6 }}
       >
-        <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: '#0A0A0B' }}>Try again</Text>
+        <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: '#0A0A0B' }}>{t('Try again')}</Text>
       </Pressable>
     </View>
   );

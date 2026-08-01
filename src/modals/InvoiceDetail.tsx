@@ -7,6 +7,7 @@ import { Icon } from '../icons';
 import { GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { longDate } from '../utils/date';
+import { t } from '../i18n';
 
 function Field({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
   return (
@@ -43,7 +44,7 @@ export function InvoiceDetail() {
           <Pressable onPress={store.closeInvoice} style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="back" size={20} color={colors.text} />
           </Pressable>
-          <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: colors.text }}>Factura detail</Text>
+          <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: colors.text }}>{t('Factura detail')}</Text>
         </View>
         <ScrollView contentContainerStyle={{ padding: 18, paddingTop: 4, paddingBottom: 24, gap: 14 }}>
           <View style={{ alignSelf: 'center', width: 150, height: 190, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,.1)' }}>
@@ -54,7 +55,7 @@ export function InvoiceDetail() {
             <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: colors.card, borderWidth: 1, borderColor: 'rgba(250,204,21,.35)', borderRadius: 16, padding: 12, paddingHorizontal: 14 }}>
               <Icon name="warn" size={18} color={colors.amber} />
               <Text style={{ flex: 1, fontSize: 12.5, lineHeight: 18, color: colors.textDim70 }}>
-                <Text style={{ fontFamily: fonts.bold, color: colors.amber }}>Needs review. </Text>
+                <Text style={{ fontFamily: fonts.bold, color: colors.amber }}>{t('Needs review.')} </Text>
                 VAT number missing — add it below or approve as-is.
               </Text>
             </View>
@@ -62,19 +63,19 @@ export function InvoiceDetail() {
             <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: 'rgba(74,222,128,.3)', borderRadius: 16, padding: 12, paddingHorizontal: 14 }}>
               <Icon name="check" size={18} color={colors.mint} />
               <Text style={{ fontSize: 12.5, color: colors.textDim70 }}>
-                <Text style={{ fontFamily: fonts.bold, color: colors.mint }}>Logged automatically</Text> · matched from the scan
+                <Text style={{ fontFamily: fonts.bold, color: colors.mint }}>{t('Logged automatically')}</Text> · {t('matched from the scan')}
               </Text>
             </View>
           )}
 
           <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 18, paddingHorizontal: 16 }}>
-            <Field label="MERCHANT" value={shown.merchant} />
+            <Field label={t('MERCHANT')} value={shown.merchant} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
             <Field label="DATE" value={longDate(shown.occurredAt)} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
-            <Field label="CATEGORY" value={shown.cat} />
+            <Field label={t('CATEGORY')} value={shown.cat} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
-            <Field label="VAT ID" value={isWarn ? 'Missing — tap to add' : 'ESB-84920115'} valueColor={isWarn ? colors.amber : colors.text} />
+            <Field label={t('VAT ID')} value={isWarn ? t('Missing — tap to add') : 'ESB-84920115'} valueColor={isWarn ? colors.amber : colors.text} />
             <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 }}>
               <Text style={{ fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 1, color: colors.textDim45 }}>TOTAL</Text>
@@ -86,8 +87,8 @@ export function InvoiceDetail() {
 
           <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 18, padding: 13, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontFamily: fonts.medium, color: colors.text }}>Tax deductible</Text>
-              <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 2 }}>Flag as business expense for your Q3 return</Text>
+              <Text style={{ fontSize: 14, fontFamily: fonts.medium, color: colors.text }}>{t('Tax deductible')}</Text>
+              <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 2 }}>{t('Flag as business expense for your Q3 return')}</Text>
             </View>
             <Toggle on={card.tax} onToggle={() => store.setCard('inv-' + shown.id, { tax: !card.tax })} />
           </View>
@@ -95,7 +96,7 @@ export function InvoiceDetail() {
           {isWarn && (
             <Pressable onPress={store.approveInvoice}>
               <LinearGradient colors={GRAD} locations={GRAD_LOCATIONS} start={{ x: 0, y: 0.1 }} end={{ x: 1, y: -0.1 }} style={{ borderRadius: 999, paddingVertical: 13, alignItems: 'center' }}>
-                <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 14 }}>Approve & log</Text>
+                <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 14 }}>{t('Approve & log')}</Text>
               </LinearGradient>
             </Pressable>
           )}

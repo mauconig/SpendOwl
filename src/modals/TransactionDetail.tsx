@@ -19,6 +19,7 @@ import { minorToEur } from '../api/types';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { formatAmountInput, parseAmountInput } from '../utils/moneyInput';
 import { longDate, parseDay, toDayString } from '../utils/date';
+import { catName, t, tf } from '../i18n';
 
 const CAT_KEYS = Object.keys(CATS) as CatKey[];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -147,13 +148,13 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
         contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 14, gap: 14 }}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>Edit transaction</Text>
+        <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>{t('Edit transaction')}</Text>
 
-        <Field label="MERCHANT">
+        <Field label={t('MERCHANT')}>
           <TextInput
             value={merchant}
             onChangeText={setMerchant}
-            placeholder="Where you paid"
+            placeholder={t('Where you paid')}
             placeholderTextColor="rgba(245,245,247,.3)"
             style={inputStyle}
           />
@@ -170,7 +171,7 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
           />
         </Field>
 
-        <Field label="CATEGORY">
+        <Field label={t('CATEGORY')}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
             {CAT_KEYS.map(key => {
               const active = cat === key;
@@ -194,7 +195,7 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
                       color: active ? '#0A0A0B' : colors.textDim60,
                     }}
                   >
-                    {CATS[key].name}
+                    {catName(CATS[key].name)}
                   </Text>
                 </Pressable>
               );
@@ -209,7 +210,7 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
             // Read-only: nothing today lets you reassign which card a logged
             // transaction was paid with, only see it.
             return (
-              <Field label="PAID WITH">
+              <Field label={t('PAID WITH')}>
                 <View
                   style={{
                     alignSelf: 'flex-start',
@@ -231,7 +232,7 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
         {/* The amount field above holds the net, so without this there is
             nothing on the row explaining why it isn't the number they said. */}
         {tx?.discountMinor != null && tx.discountMinor > 0 && (
-          <Field label="DISCOUNT APPLIED">
+          <Field label={t('DISCOUNT APPLIED')}>
             <Text style={{ fontSize: 14.5, color: colors.mint }}>
               {tx.discountBank} {tx.discountPercent}% — saved{' '}
               {formatMoney(minorToEur(tx.discountMinor), baseCur, decimalsFor(baseCur))}
@@ -248,7 +249,7 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
             next month's will use a different one — which is the whole reason
             the subscription stores a currency rather than one fixed amount. */}
         {tx?.originalCurrency != null && tx.originalMinor != null && (
-          <Field label="BILLED AS">
+          <Field label={t('BILLED AS')}>
             <Text style={{ fontSize: 14.5, color: colors.text }}>
               {formatMoney(minorToEur(tx.originalMinor), tx.originalCurrency, decimalsFor(tx.originalCurrency))}
             </Text>
@@ -269,7 +270,7 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
             onPress={() => setPickingDate(v => !v)}
             style={{ ...inputStyle, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
           >
-            <Text style={{ fontSize: 14.5, color: colors.text }}>{date ? longDate(date) : 'Pick a date'}</Text>
+            <Text style={{ fontSize: 14.5, color: colors.text }}>{date ? longDate(date) : t('Pick a date')}</Text>
             <Icon name="chev" size={16} color={colors.textDim40} />
           </Pressable>
 
@@ -299,7 +300,7 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
           <TextInput
             value={note}
             onChangeText={setNote}
-            placeholder="Optional"
+            placeholder={t('Optional')}
             placeholderTextColor="rgba(245,245,247,.3)"
             multiline
             style={{ ...inputStyle, minHeight: 62, textAlignVertical: 'top' }}
@@ -321,8 +322,8 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
           }}
         >
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 13.5, fontFamily: fonts.medium, color: colors.text }}>Tax deductible</Text>
-            <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 2 }}>Flag as a business expense</Text>
+            <Text style={{ fontSize: 13.5, fontFamily: fonts.medium, color: colors.text }}>{t('Tax deductible')}</Text>
+            <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 2 }}>{t('Flag as a business expense')}</Text>
           </View>
           <Toggle on={tax} onToggle={() => setTax(v => !v)} />
         </View>
@@ -340,7 +341,7 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
             opacity: canSave ? 1 : 0.4,
           }}
         >
-          <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: '#0A0A0B' }}>Save changes</Text>
+          <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: '#0A0A0B' }}>{t('Save changes')}</Text>
         </Pressable>
 
         {/* Two-tap rather than a confirmation dialog: deleting is destructive
@@ -362,7 +363,7 @@ export function TransactionDetail({ source }: { source: 'dash' | 'sheet' }) {
         >
           <Icon name={confirmingDelete ? 'warn' : 'close'} size={14} color={colors.rose} />
           <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.rose }}>
-            {confirmingDelete ? 'Tap again to delete' : 'Delete transaction'}
+            {confirmingDelete ? t('Tap again to delete') : t('Delete transaction')}
           </Text>
         </Pressable>
       </View>

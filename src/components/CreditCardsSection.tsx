@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { Icon } from '../icons';
 import { colors, fonts, formatMoney } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
+import { t } from '../i18n';
 
 export function CreditCardsSection() {
   const store = useSpendOwl();
@@ -12,12 +13,12 @@ export function CreditCardsSection() {
   return (
     <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16, gap: 12 }}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>Credit cards</Text>
+        <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>{t('Credit cards')}</Text>
         <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: colors.rose }}>{formatMoney(totalDebt, baseCur, 2)} owed</Text>
       </View>
 
       {creditCards.length === 0 ? (
-        <Text style={{ fontSize: 12.5, color: colors.textDim50 }}>No cards yet — add one below.</Text>
+        <Text style={{ fontSize: 12.5, color: colors.textDim50 }}>{t('No cards yet — add one below.')}</Text>
       ) : (
         <View style={{ gap: 10 }}>
           {creditCards.map(c => {
@@ -63,7 +64,7 @@ export function CreditCardsSection() {
 
       <Pressable onPress={store.openAddCard} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, marginTop: 2 }}>
         <Icon name="plus" size={14} color="#78ADEE" />
-        <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: '#78ADEE' }}>Add card</Text>
+        <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: '#78ADEE' }}>{t('Add card')}</Text>
       </Pressable>
     </View>
   );

@@ -14,6 +14,7 @@ import { CATS, CatKey, type Currency, GRAD, GRAD_LOCATIONS, colors, decimalsFor,
 import { FACTURAS_ENABLED, Msg } from '../store/constants';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { ordinalDay } from '../utils/date';
+import { catName, t, tf } from '../i18n';
 
 type CardMsg = Extract<Msg, { type: 'card' }>;
 
@@ -67,7 +68,7 @@ function CardMessage({ m }: { m: CardMsg }) {
             <Icon name={chrome.icon} size={13} color={tint} />
           )}
         </View>
-        <Text style={{ fontSize: 12, color: colors.textDim50 }}>{cat ? cat.name : chrome.label}</Text>
+        <Text style={{ fontSize: 12, color: colors.textDim50 }}>{cat ? catName(cat.name) : t(chrome.label)}</Text>
       </View>
 
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
@@ -138,7 +139,7 @@ function CardMessage({ m }: { m: CardMsg }) {
         <>
           <View style={{ height: 1, backgroundColor: colors.cardBorder }} />
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 13, color: colors.textDim70 }}>Business expense</Text>
+            <Text style={{ fontSize: 13, color: colors.textDim70 }}>{t('Business expense')}</Text>
             <Toggle on={card.tax} onToggle={() => store.setCard(m.id, { tax: !card.tax })} />
           </View>
         </>
@@ -163,7 +164,7 @@ function CardMessage({ m }: { m: CardMsg }) {
             }}
           >
             <Icon name="close" size={13} color={colors.textDim60} />
-            <Text style={{ color: colors.textDim60, fontFamily: fonts.medium, fontSize: 13 }}>Reject</Text>
+            <Text style={{ color: colors.textDim60, fontFamily: fonts.medium, fontSize: 13 }}>{t('Reject')}</Text>
           </Pressable>
           <Pressable onPress={() => store.setCard(m.id, { ok: true })} style={{ flex: 1 }}>
             <LinearGradient
@@ -191,7 +192,7 @@ function CardMessage({ m }: { m: CardMsg }) {
           }}
         >
           <Icon name="check" size={15} color={colors.mint} />
-          <Text style={{ color: colors.mint, fontFamily: fonts.medium, fontSize: 13 }}>{chrome.done}</Text>
+          <Text style={{ color: colors.mint, fontFamily: fonts.medium, fontSize: 13 }}>{t(chrome.done)}</Text>
         </View>
       )}
     </View>
@@ -362,9 +363,9 @@ function MessageBubble({ m }: { m: Msg }) {
             <View style={{ gap: 6 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Icon name="spark" size={14} color="#FFFFFF" />
-                <Text style={{ fontSize: 13.5, fontFamily: fonts.bold, color: '#F5F5F7' }}>Reading your factura</Text>
+                <Text style={{ fontSize: 13.5, fontFamily: fonts.bold, color: '#F5F5F7' }}>{t('Reading your factura')}</Text>
               </View>
-              <Text style={{ fontSize: 11.5, color: colors.textDim50 }}>Pulling merchant, total & VAT…</Text>
+              <Text style={{ fontSize: 11.5, color: colors.textDim50 }}>{t('Pulling merchant, total & VAT…')}</Text>
               <Dots />
             </View>
           </View>
@@ -527,7 +528,7 @@ export function ChatScreen() {
               <TextInput
                 value={store.input}
                 onChangeText={store.setInput}
-                placeholder="Message your coach…"
+                placeholder={t('Message your coach…')}
                 placeholderTextColor="rgba(245,245,247,.35)"
                 onSubmitEditing={store.send}
                 style={{ flex: 1, color: colors.text, fontSize: 14.5 }}

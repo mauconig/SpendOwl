@@ -9,6 +9,7 @@ import { useSpendOwl } from '../store/SpendOwlContext';
 import { FACTURAS_ENABLED } from '../store/constants';
 import { monthLong } from '../utils/date';
 import { CATEGORY_COLORS, CATEGORY_SHORT, todaysOfferGroups } from '../utils/discounts';
+import { catName, t, tf } from '../i18n';
 
 type Insight = {
   title: string;
@@ -91,7 +92,7 @@ export function HomeScreen() {
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 64, gap: 12 }}>
-      <Text style={{ fontSize: 22, fontFamily: fonts.bold, color: colors.text, letterSpacing: -0.3 }}>Welcome back!</Text>
+      <Text style={{ fontSize: 22, fontFamily: fonts.bold, color: colors.text, letterSpacing: -0.3 }}>{t('Welcome back!')}</Text>
 
       <Pressable onPress={() => store.setNav('chat')}>
         <LinearGradient
@@ -105,8 +106,8 @@ export function HomeScreen() {
             <Icon name="spark" size={18} color="#FFFFFF" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: '#0A0A0B' }}>AI Insights</Text>
-            <Text style={{ fontSize: 11.5, color: 'rgba(10,10,11,.6)', marginTop: 1 }}>Evaluate your spending patterns</Text>
+            <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: '#0A0A0B' }}>{t('AI Insights')}</Text>
+            <Text style={{ fontSize: 11.5, color: 'rgba(10,10,11,.6)', marginTop: 1 }}>{t('Evaluate your spending patterns')}</Text>
           </View>
           <Icon name="arrowNE" size={20} color="rgba(10,10,11,.7)" />
         </LinearGradient>
@@ -123,7 +124,7 @@ export function HomeScreen() {
         </Pressable>
       </View>
 
-      <Text style={{ fontSize: 15, fontFamily: fonts.bold, color: colors.text, marginTop: 4 }}>For you today</Text>
+      <Text style={{ fontSize: 15, fontFamily: fonts.bold, color: colors.text, marginTop: 4 }}>{t('For you today')}</Text>
 
       {todayOffers.map(g => {
         const accent = CATEGORY_COLORS[g.category];
@@ -157,7 +158,7 @@ export function HomeScreen() {
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.text, flexShrink: 1 }}>
-                  {CATEGORY_SHORT[g.category]} today
+                  {tf('{category} today', { category: t(CATEGORY_SHORT[g.category]) })}
                 </Text>
                 {g.bestPercent != null && (
                   <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: accent }}>up to {g.bestPercent}%</Text>
@@ -169,7 +170,7 @@ export function HomeScreen() {
                 {g.offers.map(o => o.merchant).join(' · ')}
               </Text>
               <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: '#78ADEE', marginTop: 8 }}>
-                {g.offers.length === 1 ? 'See the terms' : `See all ${g.offers.length}`}
+                {g.offers.length === 1 ? t('See the terms') : tf('See all {n}', { n: g.offers.length })}
               </Text>
             </View>
           </Pressable>
@@ -220,9 +221,14 @@ function buildFallbackInsights(store: ReturnType<typeof useSpendOwl>): Insight[]
   if (summary) {
     const underPace = paceDelta >= 0;
     insights.push({
-      title: underPace ? "You're pacing well" : 'Spending above pace',
-      body: `${formatMoney(Math.abs(paceDelta), baseCur, 0)} ${underPace ? 'under' : 'over'} your budget pace this month. Safe to spend: ${formatMoney(safeToSpend, baseCur, 0)}.`,
-      cta: 'Ask the coach',
+      title: underPace ? t("You're pacing well") : t('Spending above pace'),
+      body: tf(
+        underPace
+          ? '{amount} under your budget pace this month. Safe to spend: {safe}.'
+          : '{amount} over your budget pace this month. Safe to spend: {safe}.',
+        { amount: formatMoney(Math.abs(paceDelta), baseCur, 0), safe: formatMoney(safeToSpend, baseCur, 0) }
+      ),
+      cta: t('Ask the coach'),
       icon: underPace ? 'trendUp' : 'trendDown',
       iconColor: underPace ? colors.mint : colors.rose,
       onTap: () => store.setNav('chat'),
@@ -232,9 +238,13 @@ function buildFallbackInsights(store: ReturnType<typeof useSpendOwl>): Insight[]
     if (top && spent > 0) {
       const share = Math.round((minorToEur(top.spentMinor) / spent) * 100);
       insights.push({
-        title: `${CATS[top.key].name} leads your spend`,
-        body: `${formatMoney(minorToEur(top.spentMinor), baseCur, 0)} so far — ${share}% of everything you've spent in ${monthName}.`,
-        cta: 'Set a cap in chat',
+        title: tf('{category} leads your spend', { category: catName(CATS[top.key].name) }),
+        body: tf("{amount} so far — {share}% of everything you've spent in {month}.", {
+          amount: formatMoney(minorToEur(top.spentMinor), baseCur, 0),
+          share,
+          month: monthName,
+        }),
+        cta: t('Set a cap in chat'),
         icon: 'pie',
         iconColor: CATS[top.key].color,
         onTap: () => store.setNav('chat'),
@@ -245,13 +255,18 @@ function buildFallbackInsights(store: ReturnType<typeof useSpendOwl>): Insight[]
   const upcoming = store.subs.filter(s => !s.off && s.dayOfMonth >= new Date().getDate()).slice(0, 3);
   if (upcoming.length > 0) {
     insights.push({
-      title: `${upcoming.length} renewal${upcoming.length === 1 ? '' : 's'} still to come`,
-      body: `${upcoming.map(s => s.name).join(', ')} renew${upcoming.length === 1 ? 's' : ''} later this month — ${formatMoney(
-        upcoming.reduce((sum, s) => sum + (s.price ?? 0), 0),
-        baseCur,
-        2
-      )} total.`,
-      cta: 'Review subscriptions',
+      title: tf(upcoming.length === 1 ? '{n} renewal still to come' : '{n} renewals still to come', {
+        n: upcoming.length,
+      }),
+      body: tf('{names} renew later this month — {total} total.', {
+        names: upcoming.map(s => s.name).join(', '),
+        total: formatMoney(
+          upcoming.reduce((sum, s) => sum + (s.price ?? 0), 0),
+          baseCur,
+          2
+        ),
+      }),
+      cta: t('Review subscriptions'),
       icon: 'bars',
       iconColor: '#78ADEE',
       onTap: () => {
@@ -265,9 +280,14 @@ function buildFallbackInsights(store: ReturnType<typeof useSpendOwl>): Insight[]
   const firstReview = needsReview[0];
   if (firstReview) {
     insights.push({
-      title: `${needsReview.length} factura${needsReview.length === 1 ? '' : 's'} need${needsReview.length === 1 ? 's' : ''} review`,
-      body: `${firstReview.merchant} (${formatMoney(firstReview.amountEur, baseCur, 2)}) is missing its VAT number.`,
-      cta: 'Open in vault',
+      title: tf(needsReview.length === 1 ? '{n} factura needs review' : '{n} facturas need review', {
+        n: needsReview.length,
+      }),
+      body: tf('{merchant} ({amount}) is missing its VAT number.', {
+        merchant: firstReview.merchant,
+        amount: formatMoney(firstReview.amountEur, baseCur, 2),
+      }),
+      cta: t('Open in vault'),
       icon: 'warn',
       iconColor: colors.amber,
       onTap: () => {

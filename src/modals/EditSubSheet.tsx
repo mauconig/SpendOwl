@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ModalShell } from '../components/ModalShell';
 import { GRAD, GRAD_LOCATIONS, colors, decimalsFor, fonts, type Currency } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
+import { t } from '../i18n';
 
 const CURRENCIES: Currency[] = ['PYG', 'USD', 'EUR'];
 
@@ -129,13 +130,13 @@ export function EditSubSheet() {
       bodyStyle={{ paddingHorizontal: 18, paddingTop: 10, paddingBottom: 22, gap: 14 }}
     >
       <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,.2)', alignSelf: 'center' }} />
-      <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>Edit subscription</Text>
+      <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>{t('Edit subscription')}</Text>
 
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 14 }} keyboardShouldPersistTaps="handled">
-        <Field label="Name" value={name} onChangeText={setName} placeholder="Netflix" />
+        <Field label={t('Name')} value={name} onChangeText={setName} placeholder="Netflix" />
 
         <View style={{ gap: 6 }}>
-          <Text style={{ fontSize: 12, color: colors.textDim50 }}>Billed in</Text>
+          <Text style={{ fontSize: 12, color: colors.textDim50 }}>{t('Billed in')}</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {CURRENCIES.map(c => (
               <Pill key={c} label={c} active={currency === c} onPress={() => setCurrency(c)} />
@@ -154,20 +155,18 @@ export function EditSubSheet() {
           keyboardType={decimalsFor(currency) === 0 ? 'number-pad' : 'decimal-pad'}
         />
 
-        <Field label="Renews on day of month" value={day} onChangeText={v => setDay(v.replace(/\D/g, ''))} placeholder="14" keyboardType="number-pad" />
+        <Field label={t('Renews on day of month')} value={day} onChangeText={v => setDay(v.replace(/\D/g, ''))} placeholder="14" keyboardType="number-pad" />
 
         <View style={{ gap: 6 }}>
-          <Text style={{ fontSize: 12, color: colors.textDim50 }}>Paid with</Text>
+          <Text style={{ fontSize: 12, color: colors.textDim50 }}>{t('Paid with')}</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            <Pill label="No card" active={cardId === null} onPress={() => setCardId(null)} />
+            <Pill label={t('No card')} active={cardId === null} onPress={() => setCardId(null)} />
             {store.creditCards.map(c => (
               <Pill key={c.id} label={c.name} active={cardId === c.id} onPress={() => setCardId(c.id)} />
             ))}
           </View>
           {cardId !== null && (
-            <Text style={{ fontSize: 11, color: colors.textDim45, lineHeight: 16 }}>
-              Each renewal is added to this card's balance, the same as any purchase on it.
-            </Text>
+            <Text style={{ fontSize: 11, color: colors.textDim45, lineHeight: 16 }}>{t("Each renewal is added to this card's balance, the same as any purchase on it.")}</Text>
           )}
         </View>
       </ScrollView>
@@ -180,7 +179,7 @@ export function EditSubSheet() {
           end={{ x: 1, y: -0.1 }}
           style={{ borderRadius: 999, paddingVertical: 13, alignItems: 'center', marginTop: 2 }}
         >
-          <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 14 }}>Save changes</Text>
+          <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 14 }}>{t('Save changes')}</Text>
         </LinearGradient>
       </Pressable>
     </ModalShell>

@@ -4,6 +4,7 @@ import { ModalShell } from '../components/ModalShell';
 import { colors, fonts, formatMoney, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { monthsForPayment, paymentForMonths, totalInterestPaid } from '../utils/payoff';
+import { t } from '../i18n';
 
 type Mode = 'months' | 'payment';
 
@@ -86,13 +87,13 @@ export function CardPayoffModal() {
       </View>
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Chip label="Target a date" active={mode === 'months'} onPress={() => setMode('months')} />
-        <Chip label="Set a payment" active={mode === 'payment'} onPress={() => setMode('payment')} />
+        <Chip label={t('Target a date')} active={mode === 'months'} onPress={() => setMode('months')} />
+        <Chip label={t('Set a payment')} active={mode === 'payment'} onPress={() => setMode('payment')} />
       </View>
 
       {mode === 'months' ? (
         <View style={{ gap: 6 }}>
-          <Text style={{ fontSize: 12, color: colors.textDim50 }}>Months to pay off</Text>
+          <Text style={{ fontSize: 12, color: colors.textDim50 }}>{t('Months to pay off')}</Text>
           <TextInput
             value={monthsInput}
             onChangeText={setMonthsInput}
@@ -104,7 +105,7 @@ export function CardPayoffModal() {
         </View>
       ) : (
         <View style={{ gap: 6 }}>
-          <Text style={{ fontSize: 12, color: colors.textDim50 }}>Monthly payment</Text>
+          <Text style={{ fontSize: 12, color: colors.textDim50 }}>{t('Monthly payment')}</Text>
           <TextInput
             value={paymentInput}
             onChangeText={setPaymentInput}
@@ -125,7 +126,7 @@ export function CardPayoffModal() {
         )}
         {mode === 'payment' && resultMonths !== null && (
           <Text style={{ fontSize: 22, fontFamily: fonts.bold, color: colors.text }}>
-            {resultMonths} <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: colors.textDim50 }}>months to debt-free</Text>
+            {resultMonths} <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: colors.textDim50 }}>{t('months to debt-free')}</Text>
           </Text>
         )}
       </View>
@@ -137,7 +138,7 @@ export function CardPayoffModal() {
       )}
 
       <Pressable onPress={store.closePayoff} style={{ alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: '#F2F2F4' }}>
-        <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: '#0A0A0B' }}>Done</Text>
+        <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: '#0A0A0B' }}>{t('Done')}</Text>
       </Pressable>
     </ModalShell>
   );

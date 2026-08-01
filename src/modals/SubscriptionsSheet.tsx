@@ -5,6 +5,7 @@ import { ModalShell } from '../components/ModalShell';
 import { Toggle } from '../components/Toggle';
 import { colors, decimalsFor, fonts, formatMoney, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
+import { t, tf } from '../i18n';
 
 export function SubscriptionsSheet() {
   const store = useSpendOwl();
@@ -33,7 +34,7 @@ export function SubscriptionsSheet() {
     >
       <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,.2)', alignSelf: 'center', marginBottom: 14 }} />
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-        <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>Subscriptions</Text>
+        <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>{t('Subscriptions')}</Text>
         <Text style={{ fontFamily: moneyFont(baseCur, 'mono'), fontSize: 12, color: colors.mint }}>{formatMoney(total, baseCur, 2)} / MO</Text>
       </View>
       {/* flexShrink lets the list be bounded by the sheet's maxHeight
@@ -72,7 +73,7 @@ export function SubscriptionsSheet() {
                   {s.name}
                 </Text>
                 <Text style={{ fontSize: 11.5, color: colors.textDim50, marginTop: 1 }}>
-                  {s.off ? 'Cancelled — no longer charges' : `Charges the ${s.day}`}
+                  {s.off ? t('Cancelled — no longer charges') : tf('Charges the {day}', { day: s.day })}
                   {s.cardName && !s.off ? ` · ${s.cardName}` : ''}
                 </Text>
               </View>
@@ -92,7 +93,7 @@ export function SubscriptionsSheet() {
                 </Text>
                 {s.currency !== baseCur && (
                   <Text style={{ fontSize: 10.5, fontFamily: moneyFont(baseCur, 'mono'), color: colors.textDim45, marginTop: 1 }}>
-                    {s.price == null ? 'rate unavailable' : `≈ ${formatMoney(s.price, baseCur, decimalsFor(baseCur))}`}
+                    {s.price == null ? t('rate unavailable') : `≈ ${formatMoney(s.price, baseCur, decimalsFor(baseCur))}`}
                   </Text>
                 )}
               </View>
@@ -100,7 +101,7 @@ export function SubscriptionsSheet() {
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 9, borderTopWidth: 1, borderTopColor: colors.cardBorder }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Toggle on={s.muted} onToggle={() => store.toggleSubMute(s.id)} />
-                <Text style={{ fontSize: 12, color: colors.textDim60 }}>Mute alerts</Text>
+                <Text style={{ fontSize: 12, color: colors.textDim60 }}>{t('Mute alerts')}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Pressable onPress={() => store.openEditSub(s.id)} hitSlop={6} style={{ padding: 4 }}>
@@ -108,7 +109,7 @@ export function SubscriptionsSheet() {
                 </Pressable>
                 <Pressable onPress={() => store.toggleSubOff(s.id)}>
                   <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: s.off ? colors.mint : colors.text, paddingVertical: 4, paddingHorizontal: 6 }}>
-                    {s.off ? 'Undo' : 'Log cancelled'}
+                    {s.off ? t('Undo') : t('Log cancelled')}
                   </Text>
                 </Pressable>
               </View>

@@ -1,5 +1,6 @@
 import React from 'react';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop, Text as SvgText } from 'react-native-svg';
+import { t } from '../i18n';
 
 const W = 336;
 const H = 150;
@@ -80,9 +81,7 @@ export function TrendChart({
       <SvgText x={L} y={H - 6} fontSize={10} fill="rgba(245,245,247,.4)">
         {monthLabel} 1
       </SvgText>
-      <SvgText x={last[0]} y={last[1] - 11} fontSize={10} fill="#FFFFFF" textAnchor="middle" fontWeight="700">
-        Today
-      </SvgText>
+      <SvgText x={last[0]} y={last[1] - 11} fontSize={10} fill="#FFFFFF" textAnchor="middle" fontWeight="700">{t('Today')}</SvgText>
       <SvgText x={W - R} y={H - 6} fontSize={10} fill="rgba(245,245,247,.4)" textAnchor="end">
         {monthLabel} {daysInMonth}
       </SvgText>

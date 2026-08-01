@@ -5,6 +5,7 @@ import { ModalShell } from '../components/ModalShell';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { colors, fonts, formatPYG } from '../theme';
 import { BANK_COLORS, CATEGORY_COLORS, CATEGORY_LABELS, offerBadge, todaysOfferGroups } from '../utils/discounts';
+import { t, tf } from '../i18n';
 
 /**
  * The detail behind one of Home's "today" cards. Home shows the headline —
@@ -44,10 +45,10 @@ export function TodayOffersSheet() {
       <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,.2)', alignSelf: 'center', marginBottom: 14 }} />
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
         <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text, flex: 1 }} numberOfLines={1}>
-          {category ? CATEGORY_LABELS[category] : ''}
+          {category ? t(CATEGORY_LABELS[category]) : ''}
         </Text>
         <Text style={{ fontSize: 11, fontFamily: fonts.mono, color: category ? CATEGORY_COLORS[category] : colors.textDim50 }}>
-          {offers.length} TODAY
+          {tf('{n} TODAY', { n: offers.length })}
         </Text>
       </View>
 
@@ -91,10 +92,10 @@ export function TodayOffersSheet() {
                   <Text style={{ fontSize: 10.5, fontFamily: fonts.mono, color: colors.textDim45 }}>{d.eligibleDays}</Text>
                 )}
                 {d.monthlyCapMinor != null && (
-                  <Text style={{ fontSize: 10.5, fontFamily: fonts.mono, color: colors.textDim45 }}>cap {formatPYG(d.monthlyCapMinor)}</Text>
+                  <Text style={{ fontSize: 10.5, fontFamily: fonts.mono, color: colors.textDim45 }}>{tf('cap {amount}', { amount: formatPYG(d.monthlyCapMinor) })}</Text>
                 )}
                 {d.validUntil && (
-                  <Text style={{ fontSize: 10.5, fontFamily: fonts.mono, color: colors.textDim45 }}>until {d.validUntil}</Text>
+                  <Text style={{ fontSize: 10.5, fontFamily: fonts.mono, color: colors.textDim45 }}>{tf('until {date}', { date: d.validUntil })}</Text>
                 )}
               </View>
             </View>

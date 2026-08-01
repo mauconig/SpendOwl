@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { ModalShell } from '../components/ModalShell';
 import { GRAD, GRAD_LOCATIONS, colors, fonts, formatMoney, moneyFont } from '../theme';
 import { AFFORD_OPTS, SAVINGS_TODAY, useSpendOwl } from '../store/SpendOwlContext';
+import { t } from '../i18n';
 
 export function AffordModal() {
   const store = useSpendOwl();
@@ -13,10 +14,10 @@ export function AffordModal() {
 
   const verdict =
     after > 1500
-      ? { t: 'Yes — comfortably within your buffer.', c: colors.mint, bg: colors.card, bd: 'rgba(74,222,128,.35)' }
+      ? { t: t('Yes — comfortably within your buffer.'), c: colors.mint, bg: colors.card, bd: 'rgba(74,222,128,.35)' }
       : after > 500
         ? { t: 'Yes, but it’ll be tight this month.', c: colors.amber, bg: colors.card, bd: 'rgba(250,204,21,.35)' }
-        : { t: 'I’d wait — this cuts deep into your buffer.', c: colors.rose, bg: colors.card, bd: 'rgba(248,113,113,.35)' };
+        : { t: t('I’d wait — this cuts deep into your buffer.'), c: colors.rose, bg: colors.card, bd: 'rgba(248,113,113,.35)' };
 
   return (
     <ModalShell
@@ -34,8 +35,8 @@ export function AffordModal() {
       }}
     >
       <View>
-        <Text style={{ fontSize: 18, fontFamily: fonts.bold, color: colors.text }}>Can I afford this?</Text>
-        <Text style={{ fontSize: 12.5, color: colors.textDim55, marginTop: 3 }}>Sandbox a purchase before you commit.</Text>
+        <Text style={{ fontSize: 18, fontFamily: fonts.bold, color: colors.text }}>{t('Can I afford this?')}</Text>
+        <Text style={{ fontSize: 12.5, color: colors.textDim55, marginTop: 3 }}>{t('Sandbox a purchase before you commit.')}</Text>
       </View>
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -65,7 +66,7 @@ export function AffordModal() {
       <View style={{ gap: 14 }}>
         <View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-            <Text style={{ fontSize: 12, color: colors.textDim65 }}>Savings today</Text>
+            <Text style={{ fontSize: 12, color: colors.textDim65 }}>{t('Savings today')}</Text>
             <Text style={{ fontSize: 12, fontFamily: moneyFont(baseCur, 'bold'), color: colors.mint }}>{formatMoney(SAVINGS_TODAY, baseCur, 0)}</Text>
           </View>
           <View style={{ height: 12, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
@@ -74,7 +75,7 @@ export function AffordModal() {
         </View>
         <View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-            <Text style={{ fontSize: 12, color: colors.textDim65 }}>After purchase</Text>
+            <Text style={{ fontSize: 12, color: colors.textDim65 }}>{t('After purchase')}</Text>
             <Text style={{ fontSize: 12, fontFamily: moneyFont(baseCur, 'bold'), color: colors.text }}>{formatMoney(after, baseCur, 0)}</Text>
           </View>
           <View style={{ height: 12, borderRadius: 999, backgroundColor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
@@ -94,7 +95,7 @@ export function AffordModal() {
       </View>
 
       <Pressable onPress={store.closeAfford} style={{ alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: '#F2F2F4' }}>
-        <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: '#0A0A0B' }}>Done</Text>
+        <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: '#0A0A0B' }}>{t('Done')}</Text>
       </Pressable>
     </ModalShell>
   );

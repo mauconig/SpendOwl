@@ -43,6 +43,7 @@ import {
   type ApiSummary,
   type ApiTransaction,
 } from '../api/types';
+import { setLanguage, t, type Language } from '../i18n';
 import { CatKey, Currency, displayToMinor } from '../theme';
 import { ordinalDay, shortDate } from '../utils/date';
 import {
@@ -201,6 +202,8 @@ interface SpendOwlStore {
 
   // settings
   baseCur: Currency;
+  lang: Language;
+  setLang: (lang: Language) => void;
   setBaseCur: (c: Currency) => void;
   notif: boolean;
   toggleNotif: () => void;
@@ -300,6 +303,12 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   // ---- API -> view models ----
   const settings = settingsQuery.data;
   const baseCur: Currency = settings?.baseCurrency ?? 'EUR';
+  const lang: Language = settings?.language ?? 'es';
+
+  // Applied during render, before any child reads t(). It is deliberately not
+  // in an effect: an effect runs *after* the first paint, so the whole app
+  // would flash English on every cold start before correcting itself.
+  setLanguage(lang);
 
   /**
    * Today's insight cards are generated on the first Home load of the day. The
@@ -403,7 +412,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
               return {
                 id: m.id,
                 type: 'ai',
-                text: 'This one needs a newer version of the app to show. Update SpendOwl to see it.',
+                text: t('This one needs a newer version of the app to show. Update SpendOwl to see it.'),
               };
             }
 
@@ -494,7 +503,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const chatError = sendChat.isError
     ? sendChat.error instanceof Error
       ? sendChat.error.message
-      : 'Something went wrong.'
+      : t('Something went wrong.')
     : null;
 
   // Same idea for a voice note: a bad upload, a 502 from the transcriber, or
@@ -504,7 +513,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const voiceError = sendVoice.isError
     ? sendVoice.error instanceof Error
       ? sendVoice.error.message
-      : 'Something went wrong.'
+      : t('Something went wrong.')
     : micError;
 
   const messages = useMemo<Msg[]>(
@@ -682,7 +691,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     setMicError(null);
     const status = await AudioModule.requestRecordingPermissionsAsync();
     if (!status.granted) {
-      setMicError('Microphone access is off. Enable it in your phone settings to record a voice note.');
+      setMicError(t('Microphone access is off. Enable it in your phone settings to record a voice note.'));
       return;
     }
     // Idempotent and cheap enough to set on every recording rather than track
@@ -901,7 +910,9 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     scanFirst,
 
     baseCur,
+    lang,
     setBaseCur: (c: Currency) => updateSettings.mutate({ baseCurrency: c }),
+    setLang: (l: Language) => updateSettings.mutate({ language: l }),
     notif: settings?.notif ?? true,
     toggleNotif: () => updateSettings.mutate({ notif: !(settings?.notif ?? true) }),
     bio: settings?.bio ?? false,

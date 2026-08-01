@@ -294,6 +294,22 @@ const migrations: Migration[] = [
         WHERE discount_bank IS NOT NULL;
     `,
   },
+  {
+    version: 10,
+    name: 'user_language',
+    sql: /* sql */ `
+      -- Which language the app speaks to this person in. Stored per user rather
+      -- than kept on the device because it also decides the language the coach
+      -- writes its replies in and the language the daily insights are generated
+      -- in — both of which happen on the server, with no device in sight.
+      --
+      -- Defaults to Spanish: every merchant, bank and promo in this app is
+      -- Paraguayan, so Spanish is the language its users actually have in
+      -- common, and an English default would be a worse guess than a coin flip.
+      ALTER TABLE users
+        ADD COLUMN language TEXT NOT NULL DEFAULT 'es' CHECK (language IN ('en', 'es'));
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {

@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 import { AppleMark, GoogleMark } from '../components/ProviderMark';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { colors, fonts, GRAD, GRAD_LOCATIONS } from '../theme';
+import { t, tf } from '../i18n';
 
 type Step = 'signIn' | 'signUp' | 'verify';
 type Provider = 'google' | 'apple';
@@ -51,7 +52,7 @@ function PrimaryButton({ label, busy, onPress }: { label: string; busy: boolean;
         marginTop: 2,
       }}
     >
-      <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: '#0A0A0B' }}>{busy ? 'Just a sec…' : label}</Text>
+      <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: '#0A0A0B' }}>{busy ? t('Just a sec…') : label}</Text>
     </Pressable>
   );
 }
@@ -131,7 +132,7 @@ export function AuthScreen() {
       // is a cancellation, not an error, so it gets no message.
       if (createdSessionId && setActive) await setActive({ session: createdSessionId });
     } catch {
-      setSsoError(`Could not sign in with ${provider === 'google' ? 'Google' : 'Apple'}. Please try again.`);
+      setSsoError(tf('Could not sign in with {provider}. Please try again.', { provider: provider === 'google' ? 'Google' : 'Apple' }));
     } finally {
       setSsoBusy(null);
     }
@@ -203,9 +204,9 @@ export function AuthScreen() {
           <Text style={{ fontSize: 24, fontFamily: fonts.bold, color: colors.text }}>SpendOwl</Text>
           <Text style={{ fontSize: 13.5, color: colors.textDim50, textAlign: 'center' }}>
             {step === 'signIn'
-              ? 'Sign in to pick up where you left off.'
+              ? t('Sign in to pick up where you left off.')
               : step === 'signUp'
-                ? 'Create an account to start tracking.'
+                ? t('Create an account to start tracking.')
                 : `We sent a code to ${emailAddress}.`}
           </Text>
         </View>
@@ -237,7 +238,7 @@ export function AuthScreen() {
           {step === 'verify' ? (
             <>
               <Field
-                label="Verification code"
+                label={t('Verification code')}
                 value={code}
                 onChangeText={setCode}
                 placeholder="123456"
@@ -246,18 +247,18 @@ export function AuthScreen() {
                 maxLength={6}
                 error={signUpErrors.fields.code?.message}
               />
-              <PrimaryButton label="Verify email" busy={busy} onPress={handleVerify} />
+              <PrimaryButton label={t('Verify email')} busy={busy} onPress={handleVerify} />
               <Pressable onPress={() => void signUp.verifications.sendEmailCode()} disabled={busy}>
-                <Text style={{ textAlign: 'center', fontSize: 13, color: colors.textDim55 }}>Resend code</Text>
+                <Text style={{ textAlign: 'center', fontSize: 13, color: colors.textDim55 }}>{t('Resend code')}</Text>
               </Pressable>
               <Pressable onPress={() => swap('signUp')}>
-                <Text style={{ textAlign: 'center', fontSize: 13, color: colors.textDim40 }}>Use a different email</Text>
+                <Text style={{ textAlign: 'center', fontSize: 13, color: colors.textDim40 }}>{t('Use a different email')}</Text>
               </Pressable>
             </>
           ) : (
             <>
               <Field
-                label="Email"
+                label={t('Email')}
                 value={emailAddress}
                 onChangeText={setEmailAddress}
                 placeholder="you@example.com"
@@ -272,7 +273,7 @@ export function AuthScreen() {
                 }
               />
               <Field
-                label="Password"
+                label={t('Password')}
                 value={password}
                 onChangeText={setPassword}
                 placeholder="••••••••"
@@ -285,14 +286,14 @@ export function AuthScreen() {
                 <Text style={{ fontSize: 12, color: colors.rose }}>{signUpErrors.fields.captcha.message}</Text>
               ) : null}
               <PrimaryButton
-                label={step === 'signIn' ? 'Sign in' : 'Create account'}
+                label={step === 'signIn' ? t('Sign in') : t('Create account')}
                 busy={busy}
                 onPress={step === 'signIn' ? handleSignIn : handleSignUp}
               />
 
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 2 }}>
                 <View style={{ flex: 1, height: 1, backgroundColor: colors.cardBorder }} />
-                <Text style={{ fontSize: 11, color: colors.textDim40 }}>or continue with</Text>
+                <Text style={{ fontSize: 11, color: colors.textDim40 }}>{t('or continue with')}</Text>
                 <View style={{ flex: 1, height: 1, backgroundColor: colors.cardBorder }} />
               </View>
 
@@ -317,9 +318,9 @@ export function AuthScreen() {
         {step !== 'verify' ? (
           <Pressable onPress={() => swap(step === 'signIn' ? 'signUp' : 'signIn')}>
             <Text style={{ textAlign: 'center', fontSize: 13, color: colors.textDim55 }}>
-              {step === 'signIn' ? "No account yet? " : 'Already have an account? '}
+              {step === 'signIn' ? t('No account yet?') + ' ' : t('Already have an account?') + ' '}
               <Text style={{ fontFamily: fonts.bold, color: colors.text }}>
-                {step === 'signIn' ? 'Sign up' : 'Sign in'}
+                {step === 'signIn' ? t('Sign up') : t('Sign in')}
               </Text>
             </Text>
           </Pressable>

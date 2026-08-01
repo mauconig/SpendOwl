@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { type Currency, decimalsFor, minorToDisplay } from './currency.ts';
 import { appDate } from './dates.ts';
+import { LANGUAGE_NAMES, getUserLanguage, type Language } from './language.ts';
 import { query, transaction } from './db.ts';
 import { env } from './env.ts';
 import { listSubscriptionsByPrice } from './subscriptions.ts';
@@ -129,7 +130,7 @@ const CURRENCY_NAMES: Record<Currency, string> = {
   PYG: 'Paraguayan guaraní (PYG, symbol ₲)',
 };
 
-function systemPrompt(currency: Currency): string {
+function systemPrompt(currency: Currency, language: Language): string {
   const format =
     decimalsFor(currency) === 0
       ? 'Guaraní has no decimal subunit. Write whole numbers with dots for thousands — ₲1.850.000, never ₲1,850,000 and never ₲1.85M.'
@@ -138,6 +139,12 @@ function systemPrompt(currency: Currency): string {
   return `You write the "For you today" cards on the home screen of SpendOwl, a personal
 finance app. You are given a snapshot of one person's money and you return two to
 ${MAX_CARDS} short cards about it.
+
+LANGUAGE. Write every card — title and body — in ${LANGUAGE_NAMES[language]}. These
+cards sit on a screen the user has set to that language, so a card in another one
+reads as the app breaking. Merchant, card and subscription names are the
+exception: leave them exactly as given. They are what appears on a receipt, and a
+translated shop name is a shop that does not exist.
 
 CURRENCY. Their currency is ${CURRENCY_NAMES[currency]}. Every figure you are given is
 already in ${currency} and every figure you write must be too. ${format} Never convert
@@ -447,6 +454,10 @@ function lockKey(userId: string): number {
 export async function generateInsights(userId: string, currency: Currency): Promise<InsightSet> {
   if (!env.llmApiKey) return readInsights(userId, currency);
 
+  // Read before the lock: it is one indexed lookup and nothing about it needs
+  // to be consistent with the write below.
+  const language = await getUserLanguage(userId);
+
   // The whole generation happens inside the lock, model call included. Taking
   // it only around the write would stop the duplicate INSERT but not the
   // duplicate spend: both racers would pay for a call and one result would be
@@ -468,7 +479,7 @@ export async function generateInsights(userId: string, currency: Currency): Prom
     const response = await anthropic.messages.create({
       model: env.llmModel,
       max_tokens: MAX_TOKENS,
-      system: systemPrompt(currency),
+      system: systemPrompt(currency, language),
       tools: [emitTool],
       // Forcing the tool is what makes the output a schema rather than prose.
       // It is rejected outright while thinking is on, so thinking is off —

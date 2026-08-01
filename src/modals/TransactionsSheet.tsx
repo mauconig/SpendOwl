@@ -14,6 +14,7 @@ import { minorToEur, type ApiTransaction } from '../api/types';
 import { CATS, colors, fonts, formatMoney, moneyFont, type Currency } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { longDate, monthKeyOf, monthYearLong } from '../utils/date';
+import { catName, t, tf } from '../i18n';
 
 type Section = { monthKey: string; title: string; spentMinor: number; data: ApiTransaction[] };
 
@@ -104,13 +105,13 @@ export function TransactionsSheet() {
       <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,.2)', alignSelf: 'center', marginBottom: 14 }} />
 
       <View style={{ paddingHorizontal: PAD, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>All transactions</Text>
+        <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>{t('All transactions')}</Text>
         {selCat && (
           <Pressable
             onPress={() => store.setSelCat(null)}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#F2F2F4', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 11 }}
           >
-            <Text style={{ fontSize: 11.5, fontFamily: fonts.medium, color: '#0A0A0B' }}>{CATS[selCat].name} ✕</Text>
+            <Text style={{ fontSize: 11.5, fontFamily: fonts.medium, color: '#0A0A0B' }}>{catName(CATS[selCat].name)} ✕</Text>
           </Pressable>
         )}
       </View>
@@ -118,7 +119,7 @@ export function TransactionsSheet() {
       {sections.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontSize: 13, color: colors.textDim45 }}>
-            {selCat ? `Nothing in ${CATS[selCat].name} yet.` : 'No transactions yet.'}
+            {selCat ? tf('Nothing in {category} yet.', { category: catName(CATS[selCat].name) }) : t('No transactions yet.')}
           </Text>
         </View>
       ) : (
@@ -228,7 +229,7 @@ function TxRow({ tx, baseCur }: { tx: ApiTransaction; baseCur: Currency }) {
           {tx.merchant}
         </Text>
         <Text style={{ fontSize: 11, color: colors.textDim45, marginTop: 1 }}>
-          {longDate(tx.occurredAt)} · {cat.name}
+          {longDate(tx.occurredAt)} · {catName(cat.name)}
         </Text>
         {tx.note ? (
           <Text style={{ fontSize: 11, color: colors.textDim38, marginTop: 2, lineHeight: 15 }} numberOfLines={2}>
@@ -244,7 +245,7 @@ function TxRow({ tx, baseCur }: { tx: ApiTransaction; baseCur: Currency }) {
             ) : null}
             {tx.taxDeductible ? (
               <View style={{ borderRadius: 999, paddingVertical: 2, paddingHorizontal: 8, backgroundColor: 'rgba(74,222,128,.12)', borderWidth: 1, borderColor: 'rgba(74,222,128,.3)' }}>
-                <Text style={{ fontSize: 10, fontFamily: fonts.medium, color: colors.mint }}>Tax deductible</Text>
+                <Text style={{ fontSize: 10, fontFamily: fonts.medium, color: colors.mint }}>{t('Tax deductible')}</Text>
               </View>
             ) : null}
           </View>

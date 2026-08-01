@@ -1,3 +1,5 @@
+import { getLanguage, t, type Language } from '../i18n';
+
 // The API returns calendar days as plain 'YYYY-MM-DD' strings. Parsing those
 // with `new Date(iso)` would treat them as UTC midnight and render as the
 // previous day for anyone west of Greenwich, so build the date from its parts
@@ -22,48 +24,65 @@ function startOfToday(): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS: Record<Language, string[]> = {
+  en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+  es: ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'],
+};
 
-/** 'Jul 14' */
+/**
+ * 'Jul 14' / '14 de jul'
+ *
+ * Not a dictionary lookup like the rest of the UI: the two languages put the
+ * day and month in opposite orders, so translating the month name alone would
+ * produce "jul 14", which no Spanish speaker writes.
+ */
 export function shortDate(iso: string): string {
   const date = parseDay(iso);
-  return `${MONTHS[date.getMonth()]} ${date.getDate()}`;
+  const month = MONTHS[getLanguage()][date.getMonth()];
+  return getLanguage() === 'es' ? `${date.getDate()} de ${month}` : `${month} ${date.getDate()}`;
 }
 
-/** 'Jul 14, 2026' */
+/** 'Jul 14, 2026' / '14 de jul de 2026' */
 export function longDate(iso: string): string {
-  return `${shortDate(iso)}, ${parseDay(iso).getFullYear()}`;
+  const year = parseDay(iso).getFullYear();
+  return getLanguage() === 'es' ? `${shortDate(iso)} de ${year}` : `${shortDate(iso)}, ${year}`;
 }
 
 /** 'Today' / 'Yesterday' / 'Jul 14' — the labels the transaction list uses. */
 export function relativeDayLabel(iso: string): string {
   const days = Math.round((startOfToday().getTime() - parseDay(iso).getTime()) / 86_400_000);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
+  if (days === 0) return t('Today');
+  if (days === 1) return t('Yesterday');
   return shortDate(iso);
 }
 
-const MONTHS_LONG = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
+const MONTHS_LONG: Record<Language, string[]> = {
+  en: ['January', 'February', 'March', 'April', 'May', 'June',
+       'July', 'August', 'September', 'October', 'November', 'December'],
+  // Lower case on purpose: Spanish does not capitalise month names, and a
+  // capitalised one reads as a translated-from-English app.
+  es: ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+       'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'],
+};
 
 /** '2026-07' -> 'Jul' */
 export function monthShort(monthKey: string): string {
   const index = Number(monthKey.slice(5, 7)) - 1;
-  return MONTHS[index] ?? '';
+  return MONTHS[getLanguage()][index] ?? '';
 }
 
 /** '2026-07' -> 'July' */
 export function monthLong(monthKey: string): string {
   const index = Number(monthKey.slice(5, 7)) - 1;
-  return MONTHS_LONG[index] ?? '';
+  return MONTHS_LONG[getLanguage()][index] ?? '';
 }
 
 /** '2026-07' -> 'July 2026'. Month headings in the full transaction list. */
 export function monthYearLong(monthKey: string): string {
   const name = monthLong(monthKey);
-  return name ? `${name} ${monthKey.slice(0, 4)}` : '';
+  if (!name) return '';
+  // "julio de 2026", not "julio 2026" — the preposition is not optional here.
+  return getLanguage() === 'es' ? `${name} de ${monthKey.slice(0, 4)}` : `${name} ${monthKey.slice(0, 4)}`;
 }
 
 /** '2026-07-14' -> '2026-07'. The key transactions are grouped by. */
@@ -71,8 +90,15 @@ export function monthKeyOf(iso: string): string {
   return iso.slice(0, 7);
 }
 
-/** 3 -> '3rd'. Subscription rows show an ordinal day of month. */
+/**
+ * 3 -> '3rd' / '3'. Subscription rows show an ordinal day of month.
+ *
+ * Spanish has no everyday written ordinal for a date — a renewal on the 3rd is
+ * "el 3", not "el 3.º" — so the number stands alone rather than being decorated
+ * with a suffix nobody writes.
+ */
 export function ordinalDay(day: number): string {
+  if (getLanguage() === 'es') return String(day);
   if (day % 100 >= 11 && day % 100 <= 13) return `${day}th`;
   const suffix = ['th', 'st', 'nd', 'rd'][day % 10] ?? 'th';
   return `${day}${suffix}`;
