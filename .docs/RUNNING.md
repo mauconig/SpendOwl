@@ -94,7 +94,7 @@ npm run dev        # API on :8787, applies migrations on boot
 
 `db:up` starts a `spendowl-db` container with a named volume, so data survives
 restarts. `npm run db:reset` destroys the volume and starts clean — the fastest
-way to get freshly seeded demo data.
+way back to an empty database with the migrations freshly applied.
 
 The API needs `CLERK_SECRET_KEY` from step 2; it reads `../.env.local`
 automatically. `DATABASE_URL` defaults to the docker-compose credentials, so
@@ -192,6 +192,109 @@ is enabled at boot, so a reboot brings the whole stack back unattended.
 The box also hosts an unrelated `maubot` stack (a neo4j container plus
 `maubot.service`). SpendOwl uses its own container, volume, ports and systemd
 unit, and does not touch it.
+
+## Setting up a second machine
+
+Nothing has to be carried on a USB stick. `main` holds the code, `eas.json`
+holds the two public env vars, and the VPS holds the three secret ones — so a
+new machine needs a clone, an SSH grant, and one command.
+
+The only thing that moves between the two machines is a **public** key, which
+is safe to send over any channel.
+
+### 1. Clone and install
+
+```sh
+git clone https://github.com/mauconig/SpendOwl.git
+cd SpendOwl
+npm install
+```
+
+Don't copy `node_modules` across — it holds platform-specific binaries. Same
+for `.expo/` and `dist/` (build caches) and `server/gnb-discounts.json`
+(scraper output, only needed to re-run the discount import).
+
+**Docker is optional here.** `EXPO_PUBLIC_API_URL` points at the VPS, so a
+second machine can develop against the always-on API with no local Postgres at
+all. Install Docker only to run the server locally.
+
+### 2. Grant it SSH access
+
+Generate a key *on the new machine* rather than copying the existing one. Two
+keys mean either device can be revoked without locking out the other, and no
+private key is ever transmitted.
+
+```sh
+ssh-keygen -t ed25519 -C "laptop"          # on the NEW machine
+cat ~/.ssh/id_ed25519.pub                  # send this line anywhere; it is public
+```
+
+From a machine that **already** has access, append it:
+
+```sh
+ssh vps "printf '%s\n' 'ssh-ed25519 AAAA... laptop' >> ~/.ssh/authorized_keys"
+```
+
+The trailing comment is not decoration — it is how you tell the entries apart
+when revoking one later. Then give the new machine the alias, in `~/.ssh/config`:
+
+```
+Host vps
+    HostName 147.93.180.120
+    User root
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+```
+
+Check with `ssh vps hostname`.
+
+### 3. Rebuild `.env.local`
+
+```sh
+npm run pull-env         # --print to show values, --force to overwrite
+```
+
+`scripts/pull-env.mjs` reads the two `EXPO_PUBLIC_*` vars out of `eas.json` and
+the three secrets out of `/opt/spendowl/api.env` over ssh — the same file the
+running API reads, so it cannot drift from production. It refuses to overwrite
+an existing `.env.local` without `--force`.
+
+It deliberately leaves `DATABASE_URL` behind. That value points at the VPS's own
+`127.0.0.1` Postgres with the VPS's password; copied here it would aim local dev
+at your local container while holding the wrong credentials — an authentication
+failure that looks nothing like its cause.
+
+### 4. Log in to EAS
+
+```sh
+npx eas-cli login
+```
+
+Nothing else. The project is linked through `app.json`'s `extra.eas.projectId`,
+and **the Android keystore lives on Expo's servers, not in the checkout** — so
+an APK built from the new machine carries the same signature and installs over
+the existing one as an upgrade. There is no keystore file to copy, and
+generating a new one would break upgrades for anyone who already has the app.
+
+### What must never be committed to make this easier
+
+It is tempting to check `.env.local` in and skip step 3, and a private repo
+makes it feel safe. It isn't:
+
+- Anything prefixed `EXPO_PUBLIC_` is **inlined into the APK bundle**, which
+  ships to phones and can be unzipped and read. Repo visibility is irrelevant
+  for those — which is exactly why only publishable-by-design values may carry
+  the prefix.
+- EAS uploads the project **through git**, so commits also reach the build
+  servers.
+- Git history is permanent. Deleting a committed secret doesn't remove it;
+  rotating the key is the only fix.
+- "Private" isn't durable — repos get made public, forked, transferred, given a
+  collaborator, or wired to a CI app.
+
+`CLERK_SECRET_KEY` mints sessions for any user, and `LLM_API_KEY` / `STT_API_KEY`
+are billable. They stay in `/opt/spendowl/api.env` and in gitignored
+`.env.local` files, nowhere else.
 
 ## Shipping an Android build
 
@@ -295,8 +398,10 @@ env at the same time; the two halves must match instances.
   Wi-Fi as the machine. The app derives the API host from the Metro dev-server
   address, so a VPN or a guest network that isolates clients will break it;
   set `EXPO_PUBLIC_API_URL` to override.
-- **Dashboard shows zeroes** — the account exists but seeding didn't run.
-  Check the API log for an error on the first authenticated request.
+- **Dashboard shows zeroes** — expected on a new account; nothing is seeded any
+  more, so every figure starts at nothing until you log something. If an
+  established account reads zero, check the API log for an error on the first
+  authenticated request, and check Settings → starting balance.
 - **Checking what actually persisted** — go straight to the database rather
   than guessing from the UI:
   ```sh
@@ -314,10 +419,14 @@ The app's `tsconfig.json` excludes `server/`, and `metro.config.js` blocks it
 from the bundler — it is a separate Node package that the app never imports.
 
 Authentication (Clerk) and all persisted data (Postgres) are real, and scoped
-per account: two users see entirely separate data. Still simulated: the AI
-coach's replies, receipt scanning, and voice transcription are canned results
-on fixed delays. The server *stores* them but does not generate them — see
-`.docs/BACKEND.md` for what making those real involves.
+per account: two users see entirely separate data. The AI coach is real — it
+calls an LLM with tools that propose transactions for you to approve
+(`server/src/routes/chat.ts`) — and so is voice, which transcribes through Groq
+and then feeds the transcript to that same coach. **Receipt scanning is still
+stubbed**: the server stores what the fake scanner produces rather than reading
+the image. See `.docs/BACKEND.md` for what real OCR involves.
 
-New accounts are seeded with a month of demo data on first sign-in
-(`server/src/seed.ts`), so the app opens populated rather than empty.
+New accounts start genuinely empty. Seeding a month of invented transactions
+was removed deliberately — a finance app showing spending you never did is
+alarming rather than helpful, and nothing on screen distinguished the fixtures
+from your own data. `server/src/seed.ts` now only creates the user row.
