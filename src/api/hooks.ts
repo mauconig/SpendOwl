@@ -1,7 +1,8 @@
 import { useAuth } from '@clerk/expo';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { createApi } from './client';
+import { ApiError, createApi } from './client';
+import { t } from '../i18n';
 import type {
   ApiCreditCard,
   ApiDiscount,
@@ -44,9 +45,41 @@ export function useTransactions() {
   return useQuery({ queryKey: keys.transactions, queryFn: () => api.get<ApiTransaction[]>('/api/transactions') });
 }
 
+/**
+ * The one response whose *shape* is checked rather than trusted, because it is
+ * the one whose fields are money.
+ *
+ * `api.get<ApiSummary>` is a cast, not a check: TypeScript is gone at runtime,
+ * so a payload missing a field hands `undefined` to a screen that writes
+ * `summary?.balanceMinor ?? 0` and renders a confident ₲0. That is not
+ * hypothetical — it is what a phone still on the pre-`9cfe623` build showed for
+ * days after the server stopped sending `safeToSpendMinor`: an account with
+ * money in it, reported as empty, with nothing on screen suggesting the app was
+ * the thing that was wrong.
+ *
+ * A balance is the figure people act on, so "I don't understand this response"
+ * has to be louder than a wrong number that looks fine. Throwing puts the app
+ * behind ErrorScreen (see DataGate in App.tsx), which already exists to stop a
+ * failed load from being drawn as zeroes — this just extends "failed" to cover
+ * a 200 the client cannot read.
+ *
+ * Only the hero figure is checked. The rest of the payload feeds the donut and
+ * the trend chart, where a gap draws an empty chart rather than a false claim
+ * about someone's money.
+ */
+function assertReadableSummary(data: ApiSummary): ApiSummary {
+  if (typeof data?.balanceMinor === 'number') return data;
+  // Status 200 on purpose: the request succeeded. What failed is this build's
+  // ability to read it, and the message says so rather than blaming the network.
+  throw new ApiError(200, t('This version of SpendOwl is too old to read your balance. Update the app.'));
+}
+
 export function useSummary() {
   const api = useApi();
-  return useQuery({ queryKey: keys.summary, queryFn: () => api.get<ApiSummary>('/api/summary') });
+  return useQuery({
+    queryKey: keys.summary,
+    queryFn: () => api.get<ApiSummary>('/api/summary').then(assertReadableSummary),
+  });
 }
 
 export function useCreditCards() {

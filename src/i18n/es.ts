@@ -218,6 +218,8 @@ export const ES: Record<string, string> = {
   'Something went wrong.': 'Algo salió mal.',
   'This one needs a newer version of the app to show. Update SpendOwl to see it.':
     'Esto necesita una versión más nueva de la app. Actualizá SpendOwl para verlo.',
+  'This version of SpendOwl is too old to read your balance. Update the app.':
+    'Esta versión de SpendOwl es demasiado vieja para leer tu saldo. Actualizá la app.',
   'Microphone access is off. Enable it in your phone settings to record a voice note.':
     'El micrófono está desactivado. Activalo en los ajustes del teléfono para grabar una nota de voz.',
 

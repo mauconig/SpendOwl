@@ -402,6 +402,20 @@ env at the same time; the two halves must match instances.
   more, so every figure starts at nothing until you log something. If an
   established account reads zero, check the API log for an error on the first
   authenticated request, and check Settings → starting balance.
+- **An installed APK shows ₲0 while the API returns real figures** — the phone
+  is on a build older than the server's contract. `9cfe623` renamed the hero
+  field from `safeToSpendMinor` to `balanceMinor`, and a client that asks for a
+  field the server no longer sends reads `undefined`, which every screen
+  defaults to 0. Confirm by comparing the installed build's commit with the
+  deployed one:
+  ```sh
+  npx eas-cli build:list --limit 1 --json --non-interactive   # gitCommitHash
+  ssh vps 'cd /opt/spendowl/app && git log --oneline -1'
+  ```
+  `useSummary` in `src/api/hooks.ts` now throws on a payload it cannot read, so
+  a stale build lands on ErrorScreen telling the user to update — but that guard
+  only exists in builds that carry it. Anything older still renders the silent
+  zero, and the only fix for those is installing a current APK.
 - **Checking what actually persisted** — go straight to the database rather
   than guessing from the UI:
   ```sh
