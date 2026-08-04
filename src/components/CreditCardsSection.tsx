@@ -3,7 +3,23 @@ import { Pressable, Text, View } from 'react-native';
 import { Icon } from '../icons';
 import { colors, fonts, formatMoney } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
-import { t } from '../i18n';
+import { t, tf } from '../i18n';
+
+/**
+ * Available credit, which is what this section leads with.
+ *
+ * It used to lead with the debt, and the debt is the harder number to act on:
+ * deciding whether a purchase fits means subtracting it from the limit in your
+ * head, every time. Available is the answer to that question already computed,
+ * and it is derived from the two figures the card already stores — nothing here
+ * asks anyone to enter a third.
+ *
+ * Clamped at zero: a card over its limit owes more than it can hold, and
+ * "-₲200.000 available" is a worse way of saying "nothing left" than ₲0 is.
+ */
+function availableOn(card: { balance: number; limit: number }): number {
+  return Math.max(card.limit - card.balance, 0);
+}
 
 export function CreditCardsSection() {
   const store = useSpendOwl();
@@ -14,7 +30,13 @@ export function CreditCardsSection() {
     <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 20, padding: 16, gap: 12 }}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
         <Text style={{ fontSize: 14.5, fontFamily: fonts.bold, color: colors.text }}>{t('Credit cards')}</Text>
-        <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: colors.rose }}>{formatMoney(totalDebt, baseCur, 2)} owed</Text>
+        {/* The total stays the debt, in rose, while each card below leads with
+            what it has left. The two answer different questions and the header
+            is where the debt one belongs: per card you are deciding whether a
+            purchase fits, across all of them you are asking what you owe. */}
+        <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: colors.rose }}>
+          {tf('{amount} owed', { amount: formatMoney(totalDebt, baseCur, 2) })}
+        </Text>
       </View>
 
       {creditCards.length === 0 ? (
@@ -22,7 +44,12 @@ export function CreditCardsSection() {
       ) : (
         <View style={{ gap: 10 }}>
           {creditCards.map(c => {
-            const pct = Math.min(c.balance / c.limit, 1);
+            const available = availableOn(c);
+            // Fills with what is left rather than what is spent, so the bar and
+            // the figure under it say the same thing. A bar that drains as you
+            // spend, under a number that counts what you can still spend, would
+            // read as two different accounts of the same card.
+            const pct = c.limit > 0 ? Math.min(available / c.limit, 1) : 0;
             return (
               <Pressable key={c.id} onPress={() => store.openPayoff(c.id)} style={{ gap: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -33,9 +60,13 @@ export function CreditCardsSection() {
                     <Text style={{ fontSize: 13.5, fontFamily: fonts.bold, color: colors.text }} numberOfLines={1}>
                       {c.name}
                     </Text>
+                    {/* The debt moves here rather than disappearing: it is
+                        still what the payoff modal behind this row is about,
+                        and a card app that cannot tell you what you owe is
+                        missing the point. It is secondary, not absent. */}
                     <Text style={{ fontSize: 11, color: colors.textDim45, marginTop: 1 }}>
                       {c.last4 ? `•••• ${c.last4} · ` : ''}
-                      {c.apr}% APR
+                      {c.apr}% APR · {tf('{amount} used', { amount: formatMoney(c.balance, baseCur, 0) })}
                     </Text>
                   </View>
                   <Pressable
@@ -53,8 +84,12 @@ export function CreditCardsSection() {
                   <View style={{ height: '100%', width: `${Math.max(pct * 100, 3)}%`, borderRadius: 999, backgroundColor: c.color }} />
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ fontSize: 12, fontFamily: fonts.medium, color: colors.text }}>{formatMoney(c.balance, baseCur, 2)} owed</Text>
-                  <Text style={{ fontSize: 12, color: colors.textDim45 }}>of {formatMoney(c.limit, baseCur, 0)} limit</Text>
+                  <Text style={{ fontSize: 12, fontFamily: fonts.medium, color: colors.text }}>
+                    {tf('{amount} available', { amount: formatMoney(available, baseCur, 2) })}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.textDim45 }}>
+                    {tf('of {amount}', { amount: formatMoney(c.limit, baseCur, 0) })}
+                  </Text>
                 </View>
               </Pressable>
             );

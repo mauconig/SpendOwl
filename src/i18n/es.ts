@@ -131,6 +131,15 @@ export const ES: Record<string, string> = {
   'Add a card': 'Agregar una tarjeta',
   'Edit card': 'Editar tarjeta',
   'No cards yet — add one below.': 'Todavía no hay tarjetas — agregá una abajo.',
+  // What a card has left, which is what each row leads with. Plural because it
+  // agrees with the currency in the amount ("₲7.343.602 disponibles"), not with
+  // the word "saldo".
+  '{amount} available': '{amount} disponibles',
+  '{amount} used': '{amount} usado',
+  'of {amount}': 'de {amount}',
+  // Reordered on purpose — "debés ₲4.597.088", not "₲4.597.088 debés". This is
+  // the reordering the named placeholders exist to allow.
+  '{amount} owed': 'debés {amount}',
   'Card name': 'Nombre de la tarjeta',
   'Balance owed': 'Saldo adeudado',
   'Credit limit': 'Límite de crédito',
