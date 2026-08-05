@@ -183,6 +183,10 @@ export function OnboardingScreen() {
         limit,
         apr: Number(card.apr) || 0,
         color: card.color,
+        // The currency picked a moment ago in this same action, not
+        // store.baseCur — see the comment on addCreditCard in
+        // SpendOwlContext.tsx for why that would still read the old one here.
+        currency,
       });
     }
   };

@@ -146,7 +146,7 @@ interface SpendOwlStore {
   openAddCard: () => void;
   openEditCard: (id: string) => void;
   closeCardSheet: () => void;
-  addCreditCard: (input: { name: string; balance: number; limit: number; apr: number; color?: string }) => void;
+  addCreditCard: (input: { name: string; balance: number; limit: number; apr: number; color?: string; currency?: Currency }) => void;
   updateCreditCard: (input: {
     id: string;
     name?: string;
@@ -807,7 +807,16 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addCreditCard = useCallback(
-    (input: { name: string; balance: number; limit: number; apr: number; color?: string }) => {
+    (input: { name: string; balance: number; limit: number; apr: number; color?: string; currency?: Currency }) => {
+      // `currency` lets a caller override baseCur for this one write — needed
+      // by OnboardingScreen, which sets the account's currency and adds cards
+      // in the same action. baseCur here still reads the settings query as it
+      // was on the last render, and that optimistic update hasn't landed yet
+      // when the card mutations fire a moment later in the same call stack —
+      // so without this, a card added while switching to PYG got converted
+      // with the old currency's rule (÷100 undone) and read back a hundred
+      // times too big.
+      const cur = input.currency ?? baseCur;
       addCard.mutate({
         name: input.name,
         // displayToMinor, not eurToMinor: these come from a text field, and
@@ -816,8 +825,8 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
         // hundred times too big. eurToMinor is right where the value has
         // already been through minorToEur (the card-approval path); it is wrong
         // for anything a person typed.
-        balanceMinor: displayToMinor(input.balance, baseCur),
-        limitMinor: displayToMinor(input.limit, baseCur),
+        balanceMinor: displayToMinor(input.balance, cur),
+        limitMinor: displayToMinor(input.limit, cur),
         apr: input.apr,
         // Falls back to the old rotation so a card added without ever
         // touching the picker still gets today's default behaviour.
