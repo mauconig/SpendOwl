@@ -47,7 +47,14 @@ export function DashboardScreen() {
   // two are added rather than one replacing the other: showing only interest
   // here while spend counted the payment would leave the donut short of the
   // month's total by exactly the amount paid.
-  const cardInterest = cardInterestMonthly(store.creditCards);
+  //
+  // store.creditCards is minorToDisplay-scaled (the real guaraní figure on a
+  // PYG account), but spentByCat below and everything else on this screen is
+  // still minorToEur-scaled (always ÷100, which formatMoney/heroSplit undo
+  // again for PYG) — that wider conversion hasn't been done yet. Dividing
+  // back down here is what keeps this one figure from being added and shown
+  // a hundred times too big next to it.
+  const cardInterest = baseCur === 'PYG' ? cardInterestMonthly(store.creditCards) / 100 : cardInterestMonthly(store.creditCards);
   const spentByCat = new Map<CatKey, number>(
     (summary?.categories ?? []).map(c => [c.key, minorToEur(c.spentMinor)])
   );

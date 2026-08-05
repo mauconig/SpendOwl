@@ -9,7 +9,7 @@ const LAST_ACTIVE_KEY = 'spendowl.lastActiveAt';
 const LOCK_AFTER_MS = 5 * 60 * 1000;
 const SIGN_OUT_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
-export type AppLockState = 'unlocked' | 'locked' | 'signing-out';
+export type AppLockState = 'checking' | 'unlocked' | 'locked' | 'signing-out';
 
 /**
  * Gates the app behind Face ID/fingerprint after ~5 minutes backgrounded, and
@@ -20,38 +20,52 @@ export type AppLockState = 'unlocked' | 'locked' | 'signing-out';
  * The timestamp lives in SecureStore rather than component state because
  * `AppState` itself doesn't survive the process being killed between
  * launches, which is exactly the case the long-inactivity check exists for.
+ *
+ * Starts at `'checking'`, not `'unlocked'`: the caller renders nothing (the
+ * screen behind stays whatever dark background it already had) for this
+ * state, same as `'locked'`. Defaulting to `'unlocked'` instead let real
+ * account data flash on screen for the beat it took to read the stored
+ * timestamp and, if needed, wait on the biometric prompt — exactly the
+ * window someone picking up a backgrounded phone would be looking at it in.
  */
 export function useAppLock(bioEnabled: boolean) {
   const { signOut } = useClerk();
-  const [state, setState] = useState<AppLockState>('unlocked');
+  const [state, setState] = useState<AppLockState>('checking');
   const appState = useRef(AppState.currentState);
   const checking = useRef(false);
 
   const promptBiometric = useCallback(async () => {
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const isEnrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
-    if (!hasHardware || !isEnrolled) {
-      // Nothing to gate on — don't strand someone with no biometrics set up.
-      setState('unlocked');
-      return;
-    }
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
+      if (!hasHardware || !isEnrolled) {
+        // Nothing to gate on — don't strand someone with no biometrics set up.
+        setState('unlocked');
+        return;
+      }
 
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: t('Unlock Nummus AI'),
-      disableDeviceFallback: false,
-    });
-    if (result.success) {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: t('Unlock Nummus AI'),
+        disableDeviceFallback: false,
+      });
+      if (result.success) {
+        setState('unlocked');
+        return;
+      }
+      // Biometrics that are fundamentally unusable right now (e.g. Face ID
+      // inside Expo Go on iOS, which Expo Go cannot get entitled for) shouldn't
+      // leave the user stuck behind a lock screen with no way to clear it.
+      if (result.error === 'not_available' || result.error === 'no_space') {
+        setState('unlocked');
+        return;
+      }
+      setState('locked');
+    } catch {
+      // A crashed hardware/permissions check is not a security boundary
+      // worth enforcing — fail open rather than leave the screen black with
+      // no way for anyone to tell why.
       setState('unlocked');
-      return;
     }
-    // Biometrics that are fundamentally unusable right now (e.g. Face ID
-    // inside Expo Go on iOS, which Expo Go cannot get entitled for) shouldn't
-    // leave the user stuck behind a lock screen with no way to clear it.
-    if (result.error === 'not_available' || result.error === 'no_space') {
-      setState('unlocked');
-      return;
-    }
-    setState('locked');
   }, []);
 
   const checkInactivity = useCallback(async () => {
@@ -76,6 +90,8 @@ export function useAppLock(bioEnabled: boolean) {
         await promptBiometric();
         return;
       }
+      setState('unlocked');
+    } catch {
       setState('unlocked');
     } finally {
       checking.current = false;

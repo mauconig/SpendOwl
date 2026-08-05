@@ -57,9 +57,14 @@ function AppLockGate() {
   const { state, retry } = useAppLock(store.bio);
 
   if (state === 'locked') return <LockScreen onRetry={retry} />;
-  // The sign-out call is in flight; Gate() will swap to AuthScreen the moment
-  // Clerk's isSignedIn flips, so there's nothing useful to render here.
-  if (state === 'signing-out') return null;
+  // 'checking' (still reading the stored timestamp, maybe waiting on the
+  // biometric prompt) and 'signing-out' (the sign-out call is in flight —
+  // Gate() will swap to AuthScreen the moment Clerk's isSignedIn flips) both
+  // render nothing rather than real account data or a lock screen that might
+  // not even be needed. The SafeAreaView behind this is already a plain dark
+  // background, so nothing here reads as a blank flash — just dark, same as
+  // a beat before the lock screen or the app itself appears.
+  if (state === 'checking' || state === 'signing-out') return null;
   return <DataGate />;
 }
 
