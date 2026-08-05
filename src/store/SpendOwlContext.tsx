@@ -213,6 +213,13 @@ interface SpendOwlStore {
   toggleNotif: () => void;
   bio: boolean;
   toggleBio: () => void;
+  monthlyBudgetMinor: number;
+
+  // Reconfiguring the starting balance and every card's balance in one place,
+  // rather than the old lone "Starting balance" field.
+  balancesSheetOpen: boolean;
+  openBalancesSheet: () => void;
+  closeBalancesSheet: () => void;
 }
 
 const SpendOwlCtx = createContext<SpendOwlStore | null>(null);
@@ -240,6 +247,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const [subSheet, setSubSheet] = useState<{ id: string } | null>(null);
   const [invOpen, setInvOpen] = useState<string | null>(null);
   const [todayOffersCat, setTodayOffersCat] = useState<ApiDiscountCategory | null>(null);
+  const [balancesSheetOpen, setBalancesSheetOpen] = useState(false);
   // 'scanning' is a transient animation, never persisted — it lives here until
   // the (currently fake) scan resolves into a real card message.
   const [pendingScans, setPendingScans] = useState<string[]>([]);
@@ -923,6 +931,11 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     toggleNotif: () => updateSettings.mutate({ notif: !(settings?.notif ?? true) }),
     bio: settings?.bio ?? false,
     toggleBio: () => updateSettings.mutate({ bio: !(settings?.bio ?? false) }),
+    monthlyBudgetMinor: settings?.monthlyBudgetMinor ?? 0,
+
+    balancesSheetOpen,
+    openBalancesSheet: () => setBalancesSheetOpen(true),
+    closeBalancesSheet: () => setBalancesSheetOpen(false),
   };
 
   return <SpendOwlCtx.Provider value={value}>{children}</SpendOwlCtx.Provider>;

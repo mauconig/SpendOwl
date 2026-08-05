@@ -22,6 +22,7 @@ export const ES: Record<string, string> = {
   'Account overdrawn': 'Cuenta en negativo',
   'Your balance': 'Tu saldo',
   'Starting balance': 'Saldo inicial',
+  'Configure balances': 'Configurar saldos',
   '{balance} in your account. {inn} in and {out} out in {month}.':
     '{balance} en tu cuenta. {inn} entró y {out} salió en {month}.',
   '{balance} below zero. {inn} in and {out} out in {month}.':
@@ -195,9 +196,15 @@ export const ES: Record<string, string> = {
   'Coach tone': 'Tono del coach',
   Friendly: 'Cercano',
   'Budget alerts': 'Avisos de presupuesto',
+  'Budget alert': 'Aviso de presupuesto',
+  'You’ve gone over this month’s budget.': 'Superaste el presupuesto de este mes.',
+  'You’ve used {pct}% of this month’s budget.': 'Ya usaste el {pct}% del presupuesto de este mes.',
   'Voice transcripts': 'Transcripción de voz',
   'On device': 'En el dispositivo',
   'Biometric lock': 'Bloqueo biométrico',
+  'Unlock SpendOwl': 'Desbloqueá SpendOwl',
+  'App locked. Unlock to continue.': 'App bloqueada. Desbloqueá para continuar.',
+  Unlock: 'Desbloquear',
   Off: 'Desactivado',
   'Training on my data': 'Entrenar con mis datos',
   'Sign out': 'Cerrar sesión',

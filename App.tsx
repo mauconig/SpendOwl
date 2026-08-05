@@ -11,9 +11,12 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AuthScreen } from './src/screens/AuthScreen';
+import { LockScreen } from './src/screens/LockScreen';
 import { RootScreen } from './src/RootScreen';
 import { SpendOwlProvider, useSpendOwl } from './src/store/SpendOwlContext';
 import { ErrorScreen, LoadingScreen } from './src/screens/LoadingScreen';
+import { useAppLock } from './src/hooks/useAppLock';
+import { useBudgetAlerts } from './src/hooks/useBudgetAlerts';
 import { colors } from './src/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -39,16 +42,34 @@ function Gate() {
 
   return (
     <SpendOwlProvider>
-      <DataGate />
+      <AppLockGate />
     </SpendOwlProvider>
   );
+}
+
+// Sits inside SpendOwlProvider (rather than around it, next to Gate's other
+// branches) so it can read `store.bio` directly instead of standing up a
+// second settings fetch just for this. Locked/signing-out both pre-empt
+// DataGate — there's no reason to wait on the data queries behind a lock
+// screen nobody can see yet.
+function AppLockGate() {
+  const store = useSpendOwl();
+  const { state, retry } = useAppLock(store.bio);
+
+  if (state === 'locked') return <LockScreen onRetry={retry} />;
+  // The sign-out call is in flight; Gate() will swap to AuthScreen the moment
+  // Clerk's isSignedIn flips, so there's nothing useful to render here.
+  if (state === 'signing-out') return null;
+  return <DataGate />;
 }
 
 // Inside SpendOwlProvider so it can see the query state. The screens below it
 // all assume their data exists, so nothing renders until the first load
 // resolves — and a failed load says so instead of showing zeroes.
 function DataGate() {
-  const { loading, error, retry } = useSpendOwl();
+  const store = useSpendOwl();
+  const { loading, error, retry } = store;
+  useBudgetAlerts(store.notif, store.summary, store.monthlyBudgetMinor);
   if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen message={error} onRetry={retry} />;
   return <RootScreen />;

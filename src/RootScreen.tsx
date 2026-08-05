@@ -4,6 +4,7 @@ import { BottomNav } from './components/BottomNav';
 import { AddCardSheet } from './modals/AddCardSheet';
 import { AffordModal } from './modals/AffordModal';
 import { CardPayoffModal } from './modals/CardPayoffModal';
+import { ConfigureBalancesSheet } from './modals/ConfigureBalancesSheet';
 import { EditSubSheet } from './modals/EditSubSheet';
 import { InvoiceDetail } from './modals/InvoiceDetail';
 import { SubscriptionsSheet } from './modals/SubscriptionsSheet';
@@ -101,6 +102,7 @@ export function RootScreen() {
       <InvoiceDetail />
       <AddCardSheet />
       <CardPayoffModal />
+      <ConfigureBalancesSheet />
       <TodayOffersSheet />
     </View>
   );
