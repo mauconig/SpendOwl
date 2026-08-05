@@ -309,4 +309,20 @@ export const ES: Record<string, string> = {
   // ---- Dates ----
   Today: 'Hoy',
   Yesterday: 'Ayer',
+
+  // ---- Onboarding ----
+  'Let’s set up your account': 'Preparemos tu cuenta',
+  'A few quick steps and you’re in.': 'Unos pasos rápidos y ya podés entrar.',
+  'How should we call you?': '¿Cómo te llamamos?',
+  'We’ll greet you by this name around the app.': 'Así te vamos a saludar por la app.',
+  'Your name': 'Tu nombre',
+  'What do you have available today?': '¿Cuánto tenés disponible hoy?',
+  'Set your starting balance and currency — we use them everywhere.':
+    'Elegí tu saldo inicial y tu moneda — las usamos en toda la app.',
+  'Add your credit cards': 'Agregá tus tarjetas de crédito',
+  'Optional — add more anytime from Statistics.': 'Opcional — podés agregar más después desde Estadísticas.',
+  'Add another card': 'Agregar otra tarjeta',
+  'No cards added yet.': 'Todavía no agregaste tarjetas.',
+  Continue: 'Continuar',
+  Finish: 'Finalizar',
 };

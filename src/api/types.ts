@@ -244,6 +244,8 @@ export type ApiSettings = {
   language: Language;
   notif: boolean;
   bio: boolean;
+  /** Has this account been through the first-run name/balance/cards wizard. */
+  onboarded: boolean;
 };
 
 /** Cents -> EUR. The one place the minor-units convention is unwound. */

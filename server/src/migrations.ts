@@ -329,6 +329,22 @@ const migrations: Migration[] = [
         ADD COLUMN opening_balance_minor INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 12,
+    name: 'user_onboarding',
+    sql: /* sql */ `
+      -- Gates a first-run wizard (name, starting balance, cards) in front of
+      -- the empty Dashboard a brand-new account used to land on directly.
+      --
+      -- DEFAULT TRUE here, then flipped to FALSE below: every account that
+      -- already exists got here some other way and has real data already, so
+      -- it counts as onboarded. Only rows inserted after the DEFAULT changes
+      -- — a genuinely new sign-up, or an account reset by deleting its row —
+      -- start FALSE and see the wizard.
+      ALTER TABLE users ADD COLUMN onboarded BOOLEAN NOT NULL DEFAULT TRUE;
+      ALTER TABLE users ALTER COLUMN onboarded SET DEFAULT FALSE;
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {

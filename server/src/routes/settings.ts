@@ -9,7 +9,8 @@ const SELECT = `
          opening_balance_minor AS "openingBalanceMinor",
          language,
          notif,
-         bio
+         bio,
+         onboarded
   FROM users
 `;
 
@@ -21,6 +22,7 @@ const updateSchema = z.object({
   language: z.enum(['en', 'es']).optional(),
   notif: z.boolean().optional(),
   bio: z.boolean().optional(),
+  onboarded: z.boolean().optional(),
 });
 
 export const settingsRoute = new Hono<AppEnv>()
@@ -43,10 +45,11 @@ export const settingsRoute = new Hono<AppEnv>()
               opening_balance_minor = COALESCE($4, opening_balance_minor),
               language              = COALESCE($5, language),
               notif                 = COALESCE($6, notif),
-              bio                   = COALESCE($7, bio)
+              bio                   = COALESCE($7, bio),
+              onboarded             = COALESCE($8, onboarded)
         WHERE id = $1
         RETURNING base_currency AS "baseCurrency", monthly_budget_minor AS "monthlyBudgetMinor",
-                  opening_balance_minor AS "openingBalanceMinor", language, notif, bio`,
+                  opening_balance_minor AS "openingBalanceMinor", language, notif, bio, onboarded`,
       [
         c.get('userId'),
         body.baseCurrency ?? null,
@@ -57,6 +60,7 @@ export const settingsRoute = new Hono<AppEnv>()
         body.language ?? null,
         body.notif ?? null,
         body.bio ?? null,
+        body.onboarded ?? null,
       ]
     );
     if (!row) return c.json({ error: 'User not provisioned' }, 404);

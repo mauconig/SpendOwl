@@ -12,6 +12,7 @@ import React, { useEffect } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { LockScreen } from './src/screens/LockScreen';
+import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { RootScreen } from './src/RootScreen';
 import { SpendOwlProvider, useSpendOwl } from './src/store/SpendOwlContext';
 import { ErrorScreen, LoadingScreen } from './src/screens/LoadingScreen';
@@ -77,6 +78,10 @@ function DataGate() {
   useBudgetAlerts(store.notif, store.summary, store.monthlyBudgetMinor);
   if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen message={error} onRetry={retry} />;
+  // A brand-new row (or one just reset to empty) starts unonboarded — see
+  // server/src/migrations.ts version 12 — and sees the wizard here instead of
+  // an empty Dashboard with nothing on it to explain why.
+  if (!store.onboarded) return <OnboardingScreen />;
   return <RootScreen />;
 }
 

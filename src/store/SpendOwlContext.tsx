@@ -215,6 +215,11 @@ interface SpendOwlStore {
   toggleBio: () => void;
   monthlyBudgetMinor: number;
 
+  // Whether this account has been through the first-run wizard yet — gates
+  // OnboardingScreen in App.tsx ahead of the real Dashboard.
+  onboarded: boolean;
+  completeOnboarding: (input: { baseCurrency: Currency; openingBalanceMinor: number }) => void;
+
   // Reconfiguring the starting balance and every card's balance in one place,
   // rather than the old lone "Starting balance" field.
   balancesSheetOpen: boolean;
@@ -937,6 +942,13 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     bio: settings?.bio ?? false,
     toggleBio: () => updateSettings.mutate({ bio: !(settings?.bio ?? false) }),
     monthlyBudgetMinor: settings?.monthlyBudgetMinor ?? 0,
+
+    onboarded: settings?.onboarded ?? false,
+    // One PATCH rather than three separate setters: the wizard's a single
+    // commit, and this is the only caller that ever needs to flip onboarded
+    // and the balance/currency together.
+    completeOnboarding: (input: { baseCurrency: Currency; openingBalanceMinor: number }) =>
+      updateSettings.mutate({ ...input, onboarded: true }),
 
     balancesSheetOpen,
     openBalancesSheet: () => setBalancesSheetOpen(true),
