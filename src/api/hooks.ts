@@ -71,7 +71,7 @@ function assertReadableSummary(data: ApiSummary): ApiSummary {
   if (typeof data?.balanceMinor === 'number') return data;
   // Status 200 on purpose: the request succeeded. What failed is this build's
   // ability to read it, and the message says so rather than blaming the network.
-  throw new ApiError(200, t('This version of SpendOwl is too old to read your balance. Update the app.'));
+  throw new ApiError(200, t('This version of Nummus AI is too old to read your balance. Update the app.'));
 }
 
 export function useSummary() {

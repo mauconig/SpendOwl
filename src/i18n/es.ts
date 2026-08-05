@@ -23,6 +23,10 @@ export const ES: Record<string, string> = {
   'Your balance': 'Tu saldo',
   'Starting balance': 'Saldo inicial',
   'Configure balances': 'Configurar saldos',
+  'Set what you actually have today — Home and the Dashboard adjust to match.':
+    'Poné lo que realmente tenés hoy — Inicio y el Dashboard se ajustan solos.',
+  'Available balance': 'Saldo disponible',
+  'Available credit': 'Crédito disponible',
   '{balance} in your account. {inn} in and {out} out in {month}.':
     '{balance} en tu cuenta. {inn} entró y {out} salió en {month}.',
   '{balance} below zero. {inn} in and {out} out in {month}.':
@@ -202,7 +206,7 @@ export const ES: Record<string, string> = {
   'Voice transcripts': 'Transcripción de voz',
   'On device': 'En el dispositivo',
   'Biometric lock': 'Bloqueo biométrico',
-  'Unlock SpendOwl': 'Desbloqueá SpendOwl',
+  'Unlock Nummus AI': 'Desbloqueá Nummus AI',
   'App locked. Unlock to continue.': 'App bloqueada. Desbloqueá para continuar.',
   Unlock: 'Desbloquear',
   Off: 'Desactivado',
@@ -232,10 +236,10 @@ export const ES: Record<string, string> = {
   'Can’t load your data': 'No pudimos cargar tus datos',
   'Try again': 'Reintentar',
   'Something went wrong.': 'Algo salió mal.',
-  'This one needs a newer version of the app to show. Update SpendOwl to see it.':
-    'Esto necesita una versión más nueva de la app. Actualizá SpendOwl para verlo.',
-  'This version of SpendOwl is too old to read your balance. Update the app.':
-    'Esta versión de SpendOwl es demasiado vieja para leer tu saldo. Actualizá la app.',
+  'This one needs a newer version of the app to show. Update Nummus AI to see it.':
+    'Esto necesita una versión más nueva de la app. Actualizá Nummus AI para verlo.',
+  'This version of Nummus AI is too old to read your balance. Update the app.':
+    'Esta versión de Nummus AI es demasiado vieja para leer tu saldo. Actualizá la app.',
   'Microphone access is off. Enable it in your phone settings to record a voice note.':
     'El micrófono está desactivado. Activalo en los ajustes del teléfono para grabar una nota de voz.',
 

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SpendOwl",
+    "name": "Nummus AI",
     "slug": "spendowl",
     "version": "1.0.0",
     "scheme": "spendowl",
@@ -15,7 +15,7 @@
       "package": "com.spendowl.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0A0A0C",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -31,7 +31,14 @@
     },
     "plugins": [
       "expo-font",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#07080b",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180
+        }
+      ],
       "expo-secure-store",
       "@clerk/expo",
       "expo-web-browser",
@@ -39,7 +46,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "SpendOwl uses your microphone to turn voice notes into transactions."
+          "microphonePermission": "Nummus AI uses your microphone to turn voice notes into transactions."
         }
       ],
       "expo-asset"

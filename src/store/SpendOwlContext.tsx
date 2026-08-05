@@ -44,7 +44,7 @@ import {
   type ApiTransaction,
 } from '../api/types';
 import { setLanguage, t, type Language } from '../i18n';
-import { CatKey, Currency, displayToMinor } from '../theme';
+import { CatKey, Currency, displayToMinor, minorToDisplay } from '../theme';
 import { ordinalDay, shortDate } from '../utils/date';
 import {
   AFFORD_OPTS,
@@ -345,16 +345,21 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
 
   const creditCards = useMemo<CreditCard[]>(
     () =>
+      // minorToDisplay, not minorToEur: balanceMinor/limitMinor are written with
+      // displayToMinor (addCreditCard/updateCreditCard below), which only
+      // scales by 100 for currencies that have subunits. minorToEur always
+      // scales by 100, so on a guaraní account it read every card's balance
+      // and limit back a hundred times too small.
       (cardsQuery.data ?? []).map(c => ({
         id: c.id,
         name: c.name,
         last4: c.last4,
-        balance: minorToEur(c.balanceMinor),
-        limit: minorToEur(c.limitMinor),
+        balance: minorToDisplay(c.balanceMinor, baseCur),
+        limit: minorToDisplay(c.limitMinor, baseCur),
         apr: c.apr,
         color: c.color,
       })),
-    [cardsQuery.data]
+    [cardsQuery.data, baseCur]
   );
 
   const subs = useMemo<Subscription[]>(
@@ -424,7 +429,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
               return {
                 id: m.id,
                 type: 'ai',
-                text: t('This one needs a newer version of the app to show. Update SpendOwl to see it.'),
+                text: t('This one needs a newer version of the app to show. Update Nummus AI to see it.'),
               };
             }
 

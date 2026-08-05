@@ -108,6 +108,21 @@ export function formatMoney(amount: number, cur: Currency, decimals: 0 | 2 = 2):
   return symbol + amount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
+/**
+ * Same rendering as formatMoney, for amounts that are already the real,
+ * correctly-scaled figure rather than a halved one — i.e. anything read with
+ * minorToDisplay (credit card balance/limit) rather than minorToEur
+ * (everything else, still). formatMoney's PYG branch multiplies by 100 to
+ * undo a halving its other callers all applied first; a card balance never
+ * had that halving applied, so running it through formatMoney read a real
+ * ₲7.343.601 back as ₲734.360.100.
+ */
+export function formatMoneyExact(amount: number, cur: Currency, decimals: 0 | 2 = 2): string {
+  if (cur === 'PYG') return formatPYG(amount);
+  const symbol = cur === 'EUR' ? '€' : '$';
+  return symbol + amount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
 /** Guaraní amounts are whole numbers; euros and dollars get two places. */
 export function decimalsFor(cur: Currency): 0 | 2 {
   return cur === 'PYG' ? 0 : 2;

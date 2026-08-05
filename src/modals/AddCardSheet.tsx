@@ -5,7 +5,7 @@ import { ColorSwatchPicker } from '../components/ColorSwatchPicker';
 import { ModalShell } from '../components/ModalShell';
 import { GRAD, GRAD_LOCATIONS, colors, fonts } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
-import { CARD_COLORS } from '../store/constants';
+import { availableOnCard, CARD_COLORS } from '../store/constants';
 import { formatThousands, parseThousands } from '../utils/moneyInput';
 import { t } from '../i18n';
 
@@ -45,7 +45,7 @@ export function AddCardSheet() {
   const editingCard = sheet?.mode === 'edit' ? store.creditCards.find(c => c.id === sheet.id) : undefined;
 
   const [name, setName] = useState('');
-  const [balanceDigits, setBalanceDigits] = useState('');
+  const [availableDigits, setAvailableDigits] = useState('');
   const [limitDigits, setLimitDigits] = useState('');
   const [apr, setApr] = useState('');
   const [color, setColor] = useState<string>(CARD_COLORS[0]!);
@@ -54,13 +54,13 @@ export function AddCardSheet() {
     if (!sheet) return;
     if (sheet.mode === 'edit' && editingCard) {
       setName(editingCard.name);
-      setBalanceDigits(String(Math.round(editingCard.balance)));
+      setAvailableDigits(String(availableOnCard(editingCard)));
       setLimitDigits(String(Math.round(editingCard.limit)));
       setApr(String(editingCard.apr));
       setColor(editingCard.color);
     } else {
       setName('');
-      setBalanceDigits('');
+      setAvailableDigits('');
       setLimitDigits('');
       setApr('');
       // Preview the color a new card would default to if never touched here.
@@ -71,9 +71,13 @@ export function AddCardSheet() {
 
   const close = () => store.closeCardSheet();
 
-  const balance = parseThousands(balanceDigits);
+  // The field is what's left to spend, not what's owed, so the limit is what
+  // anchors the conversion back to a balance — same derivation as
+  // CreditCardsSection and ConfigureBalancesSheet.
+  const available = parseThousands(availableDigits);
   const limit = parseThousands(limitDigits);
-  const canSubmit = name.trim().length > 0 && balance >= 0 && limit > 0 && Number(apr) >= 0;
+  const balance = Math.max(limit - available, 0);
+  const canSubmit = name.trim().length > 0 && available >= 0 && limit > 0 && Number(apr) >= 0;
 
   const submit = () => {
     if (!canSubmit) return;
@@ -108,9 +112,9 @@ export function AddCardSheet() {
 
       <Field label={t('Card name')} value={name} onChangeText={setName} placeholder="Visa Platinum" />
       <Field
-        label={t('Balance owed')}
-        value={formatThousands(balanceDigits)}
-        onChangeText={v => setBalanceDigits(v.replace(/\D/g, ''))}
+        label={t('Available credit')}
+        value={formatThousands(availableDigits)}
+        onChangeText={v => setAvailableDigits(v.replace(/\D/g, ''))}
         placeholder="0"
         keyboardType="number-pad"
       />

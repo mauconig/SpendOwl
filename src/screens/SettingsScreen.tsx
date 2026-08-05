@@ -137,7 +137,7 @@ export function SettingsScreen() {
         <Text style={{ fontSize: 14, fontFamily: fonts.medium, color: colors.rose }}>{t('Sign out')}</Text>
       </Pressable>
 
-      <Text style={{ textAlign: 'center', fontSize: 11, color: colors.textDim30, fontFamily: fonts.mono, marginTop: 4 }}>SpendOwl 2.4.1</Text>
+      <Text style={{ textAlign: 'center', fontSize: 11, color: colors.textDim30, fontFamily: fonts.mono, marginTop: 4 }}>Nummus AI 2.4.1</Text>
     </ScrollView>
   );
 }

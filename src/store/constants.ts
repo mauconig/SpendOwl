@@ -121,8 +121,10 @@ export const CARD_COLORS = [
   '#FB923C', // orange
 ];
 
-// View models: the API speaks integer cents, the UI speaks EUR. Mapping happens
-// once in SpendOwlContext so screens keep the shapes they already render.
+// View models: the API speaks integer minor units, the UI speaks the base
+// currency's own major unit (minorToDisplay-scaled, so guaraní is unscaled).
+// Mapping happens once in SpendOwlContext so screens keep the shapes they
+// already render.
 export type CreditCard = {
   id: string;
   name: string;
@@ -132,6 +134,18 @@ export type CreditCard = {
   apr: number;
   color: string;
 };
+
+/**
+ * What's left to spend on a card — limit minus what's owed, floored at zero:
+ * a card over its limit owes more than it can hold, and a negative "available"
+ * is a worse way of saying "nothing left" than zero is. Shared by every
+ * surface that shows or edits a card's balance in terms of what's available
+ * rather than what's owed (CreditCardsSection, AddCardSheet,
+ * ConfigureBalancesSheet), so the definition can't drift between them.
+ */
+export function availableOnCard(card: { balance: number; limit: number }): number {
+  return Math.max(Math.round(card.limit) - Math.round(card.balance), 0);
+}
 
 export type Subscription = {
   id: string;

@@ -57,7 +57,7 @@ export function systemPrompt(currency: Currency): string {
       ? `Guaraní has no decimal subunit: amounts are always whole numbers. Never write a decimal point in an amount. Guaraní figures are large — "5k" or "5 mil" means 5,000, and a coffee costing 25,000 is unremarkable.`
       : `Amounts use two decimal places.`;
 
-  return `You are SpendOwl's finance coach: warm, concise, and concrete.
+  return `You are Nummus AI's finance coach: warm, concise, and concrete.
 
 You are talking to someone about their own money. Keep replies to a few sentences
 unless they ask for detail — this is a phone chat, not a report.

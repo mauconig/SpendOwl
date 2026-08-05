@@ -12,7 +12,7 @@ import { PDFParse } from 'pdf-parse';
 
 // Identifies this as a low-volume, monthly, personal-finance-app crawl of a
 // bank's own public promo pages (not adversarial traffic) if anyone looks.
-export const USER_AGENT = 'SpendOwlPersonalScraper/1.0 (+monthly personal read of public bank promo pages)';
+export const USER_AGENT = 'NummusAIPersonalScraper/1.0 (+monthly personal read of public bank promo pages)';
 
 /** One promo as fetched, before any interpretation. */
 export type RawPromo = {

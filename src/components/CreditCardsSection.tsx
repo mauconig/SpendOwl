@@ -1,25 +1,10 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Icon } from '../icons';
-import { colors, fonts, formatMoney } from '../theme';
+import { colors, fonts, formatMoneyExact } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
+import { availableOnCard } from '../store/constants';
 import { t, tf } from '../i18n';
-
-/**
- * Available credit, which is what this section leads with.
- *
- * It used to lead with the debt, and the debt is the harder number to act on:
- * deciding whether a purchase fits means subtracting it from the limit in your
- * head, every time. Available is the answer to that question already computed,
- * and it is derived from the two figures the card already stores — nothing here
- * asks anyone to enter a third.
- *
- * Clamped at zero: a card over its limit owes more than it can hold, and
- * "-₲200.000 available" is a worse way of saying "nothing left" than ₲0 is.
- */
-function availableOn(card: { balance: number; limit: number }): number {
-  return Math.max(card.limit - card.balance, 0);
-}
 
 export function CreditCardsSection() {
   const store = useSpendOwl();
@@ -35,7 +20,7 @@ export function CreditCardsSection() {
             is where the debt one belongs: per card you are deciding whether a
             purchase fits, across all of them you are asking what you owe. */}
         <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: colors.rose }}>
-          {tf('{amount} owed', { amount: formatMoney(totalDebt, baseCur, 2) })}
+          {tf('{amount} owed', { amount: formatMoneyExact(totalDebt, baseCur, 2) })}
         </Text>
       </View>
 
@@ -44,7 +29,7 @@ export function CreditCardsSection() {
       ) : (
         <View style={{ gap: 10 }}>
           {creditCards.map(c => {
-            const available = availableOn(c);
+            const available = availableOnCard(c);
             // Fills with what is left rather than what is spent, so the bar and
             // the figure under it say the same thing. A bar that drains as you
             // spend, under a number that counts what you can still spend, would
@@ -66,7 +51,7 @@ export function CreditCardsSection() {
                         missing the point. It is secondary, not absent. */}
                     <Text style={{ fontSize: 11, color: colors.textDim45, marginTop: 1 }}>
                       {c.last4 ? `•••• ${c.last4} · ` : ''}
-                      {c.apr}% APR · {tf('{amount} used', { amount: formatMoney(c.balance, baseCur, 0) })}
+                      {c.apr}% APR · {tf('{amount} used', { amount: formatMoneyExact(c.balance, baseCur, 0) })}
                     </Text>
                   </View>
                   <Pressable
@@ -85,10 +70,10 @@ export function CreditCardsSection() {
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Text style={{ fontSize: 12, fontFamily: fonts.medium, color: colors.text }}>
-                    {tf('{amount} available', { amount: formatMoney(available, baseCur, 2) })}
+                    {tf('{amount} available', { amount: formatMoneyExact(available, baseCur, 2) })}
                   </Text>
                   <Text style={{ fontSize: 12, color: colors.textDim45 }}>
-                    {tf('of {amount}', { amount: formatMoney(c.limit, baseCur, 0) })}
+                    {tf('of {amount}', { amount: formatMoneyExact(c.limit, baseCur, 0) })}
                   </Text>
                 </View>
               </Pressable>

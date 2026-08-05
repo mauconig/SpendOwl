@@ -136,7 +136,7 @@ function systemPrompt(currency: Currency, language: Language): string {
       ? 'Guaraní has no decimal subunit. Write whole numbers with dots for thousands — ₲1.850.000, never ₲1,850,000 and never ₲1.85M.'
       : 'Write amounts with two decimals and a comma for thousands — €1,850.00.';
 
-  return `You write the "For you today" cards on the home screen of SpendOwl, a personal
+  return `You write the "For you today" cards on the home screen of Nummus AI, a personal
 finance app. You are given a snapshot of one person's money and you return two to
 ${MAX_CARDS} short cards about it.
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { ModalShell } from '../components/ModalShell';
-import { colors, fonts, formatMoney, moneyFont } from '../theme';
+import { colors, fonts, formatMoneyExact, moneyFont } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { monthsForPayment, paymentForMonths, totalInterestPaid } from '../utils/payoff';
 import { t } from '../i18n';
@@ -65,10 +65,10 @@ export function CardPayoffModal() {
   const verdict = neverPaysOff
     ? { t: `This payment won't cover the interest — you'd never pay it off. Try a higher amount.`, c: colors.rose, bd: 'rgba(248,113,113,.35)' }
     : interestRatio < 0.2
-      ? { t: `≈ ${formatMoney(interest, baseCur, 2)} in interest — a solid payoff pace.`, c: colors.mint, bd: 'rgba(74,222,128,.35)' }
+      ? { t: `≈ ${formatMoneyExact(interest, baseCur, 2)} in interest — a solid payoff pace.`, c: colors.mint, bd: 'rgba(74,222,128,.35)' }
       : interestRatio < 0.5
-        ? { t: `≈ ${formatMoney(interest, baseCur, 2)} in interest — could be faster with a bigger payment.`, c: colors.amber, bd: 'rgba(250,204,21,.35)' }
-        : { t: `≈ ${formatMoney(interest, baseCur, 2)} in interest — this will cost you a lot over time.`, c: colors.rose, bd: 'rgba(248,113,113,.35)' };
+        ? { t: `≈ ${formatMoneyExact(interest, baseCur, 2)} in interest — could be faster with a bigger payment.`, c: colors.amber, bd: 'rgba(250,204,21,.35)' }
+        : { t: `≈ ${formatMoneyExact(interest, baseCur, 2)} in interest — this will cost you a lot over time.`, c: colors.rose, bd: 'rgba(248,113,113,.35)' };
 
   return (
     <ModalShell
@@ -82,7 +82,7 @@ export function CardPayoffModal() {
         <Text style={{ fontSize: 18, fontFamily: fonts.bold, color: colors.text }}>{shown.name}</Text>
         <Text style={{ fontSize: 12.5, color: colors.textDim55, marginTop: 3 }}>
           {shown.last4 ? `•••• ${shown.last4} · ` : ''}
-          {formatMoney(shown.balance, baseCur, 2)} at {shown.apr}% APR
+          {formatMoneyExact(shown.balance, baseCur, 2)} at {shown.apr}% APR
         </Text>
       </View>
 
@@ -120,7 +120,7 @@ export function CardPayoffModal() {
       <View style={{ alignItems: 'center', gap: 4 }}>
         {mode === 'months' && resultPayment !== null && (
           <Text style={{ fontSize: 22, fontFamily: moneyFont(baseCur, 'bold'), color: colors.text }}>
-            {formatMoney(resultPayment, baseCur, 2)}
+            {formatMoneyExact(resultPayment, baseCur, 2)}
             <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: colors.textDim50 }}> / month</Text>
           </Text>
         )}

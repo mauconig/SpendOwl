@@ -3,7 +3,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,7 +13,6 @@ import {
   ViewStyle,
   useWindowDimensions,
 } from 'react-native';
-import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 
 /**
  * The shared chrome behind every overlay: backdrop, tap-to-dismiss, and a slide
@@ -63,15 +64,6 @@ export function ModalShell({
   bodyStyle,
 }: Props) {
   const { height } = useWindowDimensions();
-  // A bottom sheet rests against the bottom edge, which is exactly where the
-  // keyboard appears — so typing into one hides the field being typed into.
-  //
-  // Nothing does this for us. On Android a Modal renders in its own window,
-  // which the system does not resize for the keyboard the way it resizes the
-  // activity, so adjustResize never reaches these. Reserving the keyboard's
-  // height at the bottom lifts the sheet clear of it, the same approach
-  // AuthScreen and ChatScreen already take.
-  const keyboardHeight = useKeyboardHeight();
   const anim = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
   const [contentHeight, setContentHeight] = useState(0);
@@ -127,72 +119,86 @@ export function ModalShell({
 
   return (
     <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
-      <View
-        style={{
-          flex: 1,
-          justifyContent: variant === 'sheet' ? 'flex-end' : 'center',
-          paddingBottom: keyboardHeight,
-        }}
-      >
-        <Animated.View style={[StyleSheet.absoluteFill, { opacity: anim }]} pointerEvents="none">
-          {blur ? (
-            <BlurView intensity={30} tint="dark" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(4,5,8,.5)' }]} />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(4,5,8,.6)' }]} />
-          )}
-        </Animated.View>
-
-        {/* Dismiss area, and the two variants genuinely need different ones.
-            A sheet gets a flex sibling filling only the gap above it: nothing
-            then sits over the sheet's scroll axes, which is what made
-            TransactionsSheet scrollable in the first place. A centred dialog
-            has no such gap, so its backdrop covers the screen and the content
-            claims its own touches below — an inert View would let a tap on the
-            card's padding fall through and dismiss it. */}
-        {variant === 'sheet' ? (
-          <Pressable style={{ flex: 1 }} onPress={onClose} />
-        ) : (
-          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        )}
-
-        <Animated.View
-          // Children are offered the touch first, so buttons and inputs inside
-          // still work; this only catches what they don't.
-          onStartShouldSetResponder={variant === 'center' ? () => true : undefined}
-          onLayout={e => {
-            const measured = e.nativeEvent.layout.height;
-            setContentHeight(prev => (Math.abs(prev - measured) > 0.5 ? measured : prev));
+      {/*
+       * KeyboardAvoidingView, not manual height math: an earlier version
+       * measured the keyboard's height itself and subtracted it from the
+       * sheet's maxHeight/margin by hand. On Android that fought whatever the
+       * OS itself was already doing to make room for the keyboard — the two
+       * adjustments stacked, and the sheet shrank to a sliver with the screen
+       * behind showing through the gap. iOS never resizes anything on its
+       * own, so it still needs 'padding'; Android's Dialog-hosted Modal does
+       * need its own nudge too (it doesn't inherit the activity's own
+       * resize), so 'height' rather than leaving it to do nothing.
+       */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: variant === 'sheet' ? 'flex-end' : 'center',
           }}
-          style={[
-            // Margin, not padding: a centred dialog's own contentStyle sets
-            // `padding` for its inner spacing, and padding here would be
-            // overridden by it, leaving the card flush to the screen edges.
-            variant === 'center' ? { marginHorizontal: 20 } : null,
-            contentStyle,
-            // Leaves a strip of backdrop above a full-height sheet, so it still
-            // reads as a sheet over the app rather than a new screen.
-            scrollable ? { maxHeight: height - keyboardHeight - 48 } : null,
-            { transform: [{ translateY }], opacity: contentOpacity },
-          ]}
         >
-          {scrollable ? (
-            <ScrollView
-              // flexShrink lets it give way to the maxHeight above rather than
-              // growing to its content and overflowing the sheet.
-              style={{ flexShrink: 1 }}
-              contentContainerStyle={bodyStyle}
-              // Without this the first tap on a field only dismisses the
-              // keyboard, so moving between inputs takes two taps.
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {children}
-            </ScrollView>
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: anim }]} pointerEvents="none">
+            {blur ? (
+              <BlurView intensity={30} tint="dark" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(4,5,8,.5)' }]} />
+            ) : (
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(4,5,8,.6)' }]} />
+            )}
+          </Animated.View>
+
+          {/* Dismiss area, and the two variants genuinely need different ones.
+              A sheet gets a flex sibling filling only the gap above it: nothing
+              then sits over the sheet's scroll axes, which is what made
+              TransactionsSheet scrollable in the first place. A centred dialog
+              has no such gap, so its backdrop covers the screen and the content
+              claims its own touches below — an inert View would let a tap on the
+              card's padding fall through and dismiss it. */}
+          {variant === 'sheet' ? (
+            <Pressable style={{ flex: 1 }} onPress={onClose} />
           ) : (
-            children
+            <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
           )}
-        </Animated.View>
-      </View>
+
+          <Animated.View
+            // Children are offered the touch first, so buttons and inputs inside
+            // still work; this only catches what they don't.
+            onStartShouldSetResponder={variant === 'center' ? () => true : undefined}
+            onLayout={e => {
+              const measured = e.nativeEvent.layout.height;
+              setContentHeight(prev => (Math.abs(prev - measured) > 0.5 ? measured : prev));
+            }}
+            style={[
+              // Margin, not padding: a centred dialog's own contentStyle sets
+              // `padding` for its inner spacing, and padding here would be
+              // overridden by it, leaving the card flush to the screen edges.
+              variant === 'center' ? { marginHorizontal: 20 } : null,
+              contentStyle,
+              // Leaves a strip of backdrop above a full-height sheet, so it still
+              // reads as a sheet over the app rather than a new screen. No
+              // keyboard subtraction here any more — KeyboardAvoidingView
+              // above is what makes room for it now.
+              scrollable ? { maxHeight: height - 48 } : null,
+              { transform: [{ translateY }], opacity: contentOpacity },
+            ]}
+          >
+            {scrollable ? (
+              <ScrollView
+                // flexShrink lets it give way to the maxHeight above rather than
+                // growing to its content and overflowing the sheet.
+                style={{ flexShrink: 1 }}
+                contentContainerStyle={bodyStyle}
+                // Without this the first tap on a field only dismisses the
+                // keyboard, so moving between inputs takes two taps.
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {children}
+              </ScrollView>
+            ) : (
+              children
+            )}
+          </Animated.View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

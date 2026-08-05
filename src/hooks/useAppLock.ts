@@ -37,7 +37,7 @@ export function useAppLock(bioEnabled: boolean) {
     }
 
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: t('Unlock SpendOwl'),
+      promptMessage: t('Unlock Nummus AI'),
       disableDeviceFallback: false,
     });
     if (result.success) {

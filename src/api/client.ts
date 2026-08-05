@@ -62,7 +62,7 @@ export function createApi(getToken: GetToken) {
     } catch {
       // fetch only rejects on a transport failure — almost always the dev
       // server not running, or the phone being on a different network.
-      throw new ApiError(0, `Can't reach the SpendOwl API at ${API_BASE_URL}. Is the server running?`);
+      throw new ApiError(0, `Can't reach the Nummus AI API at ${API_BASE_URL}. Is the server running?`);
     }
 
     if (response.status === 204) return undefined as T;

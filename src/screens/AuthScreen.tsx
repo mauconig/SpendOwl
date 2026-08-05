@@ -1,10 +1,10 @@
 import { useSignIn, useSignUp, useSSO } from '@clerk/expo';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { AppleMark, GoogleMark } from '../components/ProviderMark';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-import { colors, fonts, GRAD, GRAD_LOCATIONS } from '../theme';
+import { colors, fonts } from '../theme';
 import { t, tf } from '../i18n';
 
 type Step = 'signIn' | 'signUp' | 'verify';
@@ -192,16 +192,8 @@ export function AuthScreen() {
         keyboardDismissMode="interactive"
       >
         <View style={{ alignItems: 'center', gap: 12, marginBottom: 4 }}>
-          <LinearGradient
-            colors={GRAD}
-            locations={GRAD_LOCATIONS}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{ width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Text style={{ fontSize: 24 }}>🦉</Text>
-          </LinearGradient>
-          <Text style={{ fontSize: 24, fontFamily: fonts.bold, color: colors.text }}>SpendOwl</Text>
+          <Image source={require('../../assets/logo.png')} style={{ width: 54, height: 54 }} resizeMode="contain" />
+          <Text style={{ fontSize: 24, fontFamily: fonts.bold, color: colors.text }}>Nummus AI</Text>
           <Text style={{ fontSize: 13.5, color: colors.textDim50, textAlign: 'center' }}>
             {step === 'signIn'
               ? t('Sign in to pick up where you left off.')
