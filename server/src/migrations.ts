@@ -345,6 +345,62 @@ const migrations: Migration[] = [
       ALTER TABLE users ALTER COLUMN onboarded SET DEFAULT FALSE;
     `,
   },
+  {
+    version: 13,
+    name: 'reversible_money',
+    sql: /* sql */ `
+      -- Three fixes to one bug: money that moved could not be moved back.
+
+      -- 1. A subscription charged to a card was counted twice.
+      --
+      -- charges.ts raised the card's balance but wrote the transaction with no
+      -- card_id, and card_id IS NULL is precisely how summary.ts decides that
+      -- money left the account (see the FILTER clauses there). So a 16.000
+      -- renewal on a GNB card both added 16.000 to the card's debt and took
+      -- 16.000 off safe-to-spend — the same money leaving twice, which is
+      -- exactly what a carded purchase is defined not to do.
+      --
+      -- Backfilled from the subscription's own card. Only rows that still have
+      -- no card: a charge that already carries one is either not from a
+      -- subscription or was written after the fix, and in both cases it is
+      -- already right.
+      UPDATE transactions t
+         SET card_id = s.card_id
+        FROM subscriptions s
+       WHERE t.subscription_id = s.id
+         AND t.card_id IS NULL
+         AND s.card_id IS NOT NULL;
+
+      -- 2. Which card a payment paid *down*.
+      --
+      -- Deliberately not card_id: that column means "this purchase has not hit
+      -- the account yet", and a card payment is the opposite — it is the moment
+      -- the account is finally debited. Putting a payment in card_id would take
+      -- it back out of safe-to-spend and make paying a card free again.
+      --
+      -- It exists so the payment can be undone. Approving one moves two things
+      -- (a transaction and the card's balance) and deleting the transaction
+      -- used to move only one back, quietly forgiving part of the debt.
+      ALTER TABLE transactions
+        ADD COLUMN paid_card_id UUID REFERENCES credit_cards(id) ON DELETE SET NULL;
+
+      -- 3. A deleted subscription charge came straight back.
+      --
+      -- materializeDueCharges runs on every read and fills in any month that
+      -- has no row, so deleting one was undone by the very next refresh of the
+      -- list — from the outside, indistinguishable from "delete does nothing".
+      -- A skip is the record that the absence is deliberate.
+      --
+      -- CASCADE: if the subscription itself is deleted there is nothing left to
+      -- regenerate, so the skips have no meaning either.
+      CREATE TABLE subscription_charge_skips (
+        subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+        charge_period   TEXT NOT NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (subscription_id, charge_period)
+      );
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {

@@ -33,12 +33,22 @@ const SEEDED: Row[] = [user('add my lunch — 12.40 at the market'), card('Merca
 
 const ARETE = 'Gasté 50000 en Supermercado Areté comprando una manzana';
 
-/** Returns '' on success, or a description of what was wrong. */
-type Check = (t: Anthropic.ToolUseBlock | undefined) => string;
+/**
+ * Returns '' on success, or a description of what was wrong.
+ *
+ * Given every tool call of the turn, not just the first: a turn may legitimately
+ * open with a lookup before the call being tested — "where should we go on
+ * Sunday" reasonably checks their history first — and scoring only position one
+ * would fail that as if no call had been made.
+ */
+type Check = (calls: Anthropic.ToolUseBlock[]) => string;
+
+const called = (calls: Anthropic.ToolUseBlock[], name: string) => calls.find(c => c.name === name);
 
 /** The full extraction: amount, merchant and note all read off the message. */
-const extractsArete: Check = t => {
-  if (!t) return 'no tool call — prose only';
+const extractsArete: Check = calls => {
+  const t = called(calls, 'propose_expense');
+  if (!t) return calls.length ? `called ${calls.map(c => c.name).join(', ')}` : 'no tool call — prose only';
   const i = t.input as Record<string, unknown>;
   const problems: string[] = [];
   if (Number(i.amount) !== 50000) problems.push(`amount=${JSON.stringify(i.amount)}`);
@@ -52,7 +62,10 @@ const cases: { label: string; want: string; rows: Row[]; check: Check }[] = [
     label: 'A. no shop named — must ask, not invent one',
     want: 'no tool call; ask which shop',
     rows: [...SEEDED, user('Compré una manzana por 5000')],
-    check: t => (t ? `invented merchant=${JSON.stringify((t.input as Record<string, unknown>).merchant)}` : ''),
+    check: calls => {
+      const t = called(calls, 'propose_expense');
+      return t ? `invented merchant=${JSON.stringify((t.input as Record<string, unknown>).merchant)}` : '';
+    },
   },
   {
     label: 'B. fresh message with all three facts',
@@ -95,6 +108,45 @@ const cases: { label: string; want: string; rows: Row[]; check: Check }[] = [
     ],
     check: extractsArete,
   },
+  {
+    label: 'F. asking where to go — must look the promos up, not answer from memory',
+    want: 'list_discounts for sunday, narrowed to cafés',
+    rows: [...SEEDED, user('queremos ir a una cafetería el domingo, qué opciones hay?')],
+    check: calls => {
+      const t = called(calls, 'list_discounts');
+      if (!t) return calls.length ? `called ${calls.map(c => c.name).join(', ')}` : 'no tool call — invented an answer';
+      const i = t.input as Record<string, unknown>;
+      const problems: string[] = [];
+      if (i.day !== 'sunday') problems.push(`day=${JSON.stringify(i.day)}`);
+      // Either narrowing is fine: the category holds the cafés, and the search
+      // finds them inside it. Passing neither dumps every restaurant promo.
+      if (i.category !== 'restaurants' && !/caf/i.test(String(i.search ?? ''))) {
+        problems.push(`category=${JSON.stringify(i.category)}, search=${JSON.stringify(i.search)}`);
+      }
+      return problems.join(', ');
+    },
+  },
+  // G and H are the same sentence in two moods. Answering "borrá" with a
+  // cancellation is what left a subscription someone asked three times to
+  // remove sitting in their list marked "cancelada".
+  {
+    label: 'G. "borrá" means delete, not cancel',
+    want: 'propose_delete_subscription',
+    rows: [...SEEDED, user('borrá la suscripción de Google One')],
+    check: calls => {
+      if (called(calls, 'propose_delete_subscription')) return '';
+      return calls.length ? `called ${calls.map(c => c.name).join(', ')}` : 'no tool call';
+    },
+  },
+  {
+    label: 'H. "cancelé" still means cancel',
+    want: 'propose_cancel_subscription',
+    rows: [...SEEDED, user('cancelé Netflix, ya no lo pago más')],
+    check: calls => {
+      if (called(calls, 'propose_cancel_subscription')) return '';
+      return calls.length ? `called ${calls.map(c => c.name).join(', ')}` : 'no tool call';
+    },
+  },
 ];
 
 let totalFail = 0;
@@ -105,8 +157,8 @@ for (const testCase of cases) {
 
   for (let i = 0; i < RUNS; i++) {
     const response = await client.messages.create({ model, max_tokens: 1024, system, tools, messages });
-    const toolUse = response.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined;
-    const problem = testCase.check(toolUse);
+    const toolUses = response.content.filter(b => b.type === 'tool_use') as Anthropic.ToolUseBlock[];
+    const problem = testCase.check(toolUses);
     if (!problem) passes++;
     results.push(problem ? `BAD  ${problem}` : 'ok');
   }

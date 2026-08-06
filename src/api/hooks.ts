@@ -150,6 +150,8 @@ export function useAddTransaction() {
       note?: string | null;
       taxDeductible?: boolean;
       cardId?: string;
+      /** Only on a card payment — the card this row pays down. See ApiTransaction. */
+      paidCardId?: string;
       discountBank?: string;
       discountPercent?: number;
       discountMinor?: number;
@@ -336,6 +338,37 @@ export function useUpdateSubscription() {
       void client.invalidateQueries({ queryKey: keys.subscriptions });
       // Cancelling stops future renewals and re-pricing changes what the next
       // one costs, so the spend picture that includes them has to refetch.
+      void client.invalidateQueries({ queryKey: keys.transactions });
+      invalidateMoney(client);
+    },
+  });
+}
+
+/**
+ * Removes the subscription itself, where the `off` flag on useUpdateSubscription
+ * only stops it renewing. Optimistic like the toggles above.
+ *
+ * Renewals it already charged are left in the transaction list by the server, so
+ * the money picture does not move on its own — but the list still refetches,
+ * because those rows lose their link to the subscription and a stale cache would
+ * keep rendering them as belonging to something that no longer exists.
+ */
+export function useDeleteSubscription() {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/api/subscriptions/${id}`),
+    onMutate: async id => {
+      await client.cancelQueries({ queryKey: keys.subscriptions });
+      const previous = client.getQueryData<ApiSubscription[]>(keys.subscriptions);
+      client.setQueryData<ApiSubscription[]>(keys.subscriptions, current => current?.filter(s => s.id !== id));
+      return { previous };
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previous) client.setQueryData(keys.subscriptions, context.previous);
+    },
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: keys.subscriptions });
       void client.invalidateQueries({ queryKey: keys.transactions });
       invalidateMoney(client);
     },

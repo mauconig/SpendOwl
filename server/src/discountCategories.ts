@@ -14,10 +14,29 @@
  * merchant's own name already answers. Nothing is stored: `bank_discounts`
  * keeps the scraper's nine categories, and the split happens on the way out.
  *
+ * DISCOUNT_CATEGORIES is imported rather than restated: this module exists to
+ * describe the difference between what is stored and what is read, and it can
+ * only do that if the stored list is the real one.
+ *
  * Consequence worth knowing: `pharmacy` is a value the client can receive but
  * the scraper will never emit, which is why it lives in ApiDiscountCategory
  * (src/api/types.ts) and not in DISCOUNT_CATEGORIES.
  */
+
+import { DISCOUNT_CATEGORIES } from './scraper/extract.ts';
+
+/**
+ * Every category a *reader* of `bank_discounts` can be handed: the scraper's
+ * taxonomy plus the `pharmacy` split refineCategory() performs on the way out.
+ *
+ * Anything that lets someone filter discounts by category — the coach's
+ * list_discounts tool — has to offer this list rather than the scraper's. With
+ * the scraper's, asking for a pharmacy is not expressible at all, and asking for
+ * `beauty_health` silently returns the pharmacies too.
+ */
+export const READABLE_DISCOUNT_CATEGORIES = [...DISCOUNT_CATEGORIES, 'pharmacy'] as const;
+
+export type ReadableDiscountCategory = (typeof READABLE_DISCOUNT_CATEGORIES)[number];
 
 /**
  * Paraguayan pharmacy chains are named with a farma/pharma stem almost without

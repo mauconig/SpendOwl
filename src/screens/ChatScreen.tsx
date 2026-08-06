@@ -29,6 +29,7 @@ const CARD_CHROME: Record<CardMsg['action'], { icon: IconName; tint: string; lab
   income: { icon: 'plus', tint: colors.mint, label: 'Income', done: 'Logged' },
   card_payment: { icon: 'card', tint: '#78ADEE', label: 'Card payment', done: 'Payment recorded' },
   sub_cancel: { icon: 'close', tint: colors.rose, label: 'Cancel subscription', done: 'Cancelled' },
+  sub_delete: { icon: 'trash', tint: colors.rose, label: 'Delete subscription', done: 'Deleted' },
   sub_add: { icon: 'plus', tint: '#C9B8F5', label: 'New subscription', done: 'Added' },
   sub_edit: { icon: 'gear', tint: '#C9B8F5', label: 'Update subscription', done: 'Updated' },
 };
@@ -174,7 +175,10 @@ function CardMessage({ m }: { m: CardMsg }) {
               end={{ x: 1, y: -0.1 }}
               style={{ borderRadius: 999, paddingVertical: 11, alignItems: 'center' }}
             >
-              <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 13.5 }}>{approveLabel(m)}</Text>
+              {/* Every branch of approveLabel is a fixed string with an entry in
+                  i18n/es.ts, so it translates here rather than inside the
+                  helper — which is what the sibling `t(chrome.done)` does. */}
+              <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 13.5 }}>{t(approveLabel(m))}</Text>
             </LinearGradient>
           </Pressable>
         </View>
@@ -211,6 +215,7 @@ function cardTitle(m: CardMsg): string {
     case 'card_payment':
       return m.cardName;
     case 'sub_cancel':
+    case 'sub_delete':
     case 'sub_add':
     case 'sub_edit':
       return m.subName;
@@ -228,7 +233,12 @@ function cardSubtitle(m: CardMsg): string {
     case 'card_payment':
       return 'Towards this card — lowers what you owe';
     case 'sub_cancel':
-      return 'Stops counting towards your monthly total';
+      return t('Stops counting towards your monthly total');
+    case 'sub_delete':
+      // Says what it does *not* touch. Someone deleting a subscription is
+      // usually undoing a mistake and expects the charge gone too; it is not,
+      // and finding that out from the transaction list would be worse.
+      return t('Removed from your list · past charges stay in your movements');
     case 'sub_add':
       return [
         `Charges every month, from the ${ordinalDay(m.dayOfMonth)}`,
@@ -261,6 +271,8 @@ function approveLabel(m: CardMsg): string {
       return 'Approve & pay';
     case 'sub_cancel':
       return 'Approve & cancel';
+    case 'sub_delete':
+      return 'Approve & delete';
     case 'sub_add':
       return 'Approve & add';
     case 'sub_edit':

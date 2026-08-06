@@ -2,6 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ModalShell } from '../components/ModalShell';
+import { Icon } from '../icons';
 import { GRAD, GRAD_LOCATIONS, colors, decimalsFor, fonts, type Currency } from '../theme';
 import { useSpendOwl } from '../store/SpendOwlContext';
 import { t } from '../i18n';
@@ -73,6 +74,9 @@ export function EditSubSheet() {
   const [currency, setCurrency] = useState<Currency>('USD');
   const [day, setDay] = useState('');
   const [cardId, setCardId] = useState<string | null>(null);
+  // Two taps, like TransactionDetail's delete. Deleting a subscription is not
+  // undoable and the button sits under a form people are already tapping in.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Re-read from the subscription on every open rather than holding local
   // state across opens, so the form always starts from what is actually stored.
@@ -83,10 +87,33 @@ export function EditSubSheet() {
     setPrice(sub.nativePrice === 0 ? '' : String(decimalsFor(sub.currency) === 0 ? Math.round(sub.nativePrice) : sub.nativePrice));
     setDay(String(sub.dayOfMonth));
     setCardId(sub.cardId);
+    setConfirmingDelete(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheet]);
 
-  const close = () => store.closeSubSheet();
+  const close = () => {
+    store.closeSubSheet();
+    setConfirmingDelete(false);
+  };
+
+  /**
+   * Delete, which is not the cancel toggle in the list.
+   *
+   * Cancelling keeps the subscription as a record of something they used to
+   * pay for; this is for one that should not be there at all. Renewals it
+   * already charged stay in the movements list, where each can be deleted
+   * individually and the money comes back — so nothing is silently rewritten
+   * here.
+   */
+  const remove = () => {
+    if (!sheet) return;
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    store.deleteSubscription(sheet.id);
+    close();
+  };
 
   const priceValue = Number(price.replace(',', '.'));
   const dayValue = Number(day);
@@ -182,6 +209,31 @@ export function EditSubSheet() {
           <Text style={{ color: '#0A0A0B', fontFamily: fonts.bold, fontSize: 14 }}>{t('Save changes')}</Text>
         </LinearGradient>
       </Pressable>
+
+      <Pressable
+        onPress={remove}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 7,
+          paddingVertical: 12,
+          borderRadius: 999,
+          borderWidth: 1,
+          borderColor: confirmingDelete ? colors.rose : colors.cardBorder,
+          backgroundColor: confirmingDelete ? 'rgba(248,113,113,.12)' : 'transparent',
+        }}
+      >
+        <Icon name={confirmingDelete ? 'warn' : 'trash'} size={14} color={colors.rose} />
+        <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.rose }}>
+          {confirmingDelete ? t('Tap again to delete') : t('Delete subscription')}
+        </Text>
+      </Pressable>
+      {confirmingDelete && (
+        <Text style={{ fontSize: 11, color: colors.textDim45, lineHeight: 16, textAlign: 'center' }}>
+          {t('Charges it already made stay in your movements. Delete those there to get the money back.')}
+        </Text>
+      )}
     </ModalShell>
   );
 }

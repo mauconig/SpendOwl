@@ -129,4 +129,30 @@ export const subscriptionsRoute = new Hono<AppEnv>()
     );
     if (!row) return c.json({ error: 'Not found' }, 404);
     return c.json(row);
+  })
+
+  /**
+   * Deletes the subscription itself. **Cancelling and deleting are different
+   * things and both are needed.**
+   *
+   * Cancelling (PATCH off: true) says "I stopped paying for this": it stays in
+   * the list, struck through, and every renewal it already charged stays in the
+   * history, because those months really did cost money. Deleting says "this
+   * should never have been here" — the template goes and stops charging.
+   *
+   * What it deliberately does *not* do is erase the charges it already made.
+   * transactions.subscription_id is ON DELETE SET NULL, so past renewals become
+   * ordinary transactions and stay in the history and in the month's totals. If
+   * one of them is also wrong, deleting that movement refunds it — see the
+   * DELETE in routes/transactions.ts. Rolling the two together here would mean
+   * removing a subscription someone had paid for two years silently rewrote two
+   * years of their spending.
+   */
+  .delete('/:id', async c => {
+    const row = await queryOne('DELETE FROM subscriptions WHERE id = $1 AND user_id = $2 RETURNING id', [
+      c.req.param('id'),
+      c.get('userId'),
+    ]);
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    return c.body(null, 204);
   });

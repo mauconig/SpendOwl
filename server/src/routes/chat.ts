@@ -2,9 +2,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '../auth.ts';
-import { findDiscount } from '../cardDiscounts.ts';
-import { appToday } from '../dates.ts';
+import { bankForCardName, findDiscount } from '../cardDiscounts.ts';
+import { appToday, localDate, nextWeekday, WEEKDAY_NAMES, type WeekdayName } from '../dates.ts';
 import { query, queryOne } from '../db.ts';
+import { READABLE_DISCOUNT_CATEGORIES, refineCategory } from '../discountCategories.ts';
+import { evaluateDays } from '../discountDays.ts';
 import {
   CURRENCIES,
   type Currency,
@@ -51,7 +53,8 @@ const CURRENCY_NAMES: Record<Currency, string> = {
   PYG: 'Paraguayan guaraní (PYG, symbol ₲)',
 };
 
-export function systemPrompt(currency: Currency): string {
+export function systemPrompt(currency: Currency, today: Date = appToday()): string {
+  const weekday = WEEKDAY_NAMES[today.getDay()]!.replace(/^./, c => c.toUpperCase());
   const whole =
     decimalsFor(currency) === 0
       ? `Guaraní has no decimal subunit: amounts are always whole numbers. Never write a decimal point in an amount. Guaraní figures are large — "5k" or "5 mil" means 5,000, and a coffee costing 25,000 is unremarkable.`
@@ -72,6 +75,12 @@ convert: a subscription can be billed in a currency that is not theirs, and the
 subscription tools take a billedIn field so the app can convert it at the real
 rate. Pass the number they said together with the currency they said it in. Apart
 from that, treat ${currency} as the only currency this conversation has.
+
+TODAY. Where they live it is ${weekday}, ${localDate(today)}. That is the only
+date you know: work "last month", "this week" or "since Friday" out from it, and
+never from a date mentioned earlier in the conversation. list_transactions takes
+plain YYYY-MM-DD dates. For promos, do no date arithmetic at all — list_discounts
+takes the day by name, including "today" and "tomorrow".
 
 Facts about their finances come from your tools. Never guess or invent a number:
 if you need a figure, call a tool. If a tool has no answer, say so plainly.
@@ -140,7 +149,31 @@ one, and never promise a discount before the tool has confirmed it. If the
 result reports one, say what it saved and where it came from. If it does not,
 say nothing about discounts at all.
 
-CARDS AND SUBSCRIPTIONS. Five different things can be said about them, and they
+WHERE TO GO. That same catalogue answers the question from the other end, and it
+is one of the most useful things you do: "we want to go to a café on Sunday,
+what is there?", "anything on at the supermarket?", "is it worth filling up
+today?". Call list_discounts. You do not know which shops these banks have deals
+with — that list is scraped from the banks and changes — so a merchant or a rate
+you produce without calling it is invented, and it sends them somewhere that
+charges full price.
+
+Pass what they gave you: the kind of place as \`category\`, the day they named as
+\`day\`, a shop or a word like "café" as \`search\`. Nothing more: if they named no
+day, omit \`day\` and read each promo's own \`days\` wording back to them.
+
+Then answer with the few that are actually theirs. A promo pays out only on a
+card from the bank running it, so \`usableWithCard\` naming one of their cards is
+what makes it an option — where it is null they hold no card from that bank and
+get nothing, and offering it anyway is the same mistake as inventing it. Lead
+with the ones they can use, name the card to pay with, and quote \`percent\` as
+given: it is deliberately the base-card rate, so rounding it up promises money
+the till will not give back.
+
+Their own history is worth a look before you recommend: list_transactions with a
+merchant or a category shows where they already go, and a promo at a place they
+already go to is usually the more useful suggestion.
+
+CARDS AND SUBSCRIPTIONS. Six different things can be said about them, and they
 are easy to confuse. Read which one it is before choosing a tool:
 
   · "I bought X with my Visa" — money spent, using a card.
@@ -149,9 +182,33 @@ are easy to confuse. Read which one it is before choosing a tool:
   · "I paid 200 to my Visa" — money paid TO a card, reducing what they owe.
     propose_card_payment. This is not spending and is never an expense.
   · "I cancelled Netflix" — propose_cancel_subscription.
+  · "Delete Netflix" / "borrá Netflix" — propose_delete_subscription.
   · "I subscribed to Netflix, 50 a month" — propose_new_subscription.
   · "Netflix is actually 9.99 usd" / "Spotify comes out of my Visa" —
     propose_edit_subscription, for a correction to one they already have.
+
+CANCELLING IS NOT DELETING, and answering one with the other is infuriating —
+someone asks three times for a thing to go away and watches it stay on the list
+wearing a different label. Cancelling says they stopped paying for something
+real: it stays in their list, struck through, as the record of a subscription
+they used to have. Deleting says it should never have been in the list at all.
+
+So take the verb they used. "Cancelá", "dalo de baja", "I cancelled it" is
+propose_cancel_subscription. "Borrá", "eliminá", "sacá", "delete it", "get rid
+of it" is propose_delete_subscription — including when they are repeating
+themselves because cancelling was not what they asked for. Never substitute one
+for the other, and never offer cancelling as a way of doing what they asked when
+they asked you to delete.
+
+Deleting one they already cancelled is normal and correct — that is where a
+subscription added by mistake ends up. Do it without comment.
+
+Neither one touches the renewals it has already charged: those stay in their
+transactions, because on the months they happened the money did leave. If they
+want one of those gone too, it is deleted from the movements list in the app,
+and deleting it there puts the money back — onto the card if it was paid with
+one, or into their balance if it was not. Tell them that rather than trying to
+do it yourself; you have no tool that removes a transaction.
 
 The first two are opposites. "Con la Visa", "with my card", "pagué con" mean
 they *spent* using it. "Pagué a la Visa", "paid off", "towards" mean they *paid
@@ -180,7 +237,7 @@ the rate moves, which is the whole reason the currency is recorded rather than a
 single converted number. If they just say a number with no currency, it is
 ${currency} and billedIn should be omitted.
 
-Everything above is a draft. None of these tools change anything: each one shows
+Every propose_ tool is a draft. None of them change anything: each one shows
 a card the user must approve. Never say something is cancelled, paid, added or
 logged — say it is waiting for them.`;
 }
@@ -199,10 +256,22 @@ const toolArgs = {
   get_budget_summary: z.object({}),
   list_transactions: z.object({
     category: z.enum(CATEGORIES).optional(),
+    merchant: z.string().trim().min(2).max(80).optional(),
+    since: z.iso.date().optional(),
+    until: z.iso.date().optional(),
     limit: z.int().min(1).max(50).optional(),
   }),
   list_subscriptions: z.object({}),
   list_credit_cards: z.object({}),
+  list_discounts: z.object({
+    category: z.enum(READABLE_DISCOUNT_CATEGORIES).optional(),
+    // A weekday by name, or the two relative days worth spelling out. The model
+    // never computes a date for this: it is told today's day in the prompt and
+    // the resolution happens in resolveDay() below.
+    day: z.enum([...WEEKDAY_NAMES, 'today', 'tomorrow']).optional(),
+    search: z.string().trim().min(2).max(60).optional(),
+    limit: z.int().min(1).max(30).optional(),
+  }),
   propose_expense: z.object({
     merchant: z.string().trim().min(1).max(120),
     category: z.enum(CATEGORIES),
@@ -223,6 +292,9 @@ const toolArgs = {
     amount: z.number().positive().finite(),
   }),
   propose_cancel_subscription: z.object({
+    subscription: z.string().trim().min(1).max(80),
+  }),
+  propose_delete_subscription: z.object({
     subscription: z.string().trim().min(1).max(80),
   }),
   propose_new_subscription: z.object({
@@ -258,13 +330,24 @@ export function buildTools(currency: Currency): Anthropic.Tool[] {
     {
       name: 'list_transactions',
       description:
-        `Recent transactions, newest first, with amounts in ${currency}. Use for questions about ` +
-        'specific purchases, merchants, or recent activity. Negative amounts are spending, ' +
-        'positive are income.',
+        `Their transaction history, newest first, with amounts in ${currency}. Use for questions ` +
+        'about specific purchases, merchants, or past activity — and to find out where they ' +
+        'actually shop or eat before recommending anything. Negative amounts are spending, ' +
+        'positive are income. All filters are optional and combine. The `totals` in the result ' +
+        'add up only the rows returned, so when `truncated` is true they are not the whole ' +
+        'story — raise the limit or narrow the dates before quoting a total.',
       input_schema: {
         type: 'object',
         properties: {
           category: { type: 'string', enum: [...CATEGORIES], description: 'Optional category filter.' },
+          merchant: {
+            type: 'string',
+            description:
+              'Only rows whose merchant contains this. Case and accents are ignored, so "caf" ' +
+              'finds "Cafe Luna" and "La Cafetera", and "arete" finds "Areté".',
+          },
+          since: { type: 'string', description: 'Earliest date to include, YYYY-MM-DD. Inclusive.' },
+          until: { type: 'string', description: 'Latest date to include, YYYY-MM-DD. Inclusive.' },
           limit: { type: 'integer', description: 'How many to return. Defaults to 10, max 50.' },
         },
       },
@@ -278,6 +361,49 @@ export function buildTools(currency: Currency): Anthropic.Tool[] {
       name: 'list_credit_cards',
       description: `Their credit cards, with balance and limit in ${currency}, plus APR.`,
       input_schema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'list_discounts',
+      description:
+        'The bank promos currently on offer — the real, scraped catalogue of which shops give ' +
+        'money back on which cards, on which days. Call it for any question about where to go, ' +
+        'where to buy something, or whether there is a deal on: "we want a coffee on Sunday, ' +
+        'what is there?", "any promos at the supermarket?", "is Petrosur cheaper today?". You ' +
+        'do not know these merchants or rates from memory, so never answer such a question ' +
+        'without calling this. Each result says which of their own cards the promo pays out on ' +
+        'in `usableWithCard`, or null when they hold no card from that bank — a null promo ' +
+        'gives them nothing and is not an option to offer them. `days` is the bank\'s own ' +
+        'wording of when it runs, and `percent` is the base-card rate, never the premium one.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          category: {
+            type: 'string',
+            enum: [...READABLE_DISCOUNT_CATEGORIES],
+            description:
+              'The kind of place. `restaurants` covers cafés, bars and food out; `groceries` is ' +
+              'supermarkets; `auto_fuel` is petrol stations and car services; ' +
+              '`entertainment_travel` is cinemas, hotels and flights; `beauty_health` is salons ' +
+              'and clinics, with `pharmacy` split out of it.',
+          },
+          day: {
+            type: 'string',
+            enum: [...WEEKDAY_NAMES, 'today', 'tomorrow'],
+            description:
+              'The day they are asking about, by name. Returns only promos that actually run ' +
+              'that day. Omit it when they did not name one — that returns promos for any day, ' +
+              'each with its own `days` text.',
+          },
+          search: {
+            type: 'string',
+            description:
+              'Matches the merchant name and the promo terms, ignoring case and accents. Use it ' +
+              'for a shop they named, or to narrow a broad category — "café" inside ' +
+              '`restaurants` finds the coffee shops.',
+          },
+          limit: { type: 'integer', description: 'How many to return. Defaults to 10, max 30.' },
+        },
+      },
     },
     {
       name: 'propose_expense',
@@ -361,6 +487,23 @@ export function buildTools(currency: Currency): Anthropic.Tool[] {
       description:
         'Draft the cancellation of a subscription they already have. Approving marks it cancelled ' +
         'so it stops counting towards their monthly total. Cancels nothing on its own.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          subscription: { type: 'string', description: 'The subscription name as they said it.' },
+        },
+        required: ['subscription'],
+      },
+    },
+    {
+      name: 'propose_delete_subscription',
+      description:
+        'Draft the removal of a subscription from their list entirely, for when they say to ' +
+        'delete or get rid of one — usually because it was added by mistake. This is not the ' +
+        'same as cancelling: cancelling keeps it in the list as a record of something they used ' +
+        'to pay for, deleting takes it out. Renewals it already charged stay in their ' +
+        'transactions either way; if one of those is also wrong they remove it from the ' +
+        'movements list, which gives the money back. Deletes nothing on its own.',
       input_schema: {
         type: 'object',
         properties: {
@@ -462,6 +605,10 @@ type Proposal =
   | { action: 'income'; source: string; amountMinor: number; note: string }
   | { action: 'card_payment'; cardId: string; cardName: string; amountMinor: number }
   | { action: 'sub_cancel'; subId: string; subName: string; amountMinor: number }
+  // Removes the subscription itself, where sub_cancel only stops it renewing.
+  // Charges it already made are left alone by both — see the DELETE in
+  // routes/subscriptions.ts.
+  | { action: 'sub_delete'; subId: string; subName: string; amountMinor: number }
   | {
       action: 'sub_add';
       subName: string;
@@ -527,6 +674,40 @@ const ok = (content: string): ToolResult => ({ content });
 const failed = (content: string): ToolResult => ({ content, isError: true });
 
 /**
+ * Case- and accent-insensitive "contains", in SQL.
+ *
+ * Both sides are folded, because both sides are written by people. A model
+ * asked about a coffee shop in Spanish searches for "café" and the merchant is
+ * spelled "Cafe Luna"; someone asking what they spent at "arete" means
+ * "Supermercado Areté". A plain ILIKE answers "nothing found" to both, which
+ * reads as "there is no promo" rather than "you typed the accent differently".
+ *
+ * translate() rather than the unaccent extension: it needs nothing installed in
+ * the database, and the accent set is the same one discountDays.ts folds.
+ * `column` and `param` are literals from the queries below, never user input.
+ */
+function foldedContains(column: string, param: string): string {
+  const fold = (expr: string) => `translate(lower(${expr}), 'áéíóúüñ', 'aeiouun')`;
+  return `${fold(column)} LIKE '%' || ${fold(param)} || '%'`;
+}
+
+/**
+ * The calendar day a `day` argument means, in the user's own zone.
+ *
+ * Resolved here and not by the model. Whether a promo runs on a given day turns
+ * on that day's date as well as its name — several are restricted to a window
+ * of the month or to the first or last such weekday — so the question "what is
+ * on on Sunday" only has an answer once a real date is attached to it, and a
+ * date the model worked out is a date that can be wrong.
+ */
+function resolveDay(day: WeekdayName | 'today' | 'tomorrow'): Date {
+  const today = appToday();
+  if (day === 'today') return today;
+  if (day === 'tomorrow') return new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  return nextWeekday(day, today);
+}
+
+/**
  * Runs one validated tool call. `proposals` collects the propose_* calls for
  * the caller to persist as `card` messages once the turn finishes.
  */
@@ -576,25 +757,42 @@ async function runTool(
     }
 
     case 'list_transactions': {
-      const { category, limit } = args as z.infer<(typeof toolArgs)['list_transactions']>;
+      const { category, merchant, since, until, limit } =
+        args as z.infer<(typeof toolArgs)['list_transactions']>;
+      const max = limit ?? 10;
+      // One row past the limit, so the answer can say whether older matching
+      // rows exist rather than quietly presenting a slice as the whole history.
       const rows = await query<{ merchant: string; category: string; amountMinor: number; occurredAt: string; note: string | null }>(
         `SELECT merchant, category, amount_minor AS "amountMinor", occurred_at AS "occurredAt", note
            FROM transactions
           WHERE user_id = $1
             AND ($2::text IS NULL OR category = $2)
+            AND ($3::text IS NULL OR ${foldedContains('merchant', '$3')})
+            AND ($4::date IS NULL OR occurred_at >= $4::date)
+            AND ($5::date IS NULL OR occurred_at <= $5::date)
           ORDER BY occurred_at DESC, created_at DESC
-          LIMIT $3`,
-        [userId, category ?? null, limit ?? 10]
+          LIMIT $6`,
+        [userId, category ?? null, merchant ?? null, since ?? null, until ?? null, max + 1]
       );
+      const shown = rows.slice(0, max);
+
+      // Summed here rather than by the model: "how much did I spend on coffee
+      // in July" is a list plus an addition, and the addition is the half it
+      // gets wrong. Only over the rows returned — hence `truncated` alongside.
+      const sum = (keep: (minor: number) => boolean) =>
+        shown.reduce((total, r) => (keep(r.amountMinor) ? total + Math.abs(r.amountMinor) : total), 0);
+
       return ok(JSON.stringify({
         currency,
-        transactions: rows.map(r => ({
+        transactions: shown.map(r => ({
           merchant: r.merchant,
           category: r.category,
           amount: money(r.amountMinor),
           date: r.occurredAt,
           note: r.note,
         })),
+        totals: { spent: money(sum(m => m < 0)), received: money(sum(m => m > 0)) },
+        truncated: rows.length > shown.length,
       }));
     }
 
@@ -633,6 +831,106 @@ async function runTool(
           limit: money(r.limitMinor),
           apr: r.apr,
         })),
+      }));
+    }
+
+    case 'list_discounts': {
+      const { category, day, search, limit } = args as z.infer<(typeof toolArgs)['list_discounts']>;
+      // Every date question below is asked of this one day: which promos are
+      // still valid, and which of them run. Without a day named it is today.
+      const on = day ? resolveDay(day) : appToday();
+
+      // `pharmacy` is not stored — refineCategory() derives it from the
+      // merchant's name out of `beauty_health` — so the SQL narrows to the
+      // stored bucket and the exact category is settled below.
+      const stored = category === 'pharmacy' ? 'beauty_health' : (category ?? null);
+
+      const rows = await query<{
+        bank: string;
+        merchant: string;
+        category: string | null;
+        percent: number | null;
+        installments: number | null;
+        eligibleDays: string | null;
+        monthlyCapMinor: number | null;
+        monthlyCapCurrency: string | null;
+        validUntil: string | null;
+        description: string;
+      }>(
+        `SELECT bank, merchant, category, percent::float8 AS percent, installments,
+                eligible_days AS "eligibleDays", monthly_cap_minor AS "monthlyCapMinor",
+                monthly_cap_currency AS "monthlyCapCurrency", valid_until AS "validUntil",
+                description
+           FROM bank_discounts
+          WHERE (valid_from  IS NULL OR valid_from  <= $1::date)
+            AND (valid_until IS NULL OR valid_until >= $1::date)
+            AND ($2::text IS NULL OR category = $2)
+            AND ($3::text IS NULL OR ${foldedContains('merchant', '$3')}
+                                  OR ${foldedContains('description', '$3')})`,
+        [localDate(on), stored, search ?? null]
+      );
+
+      // Which bank each of their cards belongs to. A promo is a property of the
+      // card, not of the shop (see ../cardDiscounts.ts), so this is what
+      // separates an offer they can actually use from one they cannot.
+      const byBank = new Map<string, string>();
+      for (const card of await loadCards()) {
+        const bank = bankForCardName(card.name);
+        if (bank && !byBank.has(bank)) byBank.set(bank, card.name);
+      }
+
+      const matching = rows
+        .filter(r => !category || refineCategory(r.category, r.merchant) === category)
+        // 'always' counts: a promo with no day restriction runs on the day
+        // asked about. 'unknown' does not — the parser returns it for wording
+        // it could not fully account for, and the rule everywhere it is used is
+        // to claim nothing rather than send someone out on a guess.
+        .filter(r => !day || ['today', 'always'].includes(evaluateDays(r.eligibleDays, on)))
+        .sort(
+          (a, b) =>
+            Number(byBank.has(b.bank)) - Number(byBank.has(a.bank)) ||
+            (b.percent ?? 0) - (a.percent ?? 0) ||
+            a.merchant.localeCompare(b.merchant)
+        );
+
+      const shown = matching.slice(0, limit ?? 10);
+
+      return ok(JSON.stringify({
+        ...(day ? { forDay: { asked: day, date: localDate(on) } } : {}),
+        matchCount: matching.length,
+        truncated: matching.length > shown.length,
+        discounts: shown.map(r => {
+          // The cap is quoted in the currency the bank wrote it in, which for a
+          // Paraguayan promo is guaraníes whatever the user's own currency is.
+          // Converting it is not this app's to do, so the code travels with it.
+          const capCurrency = isCurrency(r.monthlyCapCurrency) ? r.monthlyCapCurrency : currency;
+          return {
+            merchant: r.merchant,
+            bank: r.bank,
+            percent: r.percent,
+            usableWithCard: byBank.get(r.bank) ?? null,
+            days: r.eligibleDays,
+            category: refineCategory(r.category, r.merchant),
+            installments: r.installments,
+            ...(r.monthlyCapMinor != null
+              ? {
+                  // A cap on eligible spend per month, not on the money back —
+                  // the distinction cardDiscounts.ts spells out.
+                  monthlyCapOnSpend: `${minorToDisplay(r.monthlyCapMinor, capCurrency)} ${capCurrency}`,
+                }
+              : {}),
+            validUntil: r.validUntil,
+            terms: r.description,
+          };
+        }),
+        ...(matching.length === 0
+          ? {
+              note:
+                'Nothing on offer matches. Tell them plainly that there is none — do not name a ' +
+                'shop or a rate that is not in this list. Widening the search or dropping the ' +
+                'day is worth one more call before you answer.',
+            }
+          : {}),
       }));
     }
 
@@ -746,6 +1044,28 @@ async function runTool(
       return ok(`Cancellation card for ${found.name} shown for approval. It stays active until they approve.`);
     }
 
+    case 'propose_delete_subscription': {
+      const p = args as z.infer<(typeof toolArgs)['propose_delete_subscription']>;
+      const found = resolveByName(await loadSubs(), p.subscription);
+      if ('error' in found) return failed(found.error);
+
+      // No "already cancelled" guard, unlike cancelling. Deleting one that is
+      // cancelled is the normal way out of a subscription added by mistake:
+      // cancelling was the only thing that used to be possible, so that is the
+      // state the mistakes are sitting in.
+      proposals.push({
+        action: 'sub_delete',
+        subId: found.id,
+        subName: found.name,
+        amountMinor: found.priceBaseMinor ?? 0,
+      });
+      return ok(
+        `Deletion card for ${found.name} shown for approval. It is still in their list until they ` +
+          `approve. Renewals it already charged stay in their transactions — say so if it has any, ` +
+          `and tell them those are removed from the movements list, which gives the money back.`
+      );
+    }
+
     case 'propose_new_subscription': {
       const p = args as z.infer<(typeof toolArgs)['propose_new_subscription']>;
 
@@ -851,6 +1171,12 @@ function replayOf(
         name: 'propose_cancel_subscription',
         input: { subscription: String(card.subName ?? '') },
         ack: `Cancellation card for ${card.subName} shown for approval.`,
+      };
+    case 'sub_delete':
+      return {
+        name: 'propose_delete_subscription',
+        input: { subscription: String(card.subName ?? '') },
+        ack: `Deletion card for ${card.subName} shown for approval.`,
       };
     case 'sub_add':
       return {

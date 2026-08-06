@@ -93,11 +93,28 @@ export async function materializeDueCharges(userId: string): Promise<void> {
   // a date the month window in summary.ts treats as the future.
   const today = appToday();
 
+  // Periods whose charge was deliberately deleted (see routes/transactions.ts).
+  // Without this the delete is undone by the next read: duePeriods() has no
+  // memory, so a month with no row always looks like a month still owed.
+  const skipped = new Set(
+    (
+      await query<{ subscriptionId: string; chargePeriod: string }>(
+        `SELECT k.subscription_id AS "subscriptionId", k.charge_period AS "chargePeriod"
+           FROM subscription_charge_skips k
+           JOIN subscriptions s ON s.id = k.subscription_id
+          WHERE s.user_id = $1`,
+        [userId]
+      )
+    ).map(r => `${r.subscriptionId}:${r.chargePeriod}`)
+  );
+
   for (const sub of subs) {
     const due = duePeriods(sub, today);
     if (due.length === 0) continue;
 
     for (const { period, on } of due) {
+      if (skipped.has(`${sub.id}:${period}`)) continue;
+
       const rate = await getRate(sub.currency as Currency, base, on);
       if (rate == null) {
         console.warn(`[charges] no rate for ${sub.currency}->${base} on ${period}, skipping ${sub.name}`);
@@ -114,8 +131,8 @@ export async function materializeDueCharges(userId: string): Promise<void> {
         const { rows } = await client.query<{ id: string }>(
           `INSERT INTO transactions
              (user_id, merchant, category, amount_minor, occurred_at, note,
-              subscription_id, charge_period, original_minor, original_currency, fx_rate)
-           VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9, $10, $11)
+              subscription_id, charge_period, original_minor, original_currency, fx_rate, card_id)
+           VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9, $10, $11, $12)
            ON CONFLICT (subscription_id, charge_period) WHERE subscription_id IS NOT NULL
              DO NOTHING
            RETURNING id`,
@@ -133,6 +150,15 @@ export async function materializeDueCharges(userId: string): Promise<void> {
             sub.priceMinor,
             sub.currency,
             rate,
+            // The card the subscription is paid with, on the row itself.
+            //
+            // Not decoration: summary.ts reads card_id to mean "spent, but the
+            // account has not been debited for it yet", which is exactly what a
+            // renewal on a credit card is. Leaving it null while still raising
+            // the card's balance below charged the same renewal twice — once to
+            // the card and once to safe-to-spend. Migration 12 backfills the
+            // rows written before this line existed.
+            sub.cardId,
           ]
         );
 

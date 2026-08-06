@@ -59,6 +59,39 @@ export function appToday(): Date {
   return new Date(year!, month! - 1, day!);
 }
 
+/**
+ * Weekday names, indexed to match `Date#getDay` (0 = Sunday).
+ *
+ * The Spanish day names a bank writes its promos in are parsed in
+ * discountDays.ts; these are the English keys a tool argument or a prompt uses,
+ * so that "el domingo" becomes a value from a fixed list rather than a date the
+ * model worked out for itself.
+ */
+export const WEEKDAY_NAMES = [
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+] as const;
+
+export type WeekdayName = (typeof WEEKDAY_NAMES)[number];
+
+/**
+ * The next date falling on `weekday`, counting today as itself.
+ *
+ * "What's on on Sunday?" asked on a Sunday means today, not a week away. The
+ * distinction is not cosmetic: a promo can be restricted to a day-of-month
+ * window ("del 1 al 10 de cada mes") that this Sunday falls inside and the next
+ * one does not, so the date the question resolves to decides the answer.
+ */
+export function nextWeekday(weekday: WeekdayName, from: Date = appToday()): Date {
+  const delta = (WEEKDAY_NAMES.indexOf(weekday) - from.getDay() + 7) % 7;
+  return new Date(from.getFullYear(), from.getMonth(), from.getDate() + delta);
+}
+
 /** 'YYYY-MM-DD' from a Date's own local calendar fields. */
 export function localDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

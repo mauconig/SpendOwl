@@ -30,6 +30,7 @@ import {
   useTransactions,
   useUpdateCreditCard,
   useUpdateSettings,
+  useDeleteSubscription,
   useUpdateSubscription,
   useUpdateTransaction,
   useSettings,
@@ -173,7 +174,14 @@ interface SpendOwlStore {
   openSubs: () => void;
   closeSubs: () => void;
   toggleSubMute: (id: string) => void;
+  /** Cancel / un-cancel: stops it renewing, keeps it in the list and its history. */
   toggleSubOff: (id: string) => void;
+  /**
+   * Removes it from the list for good. Different from cancelling on purpose —
+   * this is for one that should never have been added. Renewals it already
+   * charged stay in the transaction list; each is undone from there.
+   */
+  deleteSubscription: (id: string) => void;
   // Editing one subscription's terms. Mirrors `cardSheet` above, minus the add
   // mode — subscriptions are still only created through the chat coach.
   subSheet: { id: string } | null;
@@ -277,6 +285,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
   const payoffCard = usePayoffCreditCard();
   const addSubscription = useAddSubscription();
   const updateSubscription = useUpdateSubscription();
+  const deleteSubscription = useDeleteSubscription();
   const approveReceipt = useApproveReceipt();
   const addReceipt = useAddReceipt();
   const addMessage = useAddMessage();
@@ -466,6 +475,15 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
                   subName: p.subName ?? 'that subscription',
                   amountEur,
                 };
+              case 'sub_delete':
+                return {
+                  id: m.id,
+                  type: 'card',
+                  action: 'sub_delete',
+                  subId: p.subId ?? '',
+                  subName: p.subName ?? 'that subscription',
+                  amountEur,
+                };
               case 'sub_add':
                 return {
                   id: m.id,
@@ -593,12 +611,23 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
               category: 'debt',
               amountMinor: -eurToMinor(message.amountEur),
               note: 'Card payment',
+              // Not cardId — that would mean the account has not paid for this
+              // yet, which is the opposite of what a payment is. This records
+              // which card was paid so that deleting the row can owe it again.
+              paidCardId: message.cardId,
             });
           }
           return;
 
         case 'sub_cancel':
           if (message.subId) updateSubscription.mutate({ id: message.subId, off: true });
+          return;
+
+        case 'sub_delete':
+          // Deletes the subscription only. Its past renewals stay in the
+          // transaction list — the server keeps them on purpose, and each one
+          // is undone from the movements list, which refunds it.
+          if (message.subId) deleteSubscription.mutate(message.subId);
           return;
 
         case 'sub_add':
@@ -645,7 +674,16 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
           }
       }
     },
-    [serverMessages, cards, addTransaction, chargeCard, payoffCard, addSubscription, updateSubscription]
+    [
+      serverMessages,
+      cards,
+      addTransaction,
+      chargeCard,
+      payoffCard,
+      addSubscription,
+      updateSubscription,
+      deleteSubscription,
+    ]
   );
 
   /**
@@ -926,6 +964,7 @@ export function SpendOwlProvider({ children }: { children: React.ReactNode }) {
     closeSubs: () => setSubsOpen(false),
     toggleSubMute,
     toggleSubOff,
+    deleteSubscription: (id: string) => deleteSubscription.mutate(id),
     subSheet,
     openEditSub: (id: string) => setSubSheet({ id }),
     closeSubSheet: () => setSubSheet(null),

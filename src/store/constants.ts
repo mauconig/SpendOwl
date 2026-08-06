@@ -43,6 +43,10 @@ export type Msg =
   | { id: string; type: 'card'; action: 'income'; source: string; amountEur: number; note: string }
   | { id: string; type: 'card'; action: 'card_payment'; cardId: string; cardName: string; amountEur: number }
   | { id: string; type: 'card'; action: 'sub_cancel'; subId: string; subName: string; amountEur: number }
+  // Removes it from the list outright, where sub_cancel only strikes it
+  // through. Renewals it already charged stay in the transaction history —
+  // those are undone one at a time from the movements list.
+  | { id: string; type: 'card'; action: 'sub_delete'; subId: string; subName: string; amountEur: number }
   // amountEur here is in `subCurrency`, not the user's — a subscription is
   // billed in whatever currency the service charges in, and the app converts
   // it fresh every month rather than storing one frozen number.
